@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Portal - Task Board</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>🤖 Agent Portal</h1>
+    <div class="header-actions">
+      <button class="settings-btn" onclick="showSettings()" title="Settings">⚙️</button>
+      <div class="connection-status" id="connection-status">
+        <span class="status-dot"></span>
+        <span class="status-text">Connecting...</span>
+      </div>
+    </div>
+  </header>
+  
+  <main class="board">
+    <div class="column" data-status="todo">
+      <div class="column-header">
+        <h2>📋 To Do</h2>
+        <span class="count" id="todo-count">0</span>
+      </div>
+      <div class="cards" id="todo-cards"></div>
+    </div>
+    
+    <div class="column" data-status="in-progress">
+      <div class="column-header">
+        <h2>🔄 In Progress</h2>
+        <span class="count" id="in-progress-count">0</span>
+      </div>
+      <div class="cards" id="in-progress-cards"></div>
+    </div>
+    
+    <div class="column" data-status="done">
+      <div class="column-header">
+        <h2>✅ Done</h2>
+        <span class="count" id="done-count">0</span>
+      </div>
+      <div class="cards" id="done-cards"></div>
+    </div>
+  </main>
+
+  <div class="modal" id="settings-modal">
+    <div class="modal-content settings-content">
+      <div class="modal-header">
+        <h3>⚙️ Settings</h3>
+        <button class="close-btn" onclick="closeSettings()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>API Key (for drag-drop task updates)</label>
+          <input type="text" id="api-key-input" placeholder="ak_..." class="input-field">
+        </div>
+        <div class="field">
+          <button onclick="saveSettings()" class="save-btn">Save</button>
+          <span id="settings-status" class="settings-status"></span>
+        </div>
+        <div class="field hint">
+          <small>API key is stored in browser localStorage. Required to move tasks between columns.</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="task-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title">Task Details</h3>
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Status</label>
+          <span id="modal-status" class="status-badge"></span>
+        </div>
+        <div class="field">
+          <label>Created</label>
+          <span id="modal-created"></span>
+        </div>
+        <div class="field">
+          <label>Last Updated</label>
+          <span id="modal-updated"></span>
+        </div>
+        <div class="field">
+          <label>Notes / Log</label>
+          <pre id="modal-notes"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
