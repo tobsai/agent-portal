@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Agent Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0f0c29 0%, #1a1a2e 100%);
+      color: #eee;
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo { font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
+    
+    .header-actions { display: flex; align-items: center; gap: 1rem; }
+    
+    .user-info { display: flex; align-items: center; gap: 0.75rem; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); }
+    .user-name { font-size: 0.875rem; color: #ccc; }
+    
+    .btn {
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(102,126,234,0.4); }
+    .btn-ghost { background: rgba(255,255,255,0.1); color: #ccc; }
+    .btn-ghost:hover { background: rgba(255,255,255,0.15); }
+
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    .column {
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.1);
+      overflow: hidden;
+    }
+
+    .column-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      background: rgba(255,255,255,0.05);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .column-title { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; }
+    .column-title .icon { font-size: 1.25rem; }
+    .count { background: rgba(255,255,255,0.15); padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; }
+
+    .cards { padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; min-height: 300px; }
+
+    .card {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .card:hover { background: rgba(255,255,255,0.12); transform: translateY(-2px); }
+    .card.urgent { border-left: 3px solid #f5576c; }
+    .card.high { border-left: 3px solid #ffc107; }
+
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; }
+    .card-title { font-weight: 600; font-size: 0.95rem; }
+    .card-agent { font-size: 0.7rem; padding: 0.2rem 0.5rem; background: rgba(102,126,234,0.3); border-radius: 4px; color: #a5b4fc; }
+    
+    .card-meta { display: flex; gap: 1rem; font-size: 0.75rem; color: #888; }
+    .card-events { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.1); }
+    .event { font-size: 0.8rem; color: #aaa; padding: 0.25rem 0; }
+    .event-time { color: #666; font-size: 0.7rem; }
+
+    .empty-state { text-align: center; padding: 3rem 1rem; color: #666; }
+    .empty-state .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+    /* Modal */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); justify-content: center; align-items: center; z-index: 200; }
+    .modal.active { display: flex; }
+    .modal-content { background: #1a1a2e; border-radius: 16px; width: 90%; max-width: 600px; max-height: 85vh; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .modal-header h3 { font-size: 1.25rem; }
+    .close-btn { background: none; border: none; color: #888; font-size: 1.5rem; cursor: pointer; }
+    .modal-body { padding: 1.25rem; overflow-y: auto; max-height: calc(85vh - 70px); }
+    
+    .field { margin-bottom: 1.25rem; }
+    .field label { display: block; font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .field input, .field select, .field textarea { width: 100%; padding: 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #eee; font-size: 0.9rem; }
+    .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: #667eea; }
+    .field textarea { min-height: 100px; resize: vertical; }
+
+    .status-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.8rem; font-weight: 500; }
+    .status-badge.queue { background: #3b82f6; }
+    .status-badge.in-progress { background: #f59e0b; color: #000; }
+    .status-badge.review { background: #8b5cf6; }
+    .status-badge.done { background: #10b981; }
+
+    .events-list { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem; max-height: 200px; overflow-y: auto; }
+    .event-item { padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .event-item:last-child { border-bottom: none; }
+    .event-message { font-size: 0.875rem; }
+    .event-meta { font-size: 0.7rem; color: #666; margin-top: 0.25rem; }
+
+    /* Agent management */
+    .agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; margin-top: 1rem; }
+    .agent-card { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 1rem; }
+    .agent-name { font-weight: 600; margin-bottom: 0.5rem; }
+    .agent-key { font-family: monospace; font-size: 0.75rem; color: #888; background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 4px; word-break: break-all; }
+    .agent-actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; }
+
+    /* Connection status */
+    .connection { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #888; }
+    .connection .dot { width: 8px; height: 8px; border-radius: 50%; background: #666; }
+    .connection.connected .dot { background: #10b981; box-shadow: 0 0 8px #10b981; }
+
+    @media (max-width: 1024px) {
+      .dashboard-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">🤖 Agent Portal</div>
+    <div class="header-actions">
+      <div class="connection" id="connection">
+        <span class="dot"></span>
+        <span>Connecting...</span>
+      </div>
+      <button class="btn btn-ghost" onclick="showAgentsModal()">⚙️ Agents</button>
+      <div class="user-info" id="user-info">
+        <img class="avatar" id="user-avatar" src="" alt="">
+        <span class="user-name" id="user-name"></span>
+      </div>
+      <a href="/auth/logout" class="btn btn-ghost">Logout</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="dashboard-grid">
+      <div class="column">
+        <div class="column-header">
+          <div class="column-title"><span class="icon">🔥</span> Due Today</div>
+          <span class="count" id="due-count">0</span>
+        </div>
+        <div class="cards" id="due-cards"></div>
+      </div>
+
+      <div class="column">
+        <div class="column-header">
+          <div class="column-title"><span class="icon">📋</span> Agent Queue</div>
+          <span class="count" id="queue-count">0</span>
+        </div>
+        <div class="cards" id="queue-cards"></div>
+      </div>
+
+      <div class="column">
+        <div class="column-header">
+          <div class="column-title"><span class="icon">✅</span> Completed / Review</div>
+          <span class="count" id="completed-count">0</span>
+        </div>
+        <div class="cards" id="completed-cards"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Task Modal -->
+  <div class="modal" id="task-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title">Task Details</h3>
+        <button class="close-btn" onclick="closeTaskModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Status</label>
+          <span class="status-badge" id="modal-status"></span>
+        </div>
+        <div class="field">
+          <label>Agent</label>
+          <span id="modal-agent">-</span>
+        </div>
+        <div class="field">
+          <label>Due Date</label>
+          <span id="modal-due">-</span>
+        </div>
+        <div class="field">
+          <label>Notes</label>
+          <pre id="modal-notes" style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; white-space: pre-wrap; font-size: 0.875rem;"></pre>
+        </div>
+        <div class="field">
+          <label>Activity Log</label>
+          <div class="events-list" id="modal-events"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agents Modal -->
+  <div class="modal" id="agents-modal">
+    <div class="modal-content" style="max-width: 700px;">
+      <div class="modal-header">
+        <h3>⚙️ Manage Agents</h3>
+        <button class="close-btn" onclick="closeAgentsModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field" style="display: flex; gap: 1rem;">
+          <input type="text" id="new-agent-name" placeholder="New agent name..." style="flex: 1;">
+          <button class="btn btn-primary" onclick="createAgent()">Add Agent</button>
+        </div>
+        <div class="agents-grid" id="agents-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws;
+    let currentUser = null;
+    let dashboardData = { dueToday: [], queue: [], completed: [] };
+
+    // Initialize
+    async function init() {
+      await loadUser();
+      await loadDashboard();
+      connectWebSocket();
+    }
+
+    // Load user
+    async function loadUser() {
+      const res = await fetch('/api/me');
+      currentUser = await res.json();
+      if (currentUser) {
+        document.getElementById('user-avatar').src = currentUser.picture || '';
+        document.getElementById('user-name').textContent = currentUser.name || currentUser.email;
+      }
+    }
+
+    // Load dashboard
+    async function loadDashboard() {
+      const res = await fetch('/api/tasks/dashboard');
+      dashboardData = await res.json();
+      renderDashboard();
+    }
+
+    // Render dashboard
+    function renderDashboard() {
+      renderColumn('due-cards', dashboardData.dueToday, 'due-count');
+      renderColumn('queue-cards', dashboardData.queue, 'queue-count');
+      renderColumn('completed-cards', dashboardData.completed, 'completed-count');
+    }
+
+    function renderColumn(containerId, tasks, countId) {
+      const container = document.getElementById(containerId);
+      const count = document.getElementById(countId);
+      
+      count.textContent = tasks.length;
+      
+      if (tasks.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">📭</div><div>No tasks</div></div>';
+        return;
+      }
+      
+      container.innerHTML = tasks.map(task => {
+        const priorityClass = task.priority === 'urgent' ? 'urgent' : task.priority === 'high' ? 'high' : '';
+        return `
+          <div class="card ${priorityClass}" onclick="showTaskModal('${task.id}')">
+            <div class="card-header">
+              <div class="card-title">${escapeHtml(task.name)}</div>
+              ${task.agent_name ? `<div class="card-agent">${escapeHtml(task.agent_name)}</div>` : ''}
+            </div>
+            <div class="card-meta">
+              <span>${formatStatus(task.status)}</span>
+              ${task.due_date ? `<span>Due: ${task.due_date}</span>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // WebSocket
+    function connectWebSocket() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws`);
+      
+      ws.onopen = () => {
+        document.getElementById('connection').className = 'connection connected';
+        document.getElementById('connection').innerHTML = '<span class="dot"></span><span>Live</span>';
+      };
+      
+      ws.onclose = () => {
+        document.getElementById('connection').className = 'connection';
+        document.getElementById('connection').innerHTML = '<span class="dot"></span><span>Disconnected</span>';
+        setTimeout(connectWebSocket, 3000);
+      };
+      
+      ws.onmessage = (e) => {
+        const { event, data } = JSON.parse(e.data);
+        handleEvent(event, data);
+      };
+    }
+
+    function handleEvent(event, data) {
+      // Refresh dashboard on any task change
+      if (event.startsWith('task:')) {
+        loadDashboard();
+      }
+    }
+
+    // Task modal
+    async function showTaskModal(taskId) {
+      const res = await fetch(`/api/tasks/${taskId}/events`);
+      const events = await res.json();
+      
+      const task = [...dashboardData.dueToday, ...dashboardData.queue, ...dashboardData.completed]
+        .find(t => t.id === taskId);
+      
+      if (!task) return;
+      
+      document.getElementById('modal-title').textContent = task.name;
+      document.getElementById('modal-status').textContent = formatStatus(task.status);
+      document.getElementById('modal-status').className = `status-badge ${task.status}`;
+      document.getElementById('modal-agent').textContent = task.agent_name || '-';
+      document.getElementById('modal-due').textContent = task.due_date || '-';
+      document.getElementById('modal-notes').textContent = task.notes || '(no notes)';
+      
+      document.getElementById('modal-events').innerHTML = events.length 
+        ? events.map(e => `
+          <div class="event-item">
+            <div class="event-message">${escapeHtml(e.message)}</div>
+            <div class="event-meta">${e.agent_name || 'System'} • ${new Date(e.created_at).toLocaleString()}</div>
+          </div>
+        `).join('')
+        : '<div style="color: #666; text-align: center;">No activity yet</div>';
+      
+      document.getElementById('task-modal').classList.add('active');
+    }
+
+    function closeTaskModal() {
+      document.getElementById('task-modal').classList.remove('active');
+    }
+
+    // Agents modal
+    async function showAgentsModal() {
+      await loadAgents();
+      document.getElementById('agents-modal').classList.add('active');
+    }
+
+    function closeAgentsModal() {
+      document.getElementById('agents-modal').classList.remove('active');
+    }
+
+    async function loadAgents() {
+      const res = await fetch('/api/agents');
+      const agents = await res.json();
+      
+      document.getElementById('agents-list').innerHTML = agents.length
+        ? agents.map(a => `
+          <div class="agent-card">
+            <div class="agent-name">🤖 ${escapeHtml(a.name)}</div>
+            <div class="agent-key" id="key-${a.id}">••••••••••••</div>
+            <div class="agent-actions">
+              <button class="btn btn-ghost" onclick="revealKey('${a.id}')">Show Key</button>
+              <button class="btn btn-ghost" onclick="deleteAgent('${a.id}')" style="color: #f5576c;">Delete</button>
+            </div>
+          </div>
+        `).join('')
+        : '<div style="color: #666; text-align: center; grid-column: 1/-1;">No agents yet. Create one above.</div>';
+    }
+
+    async function createAgent() {
+      const name = document.getElementById('new-agent-name').value.trim();
+      if (!name) return alert('Enter agent name');
+      
+      const res = await fetch('/api/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      
+      if (res.ok) {
+        const agent = await res.json();
+        alert(`Agent created!\n\nAPI Key: ${agent.apiKey}\n\nSave this key - you won't see it again!`);
+        document.getElementById('new-agent-name').value = '';
+        loadAgents();
+      } else {
+        const err = await res.json();
+        alert('Error: ' + err.error);
+      }
+    }
+
+    async function revealKey(agentId) {
+      const res = await fetch(`/api/agents/${agentId}/key`);
+      if (res.ok) {
+        const { apiKey } = await res.json();
+        document.getElementById(`key-${agentId}`).textContent = apiKey;
+      }
+    }
+
+    async function deleteAgent(agentId) {
+      if (!confirm('Delete this agent?')) return;
+      await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
+      loadAgents();
+    }
+
+    // Helpers
+    function formatStatus(status) {
+      const map = { queue: 'Queued', 'in-progress': 'In Progress', review: 'For Review', done: 'Done' };
+      return map[status] || status;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Modal backdrop close
+    document.querySelectorAll('.modal').forEach(modal => {
+      modal.addEventListener('click', e => {
+        if (e.target === modal) modal.classList.remove('active');
+      });
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.modal.active').forEach(m => m.classList.remove('active'));
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>
