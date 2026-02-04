@@ -23,11 +23,62 @@ const counts = {
 const connectionStatus = document.getElementById('connection-status');
 const modal = document.getElementById('task-modal');
 
+// User state
+let currentUser = null;
+
 // Initialize
 async function init() {
+  await loadUser();
   setupDropZones();
   await loadTasks();
   connectSSE();
+}
+
+// Load current user
+async function loadUser() {
+  try {
+    const res = await fetch('/api/me');
+    currentUser = await res.json();
+    updateUserUI();
+  } catch (err) {
+    console.error('Failed to load user:', err);
+  }
+}
+
+// Update user UI
+function updateUserUI() {
+  const loginBtn = document.getElementById('login-btn');
+  const userInfo = document.getElementById('user-info');
+  const userAvatar = document.getElementById('user-avatar');
+  const userName = document.getElementById('user-name');
+  
+  if (currentUser) {
+    loginBtn.style.display = 'none';
+    userInfo.style.display = 'flex';
+    userAvatar.src = currentUser.picture || '';
+    userName.textContent = currentUser.name || currentUser.email;
+    
+    // Auto-load API key for admins
+    if (currentUser.isAdmin) {
+      loadAdminApiKey();
+    }
+  } else {
+    loginBtn.style.display = 'block';
+    userInfo.style.display = 'none';
+  }
+}
+
+// Load API key for admins
+async function loadAdminApiKey() {
+  try {
+    const res = await fetch('/api/admin/api-key');
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem('portalApiKey', data.apiKey);
+    }
+  } catch (err) {
+    // Not admin or not logged in
+  }
 }
 
 // Load all tasks

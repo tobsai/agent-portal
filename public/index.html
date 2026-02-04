@@ -10,10 +10,18 @@
   <header>
     <h1>🤖 Agent Portal</h1>
     <div class="header-actions">
-      <button class="settings-btn" onclick="showSettings()" title="Settings">⚙️</button>
       <div class="connection-status" id="connection-status">
         <span class="status-dot"></span>
         <span class="status-text">Connecting...</span>
+      </div>
+      <div class="user-menu" id="user-menu">
+        <a href="/auth/google" class="login-btn" id="login-btn">Sign in with Google</a>
+        <div class="user-info" id="user-info" style="display:none;">
+          <img class="avatar" id="user-avatar" src="" alt="">
+          <span id="user-name"></span>
+          <button class="settings-btn" onclick="showSettings()" title="Settings">⚙️</button>
+          <a href="/auth/logout" class="logout-btn">Logout</a>
+        </div>
       </div>
     </div>
   </header>
