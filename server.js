@@ -15,6 +15,9 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 
 const PORT = process.env.PORT || 3847;
 
+// Trust Railway/Heroku proxy so secure cookies work behind HTTPS reverse proxy
+app.set('trust proxy', 1);
+
 // ============ DATABASE SETUP ============
 let db;
 const isProduction = !!process.env.DATABASE_URL;
