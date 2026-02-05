@@ -101,6 +101,21 @@ if (isProduction) {
           metadata JSONB DEFAULT '{}'
         );
 
+        -- Usage tracking
+        CREATE TABLE IF NOT EXISTS usage_records (
+          id SERIAL PRIMARY KEY,
+          agent_id TEXT REFERENCES agents(id),
+          timestamp TIMESTAMPTZ DEFAULT NOW(),
+          model TEXT,
+          input_tokens INTEGER DEFAULT 0,
+          output_tokens INTEGER DEFAULT 0,
+          cache_read_tokens INTEGER,
+          cache_write_tokens INTEGER,
+          session_key TEXT,
+          event_type TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_usage_agent_time ON usage_records(agent_id, timestamp DESC);
+
         -- Sessions table for connect-pg-simple
         CREATE TABLE IF NOT EXISTS sessions (
           sid VARCHAR NOT NULL COLLATE "default",
@@ -193,6 +208,19 @@ if (isProduction) {
           result TEXT,
           metadata TEXT DEFAULT '{}'
         );
+        CREATE TABLE IF NOT EXISTS usage_records (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          agent_id TEXT,
+          timestamp TEXT DEFAULT (datetime('now')),
+          model TEXT,
+          input_tokens INTEGER DEFAULT 0,
+          output_tokens INTEGER DEFAULT 0,
+          cache_read_tokens INTEGER,
+          cache_write_tokens INTEGER,
+          session_key TEXT,
+          event_type TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_usage_agent_time ON usage_records(agent_id, timestamp DESC);
       `);
     },
     async query(sql, params = []) {
@@ -565,10 +593,112 @@ app.patch('/api/subagents/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ============ USAGE TRACKING ============
+app.post('/api/usage', requireAuth, async (req, res) => {
+  try {
+    const { model, input_tokens = 0, output_tokens = 0, cache_read_tokens, cache_write_tokens, session_key, event_type } = req.body;
+    const agentId = req.agent?.id || null;
+    const now = new Date().toISOString();
+    await db.run(
+      'INSERT INTO usage_records (agent_id, timestamp, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, session_key, event_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [agentId, now, model || null, input_tokens, output_tokens, cache_read_tokens || null, cache_write_tokens || null, session_key || null, event_type || null]
+    );
+    res.status(201).json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/usage', requireAuth, async (req, res) => {
+  try {
+    const agentId = req.agent?.id || req.query.agent_id;
+    const now = new Date();
+    
+    // Calculate time ranges
+    const day24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const day7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const day30d = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+    
+    const baseQuery = agentId 
+      ? 'SELECT * FROM usage_records WHERE agent_id = $1 AND timestamp >= $2'
+      : 'SELECT * FROM usage_records WHERE timestamp >= $1';
+    
+    const [last24h, last7d, last30d] = await Promise.all([
+      agentId ? db.query(baseQuery, [agentId, day24h]) : db.query(baseQuery, [day24h]),
+      agentId ? db.query(baseQuery, [agentId, day7d]) : db.query(baseQuery, [day7d]),
+      agentId ? db.query(baseQuery, [agentId, day30d]) : db.query(baseQuery, [day30d])
+    ]);
+    
+    // Aggregate by model
+    function aggregate(records) {
+      const result = { opus: { input: 0, output: 0, cache_read: 0, cache_write: 0 }, sonnet: { input: 0, output: 0, cache_read: 0, cache_write: 0 }, messages: 0, subagents: 0 };
+      records.forEach(r => {
+        const modelKey = r.model?.includes('opus') ? 'opus' : 'sonnet';
+        result[modelKey].input += r.input_tokens || 0;
+        result[modelKey].output += r.output_tokens || 0;
+        result[modelKey].cache_read += r.cache_read_tokens || 0;
+        result[modelKey].cache_write += r.cache_write_tokens || 0;
+        if (r.event_type === 'message') result.messages++;
+        if (r.event_type === 'subagent') result.subagents++;
+      });
+      result.opus.total = result.opus.input + result.opus.output;
+      result.sonnet.total = result.sonnet.input + result.sonnet.output;
+      result.total = result.opus.total + result.sonnet.total;
+      return result;
+    }
+    
+    res.json({
+      last24h: aggregate(last24h),
+      last7d: aggregate(last7d),
+      last30d: aggregate(last30d)
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/usage/history', requireAuth, async (req, res) => {
+  try {
+    const agentId = req.agent?.id || req.query.agent_id;
+    const days = parseInt(req.query.days) || 7;
+    const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    
+    const query = agentId
+      ? 'SELECT * FROM usage_records WHERE agent_id = $1 AND timestamp >= $2 ORDER BY timestamp ASC'
+      : 'SELECT * FROM usage_records WHERE timestamp >= $1 ORDER BY timestamp ASC';
+    const params = agentId ? [agentId, startDate] : [startDate];
+    
+    const records = await db.query(query, params);
+    
+    // Group by day
+    const dailyMap = {};
+    records.forEach(r => {
+      const day = r.timestamp.split('T')[0]; // YYYY-MM-DD
+      if (!dailyMap[day]) dailyMap[day] = { opus: 0, sonnet: 0, messages: 0, subagents: 0 };
+      const modelKey = r.model?.includes('opus') ? 'opus' : 'sonnet';
+      dailyMap[day][modelKey] += (r.input_tokens || 0) + (r.output_tokens || 0);
+      if (r.event_type === 'message') dailyMap[day].messages++;
+      if (r.event_type === 'subagent') dailyMap[day].subagents++;
+    });
+    
+    // Convert to array of { date, opus, sonnet, total, messages, subagents }
+    const history = Object.keys(dailyMap).sort().map(date => ({
+      date,
+      opus: dailyMap[date].opus,
+      sonnet: dailyMap[date].sonnet,
+      total: dailyMap[date].opus + dailyMap[date].sonnet,
+      messages: dailyMap[date].messages,
+      subagents: dailyMap[date].subagents
+    }));
+    
+    res.json(history);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ============ DASHBOARD AGGREGATE ============
 app.get('/api/dashboard', requireAuth, async (req, res) => {
   try {
-    const [active, completed, subagents, scheduled, activity, threadsOpen, threadsConcluded] = await Promise.all([
+    const now = new Date();
+    const day24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const day7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    
+    const [active, completed, subagents, scheduled, activity, threadsOpen, threadsConcluded, usageToday, usageWeek] = await Promise.all([
       db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'active' AND w.category != 'conversation' ORDER BY w.started_at DESC LIMIT 20`),
       db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'completed' AND w.category != 'conversation' ORDER BY w.completed_at DESC LIMIT 10`),
       db.query(`SELECT s.*, a.name as agent_name FROM subagents s LEFT JOIN agents a ON s.agent_id = a.id ORDER BY s.started_at DESC LIMIT 10`),
@@ -576,8 +706,30 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
       db.query(`SELECT ac.*, a.name as agent_name FROM activity ac LEFT JOIN agents a ON ac.agent_id = a.id ORDER BY ac.created_at DESC LIMIT 20`),
       db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'active' AND w.category = 'conversation' ORDER BY w.started_at DESC LIMIT 20`),
       db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'completed' AND w.category = 'conversation' ORDER BY w.completed_at DESC LIMIT 10`),
+      db.query('SELECT * FROM usage_records WHERE timestamp >= $1', [day24h]),
+      db.query('SELECT * FROM usage_records WHERE timestamp >= $1', [day7d])
     ]);
-    res.json({ active, completed, subagents, scheduled, activity, threadsOpen, threadsConcluded });
+    
+    // Aggregate usage
+    function aggregateUsage(records) {
+      const result = { opus: 0, sonnet: 0, messages: 0, subagents: 0 };
+      records.forEach(r => {
+        const modelKey = r.model?.includes('opus') ? 'opus' : 'sonnet';
+        result[modelKey] += (r.input_tokens || 0) + (r.output_tokens || 0);
+        if (r.event_type === 'message') result.messages++;
+        if (r.event_type === 'subagent') result.subagents++;
+      });
+      result.total = result.opus + result.sonnet;
+      return result;
+    }
+    
+    res.json({ 
+      active, completed, subagents, scheduled, activity, threadsOpen, threadsConcluded,
+      usage: {
+        today: aggregateUsage(usageToday),
+        week: aggregateUsage(usageWeek)
+      }
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

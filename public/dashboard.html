@@ -165,7 +165,37 @@
     .agent-name { font-weight: 500; font-size: 0.85rem; }
     .agent-key { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-dim); }
 
+    /* Usage Widget */
+    .usage-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1rem; }
+    .usage-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem; text-align: center;
+    }
+    .usage-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 0.5rem; }
+    .usage-value { font-size: 1.8rem; font-weight: 600; color: var(--text); font-family: 'JetBrains Mono', monospace; }
+    .usage-breakdown { display: flex; gap: 0.75rem; justify-content: center; margin-top: 0.5rem; font-size: 0.7rem; }
+    .usage-model { color: var(--text-muted); }
+    .usage-model.opus { color: var(--accent); }
+    .usage-model.sonnet { color: var(--green); }
+    .usage-model b { font-weight: 600; color: inherit; }
+    .usage-chart-container {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem;
+    }
+    .usage-chart-header { margin-bottom: 0.75rem; }
+    .usage-chart { display: flex; gap: 0.5rem; align-items: flex-end; height: 120px; }
+    .usage-bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+    .usage-bar-container { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
+    .usage-bar {
+      width: 100%; border-radius: 4px 4px 0 0; transition: height 0.3s;
+      background: linear-gradient(180deg, var(--accent), var(--accent-dim));
+    }
+    .usage-bar.sonnet { background: linear-gradient(180deg, var(--green), var(--green-dim)); }
+    .usage-bar-label { font-size: 0.6rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+    .usage-bar-value { font-size: 0.65rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 0.15rem; }
+
     @media (max-width: 768px) {
+      .usage-grid { grid-template-columns: 1fr; }
       .layout { grid-template-columns: 1fr; }
       .sidebar { border-left: none; border-top: 1px solid var(--border); max-height: 400px; }
       .user span { display: none; }
@@ -195,6 +225,38 @@
           <p>Create a token so your agent can push live status updates to this dashboard.</p>
         </div>
         <button class="btn-banner" onclick="openModal('agents-modal')">Create Token</button>
+      </div>
+
+      <!-- Usage Tracking Widget -->
+      <div class="section" id="usage-section">
+        <div class="section-header">
+          <span class="section-title">📊 Usage & Cost</span>
+          <span class="section-count" id="usage-period">Today</span>
+        </div>
+        <div class="usage-grid">
+          <div class="usage-card">
+            <div class="usage-label">Total Tokens</div>
+            <div class="usage-value" id="usage-total">0</div>
+            <div class="usage-breakdown">
+              <span class="usage-model opus">Opus: <b id="usage-opus">0</b></span>
+              <span class="usage-model sonnet">Sonnet: <b id="usage-sonnet">0</b></span>
+            </div>
+          </div>
+          <div class="usage-card">
+            <div class="usage-label">Messages</div>
+            <div class="usage-value" id="usage-messages">0</div>
+          </div>
+          <div class="usage-card">
+            <div class="usage-label">Sub-Agents</div>
+            <div class="usage-value" id="usage-subagents">0</div>
+          </div>
+        </div>
+        <div class="usage-chart-container">
+          <div class="usage-chart-header">
+            <span class="section-title">Last 7 Days</span>
+          </div>
+          <div class="usage-chart" id="usage-chart"></div>
+        </div>
       </div>
 
       <!-- Active Work -->
@@ -287,7 +349,7 @@
   </div>
 
 <script>
-let ws, data = { active: [], completed: [], subagents: [], scheduled: [], activity: [], threadsOpen: [], threadsConcluded: [] };
+let ws, data = { active: [], completed: [], subagents: [], scheduled: [], activity: [], threadsOpen: [], threadsConcluded: [], usage: { today: { opus: 0, sonnet: 0, total: 0, messages: 0, subagents: 0 }, week: { opus: 0, sonnet: 0, total: 0, messages: 0, subagents: 0 } } }, usageHistory = [];
 
 async function init() {
   await loadUser();
@@ -343,12 +405,17 @@ function makeAvatarFallback(name) {
 }
 
 async function loadDashboard() {
-  const r = await fetch('/api/dashboard');
-  data = await r.json();
+  const [dashboardRes, historyRes] = await Promise.all([
+    fetch('/api/dashboard'),
+    fetch('/api/usage/history?days=7')
+  ]);
+  data = await dashboardRes.json();
+  usageHistory = await historyRes.json();
   render();
 }
 
 function render() {
+  renderUsage();
   renderWork('active-work', data.active, 'active-count', true);
   renderWork('completed-work', data.completed, 'completed-count', false);
   renderThreads('threads-open', data.threadsOpen || [], 'threads-open-count', true);
@@ -434,6 +501,62 @@ function renderScheduled() {
       <div class="sched-next">${s.next_run ? relTime(s.next_run) : '—'}</div>
     </div>
   `).join('');
+}
+
+function renderUsage() {
+  const usage = data.usage?.today || { opus: 0, sonnet: 0, total: 0, messages: 0, subagents: 0 };
+  
+  // Update stats
+  document.getElementById('usage-total').textContent = formatNumber(usage.total);
+  document.getElementById('usage-opus').textContent = formatNumber(usage.opus);
+  document.getElementById('usage-sonnet').textContent = formatNumber(usage.sonnet);
+  document.getElementById('usage-messages').textContent = usage.messages || 0;
+  document.getElementById('usage-subagents').textContent = usage.subagents || 0;
+  
+  // Render chart
+  const chartEl = document.getElementById('usage-chart');
+  if (!usageHistory || !usageHistory.length) {
+    chartEl.innerHTML = '<div class="empty" style="padding:1rem;font-size:0.75rem;">No usage data yet</div>';
+    return;
+  }
+  
+  // Fill in missing days
+  const today = new Date();
+  const last7Days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    const existing = usageHistory.find(h => h.date === dateStr);
+    last7Days.push(existing || { date: dateStr, opus: 0, sonnet: 0, total: 0, messages: 0, subagents: 0 });
+  }
+  
+  // Find max for scaling
+  const maxTotal = Math.max(...last7Days.map(d => d.total), 1);
+  
+  chartEl.innerHTML = last7Days.map(day => {
+    const heightPercent = (day.total / maxTotal) * 100;
+    const label = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' });
+    return `<div class="usage-bar-wrapper">
+      <div class="usage-bar-container">
+        <div class="usage-bar" style="height: ${heightPercent}%" title="${formatNumber(day.total)} tokens"></div>
+      </div>
+      <div class="usage-bar-label">${label}</div>
+      ${day.total > 0 ? `<div class="usage-bar-value">${formatNumberShort(day.total)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function formatNumber(n) {
+  if (!n) return '0';
+  return n.toLocaleString();
+}
+
+function formatNumberShort(n) {
+  if (!n) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return n.toString();
 }
 
 function renderFeed() {
