@@ -224,10 +224,28 @@
         <div id="scheduled"></div>
       </div>
 
-      <!-- Completed -->
+      <!-- Open Threads (not concluded) -->
       <div class="section">
         <div class="section-header">
-          <span class="section-title">✅ Recently Completed</span>
+          <span class="section-title">💬 Open Threads</span>
+          <span class="section-count" id="threads-open-count">0</span>
+        </div>
+        <div id="threads-open"></div>
+      </div>
+
+      <!-- Concluded Threads -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">✅ Concluded</span>
+          <span class="section-count" id="threads-concluded-count">0</span>
+        </div>
+        <div id="threads-concluded"></div>
+      </div>
+
+      <!-- Completed Work -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">📦 Recently Completed</span>
           <span class="section-count" id="completed-count">0</span>
         </div>
         <div id="completed-work"></div>
@@ -269,7 +287,7 @@
   </div>
 
 <script>
-let ws, data = { active: [], completed: [], subagents: [], scheduled: [], activity: [] };
+let ws, data = { active: [], completed: [], subagents: [], scheduled: [], activity: [], threadsOpen: [], threadsConcluded: [] };
 
 async function init() {
   await loadUser();
@@ -333,6 +351,8 @@ async function loadDashboard() {
 function render() {
   renderWork('active-work', data.active, 'active-count', true);
   renderWork('completed-work', data.completed, 'completed-count', false);
+  renderThreads('threads-open', data.threadsOpen || [], 'threads-open-count', true);
+  renderThreads('threads-concluded', data.threadsConcluded || [], 'threads-concluded-count', false);
   renderSubagents();
   renderScheduled();
   renderFeed();
@@ -357,6 +377,26 @@ function renderWork(containerId, items, countId, isActive) {
       </div>
     </div>`;
   }).join('');
+}
+
+function renderThreads(containerId, items, countId, isOpen) {
+  document.getElementById(countId).textContent = items.length;
+  const el = document.getElementById(containerId);
+  if (!items.length) { el.innerHTML = `<div class="empty"><div class="icon">${isOpen ? '💬' : '✅'}</div>${isOpen ? 'No open threads' : 'None yet'}</div>`; return; }
+  el.innerHTML = items.map(w => `
+    <div class="work-card">
+      <div class="top">
+        <div class="work-title">${esc(w.title)}</div>
+        <span class="tag ${isOpen ? 'active' : 'completed'}">${isOpen ? 'open' : 'concluded'}</span>
+      </div>
+      ${w.description ? `<div class="work-desc">${esc(w.description)}</div>` : ''}
+      <div class="work-meta">
+        <span class="tag conversation" style="background:rgba(251,191,36,0.15);color:#fbbf24;">thread</span>
+        ${w.agent_name ? `<span class="tag agent">${esc(w.agent_name)}</span>` : ''}
+        <span class="time">${relTime(isOpen ? w.started_at : w.completed_at)}</span>
+      </div>
+    </div>
+  `).join('');
 }
 
 function renderSubagents() {

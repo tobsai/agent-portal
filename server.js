@@ -568,14 +568,16 @@ app.patch('/api/subagents/:id', requireAuth, async (req, res) => {
 // ============ DASHBOARD AGGREGATE ============
 app.get('/api/dashboard', requireAuth, async (req, res) => {
   try {
-    const [active, completed, subagents, scheduled, activity] = await Promise.all([
-      db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'active' ORDER BY w.started_at DESC LIMIT 20`),
-      db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'completed' ORDER BY w.completed_at DESC LIMIT 10`),
+    const [active, completed, subagents, scheduled, activity, threadsOpen, threadsConcluded] = await Promise.all([
+      db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'active' AND w.category != 'conversation' ORDER BY w.started_at DESC LIMIT 20`),
+      db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'completed' AND w.category != 'conversation' ORDER BY w.completed_at DESC LIMIT 10`),
       db.query(`SELECT s.*, a.name as agent_name FROM subagents s LEFT JOIN agents a ON s.agent_id = a.id ORDER BY s.started_at DESC LIMIT 10`),
       db.query(`SELECT s.*, a.name as agent_name FROM scheduled s LEFT JOIN agents a ON s.agent_id = a.id WHERE s.status = 'active' ORDER BY s.next_run ASC`),
       db.query(`SELECT ac.*, a.name as agent_name FROM activity ac LEFT JOIN agents a ON ac.agent_id = a.id ORDER BY ac.created_at DESC LIMIT 20`),
+      db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'active' AND w.category = 'conversation' ORDER BY w.started_at DESC LIMIT 20`),
+      db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'completed' AND w.category = 'conversation' ORDER BY w.completed_at DESC LIMIT 10`),
     ]);
-    res.json({ active, completed, subagents, scheduled, activity });
+    res.json({ active, completed, subagents, scheduled, activity, threadsOpen, threadsConcluded });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
