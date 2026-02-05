@@ -358,8 +358,18 @@ app.get('/api/agents', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/agents', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/agents', requireAuth, async (req, res) => {
   try {
+    // Auto-promote first user to admin if no agents exist yet
+    if (!req.user.is_admin) {
+      const existingAgents = await db.get('SELECT id FROM agents LIMIT 1');
+      if (!existingAgents) {
+        await db.run('UPDATE users SET is_admin = true WHERE id = $1', [req.user.id]);
+        req.user.is_admin = true;
+      } else {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+    }
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Agent name required' });
     const id = uuidv4();

@@ -49,6 +49,29 @@
     .user span { font-size: 0.8rem; color: var(--text-muted); }
     .btn-s { font-size: 0.75rem; padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; }
     .btn-s:hover { background: var(--surface-hover); color: var(--text); }
+    .btn-token { font-size: 0.75rem; padding: 0.35rem 0.7rem; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent-dim); color: var(--accent); cursor: pointer; font-weight: 600; }
+    .btn-token:hover { background: var(--accent); color: #000; }
+
+    /* Avatar fallback */
+    .avatar { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .avatar-fallback { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-dim); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600; }
+
+    /* Token banner */
+    .token-banner {
+      background: linear-gradient(135deg, var(--accent-dim), var(--purple-dim));
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+      display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+    }
+    .token-banner .info { flex: 1; }
+    .token-banner .info h3 { font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 0.25rem; }
+    .token-banner .info p { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; }
+    .btn-banner { font-size: 0.85rem; padding: 0.5rem 1rem; border-radius: 8px; border: none; background: var(--accent); color: #000; cursor: pointer; font-weight: 600; white-space: nowrap; }
+    .btn-banner:hover { filter: brightness(1.15); }
+    .token-banner.hidden { display: none; }
 
     /* Layout */
     .layout { display: grid; grid-template-columns: 1fr 340px; gap: 0; min-height: calc(100vh - 49px); }
@@ -154,9 +177,9 @@
     <div class="logo"><span class="dot"></span> Agent Portal</div>
     <div class="header-right">
       <div class="conn" id="conn"><span class="dot"></span> connecting</div>
-      <button class="btn-s" onclick="openModal('agents-modal')">⚙ Agents</button>
+      <button class="btn-token" onclick="openModal('agents-modal')">🔑 API Tokens</button>
       <div class="user" id="user-info">
-        <img id="user-pic" src="" alt="">
+        <div class="avatar" id="user-avatar"></div>
         <span id="user-name"></span>
       </div>
       <a href="/auth/logout" class="btn-s">Logout</a>
@@ -165,6 +188,15 @@
 
   <div class="layout">
     <div class="main">
+      <!-- Token Setup Banner (shown when no agents exist) -->
+      <div class="token-banner hidden" id="token-banner">
+        <div class="info">
+          <h3>🔑 Generate an API Token</h3>
+          <p>Create a token so your agent can push live status updates to this dashboard.</p>
+        </div>
+        <button class="btn-banner" onclick="openModal('agents-modal')">Create Token</button>
+      </div>
+
       <!-- Active Work -->
       <div class="section">
         <div class="section-header">
@@ -210,17 +242,26 @@
     </div>
   </div>
 
-  <!-- Agents Modal -->
+  <!-- Agents / Tokens Modal -->
   <div class="modal" id="agents-modal">
     <div class="modal-box" style="max-width:550px;">
       <div class="modal-head">
-        <h3>⚙ Manage Agents</h3>
+        <h3>🔑 API Tokens</h3>
         <button class="modal-close" onclick="closeModal('agents-modal')">&times;</button>
       </div>
       <div class="modal-body">
+        <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.85rem;line-height:1.5;">
+          Tokens let agents authenticate and push live updates to the dashboard.
+        </p>
         <div class="field" style="display:flex;gap:0.5rem;">
-          <input id="new-agent" placeholder="Agent name…" style="flex:1">
-          <button class="btn-s" style="background:var(--accent);color:#000;border:none;font-weight:600;" onclick="createAgent()">Add</button>
+          <input id="new-agent" placeholder="Agent name (e.g. Talos)…" style="flex:1">
+          <button class="btn-s" style="background:var(--accent);color:#000;border:none;font-weight:600;padding:0.4rem 0.8rem;" onclick="createAgent()">Generate</button>
+        </div>
+        <!-- Newly created key display -->
+        <div id="new-key-display" style="display:none;background:var(--green-dim);border:1px solid var(--green);border-radius:8px;padding:0.75rem;margin-bottom:0.85rem;">
+          <div style="font-size:0.7rem;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">✅ Token Created — Copy It Now</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;word-break:break-all;color:var(--text);user-select:all;cursor:text;" id="new-key-value"></div>
+          <div style="font-size:0.7rem;color:var(--text-dim);margin-top:0.35rem;">This is the only time this token is shown in full.</div>
         </div>
         <div class="agents-grid" id="agents-list"></div>
       </div>
@@ -232,36 +273,55 @@ let ws, data = { active: [], completed: [], subagents: [], scheduled: [], activi
 
 async function init() {
   await loadUser();
-  await checkBootstrap();
   await loadDashboard();
+  await checkTokenBanner();
   connectWS();
 }
 
-async function checkBootstrap() {
-  // Check if any agents exist; if not, offer to bootstrap
-  const r = await fetch('/api/agents');
-  if (!r.ok) return;
-  const agents = await r.json();
-  if (agents.length === 0) {
-    if (confirm('No agents configured yet. Create a default "Talos" agent now?')) {
-      const br = await fetch('/api/bootstrap', { method: 'POST' });
-      if (br.ok) {
-        const data = await br.json();
-        if (data.agent) {
-          alert('Agent created!\\n\\nAPI Key: ' + data.agent.apiKey + '\\n\\nCopy this key — it\\'s shown once.');
-        }
-      }
+async function checkTokenBanner() {
+  try {
+    const r = await fetch('/api/agents');
+    if (!r.ok) return;
+    const agents = await r.json();
+    const banner = document.getElementById('token-banner');
+    if (agents.length === 0) {
+      banner.classList.remove('hidden');
+    } else {
+      banner.classList.add('hidden');
     }
-  }
+  } catch (e) { /* ignore */ }
 }
 
 async function loadUser() {
   const r = await fetch('/api/me');
   const u = await r.json();
   if (u) {
-    document.getElementById('user-pic').src = u.picture || '';
-    document.getElementById('user-name').textContent = u.name || u.email;
+    const avatarEl = document.getElementById('user-avatar');
+    const nameEl = document.getElementById('user-name');
+    nameEl.textContent = u.name || u.email;
+
+    if (u.picture) {
+      const img = document.createElement('img');
+      img.src = u.picture;
+      img.alt = u.name || '';
+      img.referrerPolicy = 'no-referrer';
+      img.onerror = () => {
+        avatarEl.innerHTML = '';
+        avatarEl.appendChild(makeAvatarFallback(u.name || u.email));
+      };
+      avatarEl.appendChild(img);
+    } else {
+      avatarEl.appendChild(makeAvatarFallback(u.name || u.email));
+    }
   }
+}
+
+function makeAvatarFallback(name) {
+  const div = document.createElement('div');
+  div.className = 'avatar-fallback';
+  const initials = (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  div.textContent = initials;
+  return div;
 }
 
 async function loadDashboard() {
@@ -378,30 +438,57 @@ async function loadAgents() {
   const agents = await r.json();
   document.getElementById('agents-list').innerHTML = agents.length
     ? agents.map(a => `<div class="agent-row">
-        <div><div class="agent-name">🤖 ${esc(a.name)}</div><div class="agent-key" id="key-${a.id}">••••••••</div></div>
-        <div style="display:flex;gap:0.3rem;">
-          <button class="btn-s" onclick="revealKey('${a.id}')">Show</button>
+        <div style="flex:1;min-width:0;">
+          <div class="agent-name">🤖 ${esc(a.name)}</div>
+          <div class="agent-key" id="key-${a.id}" style="cursor:pointer;" onclick="revealAndCopy('${a.id}')" title="Click to reveal & copy">ak_••••••••</div>
+        </div>
+        <div style="display:flex;gap:0.3rem;flex-shrink:0;">
+          <button class="btn-s" onclick="revealAndCopy('${a.id}')">📋 Copy</button>
           <button class="btn-s" style="color:var(--red)" onclick="deleteAgent('${a.id}')">×</button>
         </div>
       </div>`).join('')
-    : '<div class="empty">No agents</div>';
+    : '<div class="empty" style="padding:1rem;font-size:0.8rem;">No tokens yet — create one above</div>';
 }
 
 async function createAgent() {
-  const name = document.getElementById('new-agent').value.trim();
-  if (!name) return;
+  const nameInput = document.getElementById('new-agent');
+  const name = nameInput.value.trim();
+  if (!name) { nameInput.focus(); return; }
   const r = await fetch('/api/agents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
   if (r.ok) {
     const a = await r.json();
-    alert(`API Key: ${a.apiKey}\n\nSave this — shown once.`);
-    document.getElementById('new-agent').value = '';
+    // Show the key inline
+    const display = document.getElementById('new-key-display');
+    document.getElementById('new-key-value').textContent = a.apiKey;
+    display.style.display = 'block';
+    nameInput.value = '';
     loadAgents();
+    checkTokenBanner();
+  } else {
+    const err = await r.json().catch(() => ({}));
+    alert(err.error || 'Failed to create token');
   }
 }
 
-async function revealKey(id) {
+async function revealAndCopy(id) {
   const r = await fetch(`/api/agents/${id}/key`);
-  if (r.ok) { const { apiKey } = await r.json(); document.getElementById(`key-${id}`).textContent = apiKey; }
+  if (r.ok) {
+    const { apiKey } = await r.json();
+    const el = document.getElementById(`key-${id}`);
+    el.textContent = apiKey;
+    el.style.color = 'var(--text)';
+    try {
+      await navigator.clipboard.writeText(apiKey);
+      el.textContent = apiKey + '  ✅ copied';
+      setTimeout(() => { el.textContent = 'ak_••••••••'; el.style.color = ''; }, 4000);
+    } catch (e) {
+      // Fallback: select text for manual copy
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+    }
+  }
 }
 
 async function deleteAgent(id) {
@@ -412,7 +499,10 @@ async function deleteAgent(id) {
 
 // Utils
 function openModal(id) {
-  if (id === 'agents-modal') loadAgents();
+  if (id === 'agents-modal') {
+    loadAgents();
+    document.getElementById('new-key-display').style.display = 'none';
+  }
   document.getElementById(id).classList.add('active');
 }
 function closeModal(id) { document.getElementById(id).classList.remove('active'); }
