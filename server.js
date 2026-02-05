@@ -669,7 +669,7 @@ app.get('/api/usage/history', requireAuth, async (req, res) => {
     // Group by day
     const dailyMap = {};
     records.forEach(r => {
-      const day = r.timestamp.split('T')[0]; // YYYY-MM-DD
+      const day = (r.timestamp instanceof Date ? r.timestamp.toISOString() : r.timestamp).split('T')[0]; // YYYY-MM-DD
       if (!dailyMap[day]) dailyMap[day] = { opus: 0, sonnet: 0, messages: 0, subagents: 0 };
       const modelKey = r.model?.includes('opus') ? 'opus' : 'sonnet';
       dailyMap[day][modelKey] += (r.input_tokens || 0) + (r.output_tokens || 0);
