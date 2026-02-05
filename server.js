@@ -328,6 +328,29 @@ app.get('/api/me', (req, res) => {
   } else { res.json(null); }
 });
 
+// Bootstrap: ensure first user is admin, and auto-create default agent if none exist
+app.post('/api/bootstrap', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login first' });
+  try {
+    // Make this user admin
+    await db.run('UPDATE users SET is_admin = true WHERE id = $1', [req.user.id]);
+    
+    // Check if any agents exist
+    const existing = await db.get('SELECT id FROM agents LIMIT 1');
+    if (existing) return res.json({ message: 'Already bootstrapped', agentExists: true });
+    
+    // Create default agent
+    const id = uuidv4();
+    const apiKey = 'ak_' + uuidv4().replace(/-/g, '');
+    await db.run(
+      'INSERT INTO agents (id, name, api_key, created_by) VALUES ($1, $2, $3, $4)',
+      [id, 'Talos', apiKey, req.user.id]
+    );
+    
+    res.json({ message: 'Bootstrapped! Agent created.', agent: { id, name: 'Talos', apiKey } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ============ AGENT ROUTES ============
 app.get('/api/agents', requireAuth, async (req, res) => {
   try {

@@ -232,8 +232,27 @@ let ws, data = { active: [], completed: [], subagents: [], scheduled: [], activi
 
 async function init() {
   await loadUser();
+  await checkBootstrap();
   await loadDashboard();
   connectWS();
+}
+
+async function checkBootstrap() {
+  // Check if any agents exist; if not, offer to bootstrap
+  const r = await fetch('/api/agents');
+  if (!r.ok) return;
+  const agents = await r.json();
+  if (agents.length === 0) {
+    if (confirm('No agents configured yet. Create a default "Talos" agent now?')) {
+      const br = await fetch('/api/bootstrap', { method: 'POST' });
+      if (br.ok) {
+        const data = await br.json();
+        if (data.agent) {
+          alert('Agent created!\\n\\nAPI Key: ' + data.agent.apiKey + '\\n\\nCopy this key — it\\'s shown once.');
+        }
+      }
+    }
+  }
 }
 
 async function loadUser() {
