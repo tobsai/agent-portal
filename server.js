@@ -101,6 +101,19 @@ if (isProduction) {
           metadata JSONB DEFAULT '{}'
         );
 
+        -- Someday/Maybe items
+        CREATE TABLE IF NOT EXISTS someday_maybe (
+          id TEXT PRIMARY KEY,
+          agent_id TEXT REFERENCES agents(id),
+          title TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          category TEXT DEFAULT 'idea',
+          status TEXT DEFAULT 'active',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          last_reviewed TIMESTAMPTZ,
+          metadata JSONB DEFAULT '{}'
+        );
+
         -- Usage tracking
         CREATE TABLE IF NOT EXISTS usage_records (
           id SERIAL PRIMARY KEY,
@@ -221,6 +234,17 @@ if (isProduction) {
           event_type TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_usage_agent_time ON usage_records(agent_id, timestamp DESC);
+        CREATE TABLE IF NOT EXISTS someday_maybe (
+          id TEXT PRIMARY KEY,
+          agent_id TEXT,
+          title TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          category TEXT DEFAULT 'idea',
+          status TEXT DEFAULT 'active',
+          created_at TEXT DEFAULT (datetime('now')),
+          last_reviewed TEXT,
+          metadata TEXT DEFAULT '{}'
+        );
       `);
     },
     async query(sql, params = []) {
@@ -691,6 +715,58 @@ app.get('/api/usage/history', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ============ SOMEDAY/MAYBE ============
+app.get('/api/someday', requireAuth, async (req, res) => {
+  try {
+    const status = req.query.status || 'active';
+    const items = await db.query(
+      `SELECT s.*, a.name as agent_name FROM someday_maybe s
+       LEFT JOIN agents a ON s.agent_id = a.id
+       WHERE s.status = $1
+       ORDER BY s.created_at DESC`,
+      [status]
+    );
+    res.json(items);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/someday', requireAuth, async (req, res) => {
+  try {
+    const { title, description = '', category = 'idea', metadata = {} } = req.body;
+    if (!title) return res.status(400).json({ error: 'Title required' });
+    const id = uuidv4();
+    const agentId = req.agent?.id || null;
+    const now = new Date().toISOString();
+    await db.run(
+      'INSERT INTO someday_maybe (id, agent_id, title, description, category, created_at, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, agentId, title, description, category, now, JSON.stringify(metadata)]
+    );
+    const item = await db.get('SELECT s.*, a.name as agent_name FROM someday_maybe s LEFT JOIN agents a ON s.agent_id = a.id WHERE s.id = $1', [id]);
+    broadcast('someday:created', item);
+    res.status(201).json(item);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/api/someday/:id', requireAuth, async (req, res) => {
+  try {
+    const existing = await db.get('SELECT * FROM someday_maybe WHERE id = $1', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const { title, description, category, status, last_reviewed, metadata } = req.body;
+    await db.run(
+      'UPDATE someday_maybe SET title = $1, description = $2, category = $3, status = $4, last_reviewed = $5, metadata = $6 WHERE id = $7',
+      [title ?? existing.title, description ?? existing.description, category ?? existing.category, status ?? existing.status, last_reviewed ?? existing.last_reviewed, JSON.stringify(metadata ?? JSON.parse(existing.metadata || '{}')), req.params.id]
+    );
+    const item = await db.get('SELECT s.*, a.name as agent_name FROM someday_maybe s LEFT JOIN agents a ON s.agent_id = a.id WHERE s.id = $1', [req.params.id]);
+    broadcast('someday:updated', item);
+    res.json(item);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/someday/:id', requireAuth, async (req, res) => {
+  try { await db.run('DELETE FROM someday_maybe WHERE id = $1', [req.params.id]); broadcast('someday:deleted', { id: req.params.id }); res.json({ success: true }); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ============ DASHBOARD AGGREGATE ============
 app.get('/api/dashboard', requireAuth, async (req, res) => {
   try {
@@ -698,7 +774,7 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
     const day24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
     const day7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
     
-    const [active, completed, subagents, scheduled, activity, threadsOpen, threadsConcluded, usageToday, usageWeek] = await Promise.all([
+    const [active, completed, subagents, scheduled, activity, threadsOpen, threadsConcluded, somedayMaybe, usageToday, usageWeek] = await Promise.all([
       db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'active' AND w.category != 'conversation' ORDER BY w.started_at DESC LIMIT 20`),
       db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'completed' AND w.category != 'conversation' ORDER BY w.completed_at DESC LIMIT 10`),
       db.query(`SELECT s.*, a.name as agent_name FROM subagents s LEFT JOIN agents a ON s.agent_id = a.id ORDER BY s.started_at DESC LIMIT 10`),
@@ -706,6 +782,7 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
       db.query(`SELECT ac.*, a.name as agent_name FROM activity ac LEFT JOIN agents a ON ac.agent_id = a.id ORDER BY ac.created_at DESC LIMIT 20`),
       db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'active' AND w.category = 'conversation' ORDER BY w.started_at DESC LIMIT 20`),
       db.query(`SELECT w.*, a.name as agent_name FROM work_items w LEFT JOIN agents a ON w.agent_id = a.id WHERE w.status = 'completed' AND w.category = 'conversation' ORDER BY w.completed_at DESC LIMIT 10`),
+      db.query(`SELECT s.*, a.name as agent_name FROM someday_maybe s LEFT JOIN agents a ON s.agent_id = a.id WHERE s.status = 'active' ORDER BY s.created_at DESC LIMIT 20`),
       db.query('SELECT * FROM usage_records WHERE timestamp >= $1', [day24h]),
       db.query('SELECT * FROM usage_records WHERE timestamp >= $1', [day7d])
     ]);
@@ -724,7 +801,7 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
     }
     
     res.json({ 
-      active, completed, subagents, scheduled, activity, threadsOpen, threadsConcluded,
+      active, completed, subagents, scheduled, activity, threadsOpen, threadsConcluded, somedayMaybe,
       usage: {
         today: aggregateUsage(usageToday),
         week: aggregateUsage(usageWeek)

@@ -101,6 +101,10 @@
     .tag.research { background: var(--purple-dim); color: var(--purple); }
     .tag.deploy { background: var(--yellow-dim); color: var(--yellow); }
     .tag.agent { background: var(--accent-dim); color: var(--accent); }
+    .tag.idea { background: rgba(167,139,250,0.15); color: #a78bfa; }
+    .tag.business { background: rgba(251,191,36,0.15); color: #fbbf24; }
+    .tag.project { background: rgba(96,165,250,0.15); color: #60a5fa; }
+    .tag.learning { background: rgba(52,211,153,0.15); color: #34d399; }
     .time { font-size: 0.7rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
 
     /* Sub-agents */
@@ -304,6 +308,15 @@
         <div id="threads-concluded"></div>
       </div>
 
+      <!-- Someday/Maybe -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">💭 Someday/Maybe</span>
+          <span class="section-count" id="someday-count">0</span>
+        </div>
+        <div id="someday-maybe"></div>
+      </div>
+
       <!-- Completed Work -->
       <div class="section">
         <div class="section-header">
@@ -349,7 +362,7 @@
   </div>
 
 <script>
-let ws, data = { active: [], completed: [], subagents: [], scheduled: [], activity: [], threadsOpen: [], threadsConcluded: [], usage: { today: { opus: 0, sonnet: 0, total: 0, messages: 0, subagents: 0 }, week: { opus: 0, sonnet: 0, total: 0, messages: 0, subagents: 0 } } }, usageHistory = [];
+let ws, data = { active: [], completed: [], subagents: [], scheduled: [], activity: [], threadsOpen: [], threadsConcluded: [], somedayMaybe: [], usage: { today: { opus: 0, sonnet: 0, total: 0, messages: 0, subagents: 0 }, week: { opus: 0, sonnet: 0, total: 0, messages: 0, subagents: 0 } } }, usageHistory = [];
 
 async function init() {
   await loadUser();
@@ -422,6 +435,7 @@ function render() {
   renderThreads('threads-concluded', data.threadsConcluded || [], 'threads-concluded-count', false);
   renderSubagents();
   renderScheduled();
+  renderSomedayMaybe();
   renderFeed();
 }
 
@@ -501,6 +515,29 @@ function renderScheduled() {
       <div class="sched-next">${s.next_run ? relTime(s.next_run) : '—'}</div>
     </div>
   `).join('');
+}
+
+function renderSomedayMaybe() {
+  const items = data.somedayMaybe || [];
+  document.getElementById('someday-count').textContent = items.length;
+  const el = document.getElementById('someday-maybe');
+  if (!items.length) { el.innerHTML = '<div class="empty"><div class="icon">💭</div>No someday/maybe items</div>'; return; }
+  el.innerHTML = items.map(s => {
+    const cat = s.category || 'idea';
+    return `<div class="work-card">
+      <div class="top">
+        <div class="work-title">${esc(s.title)}</div>
+        <span class="tag" style="background:rgba(167,139,250,0.15);color:#a78bfa;">someday</span>
+      </div>
+      ${s.description ? `<div class="work-desc">${esc(s.description)}</div>` : ''}
+      <div class="work-meta">
+        <span class="tag ${cat}">${cat}</span>
+        ${s.agent_name ? `<span class="tag agent">${esc(s.agent_name)}</span>` : ''}
+        <span class="time">${relTime(s.created_at)}</span>
+        ${s.last_reviewed ? `<span class="time" title="Last reviewed">📋 ${relTime(s.last_reviewed)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderUsage() {
