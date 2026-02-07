@@ -640,6 +640,8 @@ app.post('/api/usage', requireAuth, async (req, res) => {
       'INSERT INTO usage_records (agent_id, timestamp, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, session_key, event_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
       [agentId, now, model || null, input_tokens, output_tokens, cache_read_tokens || null, cache_write_tokens || null, session_key || null, event_type || null]
     );
+    // Broadcast usage update
+    broadcast('usage:new', { model, input_tokens, output_tokens, event_type, timestamp: now });
     res.status(201).json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

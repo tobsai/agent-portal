@@ -120,6 +120,10 @@
     .status-dot.completed { background: var(--green); }
     .status-dot.failed { background: var(--red); }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    @keyframes flash {
+      0% { background: rgba(129, 140, 248, 0.1); }
+      100% { background: transparent; }
+    }
 
     /* Scheduled */
     .sched-item {
@@ -427,6 +431,107 @@ async function loadDashboard() {
   render();
 }
 
+async function loadUsageStats() {
+  const [dashboardRes, historyRes] = await Promise.all([
+    fetch('/api/usage'),
+    fetch('/api/usage/history?days=7')
+  ]);
+  const usageData = await dashboardRes.json();
+  data.usage = usageData;
+  usageHistory = await historyRes.json();
+  renderUsage();
+  flashSection('usage-section');
+}
+
+// Helper functions for updating individual items
+function updateWorkItem(item) {
+  // Remove from old lists
+  data.active = data.active.filter(w => w.id !== item.id);
+  data.completed = data.completed.filter(w => w.id !== item.id);
+  data.threadsOpen = data.threadsOpen.filter(w => w.id !== item.id);
+  data.threadsConcluded = data.threadsConcluded.filter(w => w.id !== item.id);
+  
+  // Add to appropriate list
+  if (item.category === 'conversation') {
+    if (item.status === 'active') {
+      data.threadsOpen.unshift(item);
+      renderThreads('threads-open', data.threadsOpen, 'threads-open-count', true);
+      flashSection('threads-open');
+    } else {
+      data.threadsConcluded.unshift(item);
+      renderThreads('threads-concluded', data.threadsConcluded, 'threads-concluded-count', false);
+      flashSection('threads-concluded');
+    }
+  } else {
+    if (item.status === 'active') {
+      data.active.unshift(item);
+      renderWork('active-work', data.active, 'active-count', true);
+      flashSection('active-work');
+    } else {
+      data.completed.unshift(item);
+      renderWork('completed-work', data.completed, 'completed-count', false);
+      flashSection('completed-work');
+    }
+  }
+}
+
+function removeWorkItem(id) {
+  data.active = data.active.filter(w => w.id !== id);
+  data.completed = data.completed.filter(w => w.id !== id);
+  data.threadsOpen = data.threadsOpen.filter(w => w.id !== id);
+  data.threadsConcluded = data.threadsConcluded.filter(w => w.id !== id);
+  renderWork('active-work', data.active, 'active-count', true);
+  renderWork('completed-work', data.completed, 'completed-count', false);
+  renderThreads('threads-open', data.threadsOpen, 'threads-open-count', true);
+  renderThreads('threads-concluded', data.threadsConcluded, 'threads-concluded-count', false);
+}
+
+function updateSubagent(item) {
+  const idx = data.subagents.findIndex(s => s.id === item.id);
+  if (idx >= 0) {
+    data.subagents[idx] = item;
+  } else {
+    data.subagents.unshift(item);
+  }
+  renderSubagents();
+  flashSection('subagents');
+}
+
+function updateScheduled(item) {
+  const idx = data.scheduled.findIndex(s => s.id === item.id);
+  if (idx >= 0) {
+    data.scheduled[idx] = item;
+  } else {
+    data.scheduled.push(item);
+  }
+  // Re-sort by next_run
+  data.scheduled.sort((a, b) => {
+    if (!a.next_run) return 1;
+    if (!b.next_run) return -1;
+    return new Date(a.next_run) - new Date(b.next_run);
+  });
+  renderScheduled();
+  flashSection('scheduled');
+}
+
+function updateSomedayMaybe(item) {
+  const idx = data.somedayMaybe.findIndex(s => s.id === item.id);
+  if (idx >= 0) {
+    data.somedayMaybe[idx] = item;
+  } else {
+    data.somedayMaybe.unshift(item);
+  }
+  renderSomedayMaybe();
+  flashSection('someday-maybe');
+}
+
+function flashSection(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.animation = 'flash 0.5s ease-out';
+  setTimeout(() => { el.style.animation = ''; }, 500);
+}
+
 function render() {
   renderUsage();
   renderWork('active-work', data.active, 'active-count', true);
@@ -626,9 +731,83 @@ function connectWS() {
     setTimeout(connectWS, 3000);
   };
   ws.onmessage = (e) => {
-    const { event } = JSON.parse(e.data);
-    // Refresh on any event
-    if (event) loadDashboard();
+    const msg = JSON.parse(e.data);
+    const { event, data: eventData } = msg;
+    
+    if (!event) return;
+    
+    // Handle specific events for real-time updates
+    switch (event) {
+      case 'work:created':
+        if (eventData.status === 'active' && eventData.category !== 'conversation') {
+          data.active.unshift(eventData);
+          renderWork('active-work', data.active, 'active-count', true);
+          flashSection('active-work');
+        } else if (eventData.category === 'conversation') {
+          data.threadsOpen.unshift(eventData);
+          renderThreads('threads-open', data.threadsOpen, 'threads-open-count', true);
+          flashSection('threads-open');
+        }
+        break;
+      
+      case 'work:updated':
+        updateWorkItem(eventData);
+        break;
+      
+      case 'work:deleted':
+        removeWorkItem(eventData.id);
+        break;
+      
+      case 'activity:new':
+        data.activity.unshift(eventData);
+        if (data.activity.length > 30) data.activity.pop();
+        renderFeed();
+        flashSection('activity-feed');
+        break;
+      
+      case 'subagent:created':
+        data.subagents.unshift(eventData);
+        renderSubagents();
+        flashSection('subagents');
+        break;
+      
+      case 'subagent:updated':
+        updateSubagent(eventData);
+        break;
+      
+      case 'subagent:deleted':
+        data.subagents = data.subagents.filter(s => s.id !== eventData.id);
+        renderSubagents();
+        break;
+      
+      case 'scheduled:updated':
+        updateScheduled(eventData);
+        break;
+      
+      case 'someday:created':
+        data.somedayMaybe.unshift(eventData);
+        renderSomedayMaybe();
+        flashSection('someday-maybe');
+        break;
+      
+      case 'someday:updated':
+        updateSomedayMaybe(eventData);
+        break;
+      
+      case 'someday:deleted':
+        data.somedayMaybe = data.somedayMaybe.filter(s => s.id !== eventData.id);
+        renderSomedayMaybe();
+        break;
+      
+      case 'usage:new':
+        // Reload usage stats
+        loadUsageStats();
+        break;
+      
+      default:
+        // Fallback: reload dashboard for unknown events
+        loadDashboard();
+    }
   };
 }
 
