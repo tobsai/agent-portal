@@ -617,6 +617,16 @@ app.patch('/api/subagents/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.delete('/api/subagents/:id', requireAuth, async (req, res) => {
+  try {
+    const existing = await db.get('SELECT * FROM subagents WHERE id = $1', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    await db.run('DELETE FROM subagents WHERE id = $1', [req.params.id]);
+    broadcast('subagent:deleted', { id: req.params.id });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ============ USAGE TRACKING ============
 app.post('/api/usage', requireAuth, async (req, res) => {
   try {
