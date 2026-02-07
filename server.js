@@ -607,9 +607,12 @@ app.patch('/api/subagents/:id', requireAuth, async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Not found' });
     const { status, result, metadata } = req.body;
     const completedAt = (status === 'completed' || status === 'failed') && !existing.completed_at ? new Date().toISOString() : existing.completed_at;
+    // Handle metadata - might be object (JSONB) or string (SQLite)
+    const existingMeta = typeof existing.metadata === 'string' ? JSON.parse(existing.metadata || '{}') : (existing.metadata || {});
+    const newMeta = metadata ?? existingMeta;
     await db.run(
       'UPDATE subagents SET status = $1, result = $2, completed_at = $3, metadata = $4 WHERE id = $5',
-      [status ?? existing.status, result ?? existing.result, completedAt, JSON.stringify(metadata ?? JSON.parse(existing.metadata || '{}')), req.params.id]
+      [status ?? existing.status, result ?? existing.result, completedAt, JSON.stringify(newMeta), req.params.id]
     );
     const item = await db.get('SELECT s.*, a.name as agent_name FROM subagents s LEFT JOIN agents a ON s.agent_id = a.id WHERE s.id = $1', [req.params.id]);
     broadcast('subagent:updated', item);
