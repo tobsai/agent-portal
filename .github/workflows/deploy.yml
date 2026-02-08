@@ -1,0 +1,58 @@
+# Agent Portal Railway Deployment
+# Deploys to Railway on push to main
+#
+# Setup required:
+# 1. Add RAILWAY_TOKEN secret in GitHub repo settings
+
+name: Deploy to Railway
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Agent Portal
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        run: railway up --service 55dd45a8-0142-4825-a4d8-860c3d559be9 --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Check Deployment Status
+        run: |
+          echo "Checking deployment status..."
+          sleep 10
+          for i in {1..24}; do
+            STATUS=$(curl -s -X POST https://backboard.railway.app/graphql/v2 \
+              -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d '{"query":"query { service(id: \"55dd45a8-0142-4825-a4d8-860c3d559be9\") { serviceInstances { edges { node { latestDeployment { status } } } } } }"}' \
+              | jq -r '.data.service.serviceInstances.edges[0].node.latestDeployment.status')
+            
+            echo "Attempt $i: Status = $STATUS"
+            
+            if [ "$STATUS" = "SUCCESS" ]; then
+              echo "✅ Deployment successful!"
+              exit 0
+            elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CRASHED" ]; then
+              echo "❌ Deployment failed!"
+              exit 1
+            fi
+            
+            sleep 10
+          done
+          
+          echo "⚠️ Deployment timed out"
+          exit 1
