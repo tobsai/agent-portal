@@ -10,6 +10,9 @@ if (process.env.SENTRY_DSN) {
   });
 }
 
+// PostHog analytics
+const { posthog, captureEvent, shutdown: shutdownPostHog } = require('./lib/posthog');
+
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -865,3 +868,16 @@ async function start() {
 }
 
 start().catch(console.error);
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  await shutdownPostHog();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  await shutdownPostHog();
+  process.exit(0);
+});
