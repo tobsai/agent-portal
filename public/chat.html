@@ -551,14 +551,12 @@
         return;
       }
       try {
-        let wsUrl = gatewayConfig.gatewayWsUrl.replace(/^http/, 'ws');
-        if (!wsUrl.includes('://')) wsUrl = 'wss://' + wsUrl;
+        let wsUrl = gatewayConfig.gatewayWsUrl;
+        if (wsUrl.startsWith('http')) wsUrl = wsUrl.replace(/^http/, 'ws');
+        else if (!wsUrl.includes('://')) wsUrl = 'wss://' + wsUrl;
 
         ws = new WebSocket(wsUrl);
-        ws.onopen = () => {
-          console.log('WS connected, authenticating...');
-          wsSend({ type: 'connect', params: { auth: { token: gatewayConfig.gatewayToken } } });
-        };
+        ws.onopen = () => console.log('WS open, waiting for challenge...');
         ws.onmessage = (event) => {
           try { handleMessage(JSON.parse(event.data)); }
           catch (err) { console.error('Parse error:', err); }
@@ -590,67 +588,105 @@
     }
 
     function handleMessage(data) {
-      console.log('<<', data.type || data.event, data);
+      console.log('<<', data.event || data.type, data);
 
-      // Auth ack
-      if (data.type === 'connect.ack' || data.type === 'connected') {
-        reconnectAttempts = 0;
-        updateConnectionStatus('connected', 'Connected');
-        hideError();
-        wsSend({ type: 'chat.history' });
+      // Challenge-response auth (OpenClaw gateway protocol)
+      if (data.event === 'connect.challenge') {
+        console.log('Got challenge, authenticating...');
+        wsSend({
+          type: 'req', id: 'connect-1', method: 'connect',
+          params: {
+            minProtocol: 3, maxProtocol: 3,
+            client: { id: 'cli', version: '1.0.0', platform: 'web', mode: 'cli' },
+            role: 'operator',
+            scopes: ['operator.read', 'operator.write'],
+            auth: { token: gatewayConfig.gatewayToken },
+            userAgent: 'agent-portal-chat/1.0'
+          }
+        });
         return;
       }
 
-      // History response
-      if (data.type === 'chat.history') {
-        if (Array.isArray(data.messages)) {
+      // RPC responses
+      if (data.type === 'res') {
+        if (data.id === 'connect-1') {
+          if (data.ok) {
+            reconnectAttempts = 0;
+            updateConnectionStatus('connected', 'Connected');
+            hideError();
+            wsSend({ type: 'req', id: 'hist-1', method: 'chat.history', params: {} });
+          } else {
+            const err = data.error?.message || 'Auth failed';
+            showError(err.includes('pairing') ? 'Device pairing required. Ask admin to approve.' : err);
+            updateConnectionStatus('error', 'Auth failed');
+          }
+          return;
+        }
+        if (data.id === 'hist-1') {
+          const msgs = data.payload?.messages || [];
           clearMessages();
-          data.messages.forEach(msg => {
+          msgs.forEach(msg => {
             if (msg.role === 'user' || msg.role === 'assistant') {
               const content = extractText(msg.content);
               if (content) addMessage(msg.role, content, msg.timestamp);
             }
           });
+          return;
+        }
+        // chat.send ack
+        if (data.ok && data.payload?.status === 'started') {
+          currentRunId = data.payload.runId;
+          return;
         }
         return;
       }
 
-      // chat.send ack (non-blocking — response comes via events)
-      if (data.type === 'chat.send') {
-        if (data.status === 'started') currentRunId = data.runId;
-        return;
-      }
-
-      // Streaming chat event — assistant reply
+      // Streaming chat event — assistant reply (delta or final)
       if (data.event === 'chat') {
-        const msg = data.data || data;
-        if (msg.role === 'assistant') {
+        const payload = data.payload || data.data || data;
+        const state = payload.state; // 'delta', 'final', or 'error'
+        const msg = payload.message;
+
+        if (state === 'error') {
+          removeLoadingIndicator();
+          showError(payload.errorMessage || 'Agent error');
+          isWaitingForResponse = false;
+          currentRunId = null;
+          return;
+        }
+
+        if (msg && msg.role === 'assistant') {
           const content = extractText(msg.content);
           if (content) {
             removeLoadingIndicator();
-            addMessage('assistant', content);
-            isWaitingForResponse = false;
-            currentRunId = null;
+            if (state === 'delta') {
+              updateStreamingMessage(content);
+            } else {
+              // final or unrecognized state — finalize
+              finalizeStreamingMessage(content);
+              isWaitingForResponse = false;
+              currentRunId = null;
+            }
           }
+        }
+
+        if (state === 'final' && !msg) {
+          // final with no message (e.g. empty response)
+          removeLoadingIndicator();
+          isWaitingForResponse = false;
+          currentRunId = null;
         }
         return;
       }
 
-      // Agent events (tool calls etc) — ignore for now
-      if (data.event === 'agent' || data.event === 'presence' || data.event === 'tick' || data.event === 'health') return;
+      // Ignore non-chat events
+      if (data.event) return;
 
       // Error
-      if (data.type === 'error' || data.error) {
-        const msg = data.message || data.error || data.reason || 'Unknown error';
-        // Pairing required — show helpful message
-        if (msg.includes('pairing')) {
-          showError('Device pairing required. Run: openclaw devices approve on the Mac Mini.');
-        } else {
-          showError(msg);
-        }
+      if (data.error) {
+        showError(typeof data.error === 'string' ? data.error : data.error.message || 'Unknown error');
         removeLoadingIndicator();
         isWaitingForResponse = false;
-        return;
       }
     }
 
@@ -690,6 +726,37 @@
       messageDiv.appendChild(contentDiv);
       messagesContainer.appendChild(messageDiv);
       scrollToBottom();
+    }
+
+    function updateStreamingMessage(content) {
+      let el = document.getElementById('streaming-message');
+      if (!el) {
+        const emptyState = messagesContainer.querySelector('.empty-state');
+        if (emptyState) emptyState.remove();
+        el = document.createElement('div');
+        el.className = 'message assistant';
+        el.id = 'streaming-message';
+        el.innerHTML = '<div class="message-avatar">🦞</div><div class="message-content"><div class="message-bubble"></div></div>';
+        messagesContainer.appendChild(el);
+      }
+      el.querySelector('.message-bubble').textContent = content;
+      scrollToBottom();
+    }
+
+    function finalizeStreamingMessage(content) {
+      const el = document.getElementById('streaming-message');
+      if (el) {
+        el.removeAttribute('id');
+        el.querySelector('.message-bubble').textContent = content;
+        // Add timestamp
+        const time = document.createElement('div');
+        time.className = 'message-timestamp';
+        time.textContent = formatTimestamp(new Date().toISOString());
+        el.querySelector('.message-content').appendChild(time);
+        scrollToBottom();
+      } else {
+        addMessage('assistant', content);
+      }
     }
 
     function addLoadingIndicator() {
@@ -741,7 +808,7 @@
       if (!ws || ws.readyState !== WebSocket.OPEN) { showError('Not connected'); return; }
 
       addMessage('user', text);
-      wsSend({ type: 'chat.send', message: text });
+      wsSend({ type: 'req', id: 'send-' + Date.now(), method: 'chat.send', params: { message: text } });
       addLoadingIndicator();
       isWaitingForResponse = true;
       messageInput.value = '';
