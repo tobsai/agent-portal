@@ -381,12 +381,13 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
+// Redirect old cached /chat to new path
 app.get('/chat', (req, res) => {
   if (!req.isAuthenticated()) return res.redirect('/');
-  // Force cache bust via query param
-  if (!req.query.v || req.query.v !== '3') {
-    return res.redirect('/chat?v=3');
-  }
+  res.redirect('/c');
+});
+app.get('/c', (req, res) => {
+  if (!req.isAuthenticated()) return res.redirect('/');
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
