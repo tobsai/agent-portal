@@ -383,8 +383,26 @@ app.get('/dashboard', (req, res) => {
 
 app.get('/chat', (req, res) => {
   if (!req.isAuthenticated()) return res.redirect('/');
+  // Force cache bust via query param
+  if (!req.query.v || req.query.v !== '3') {
+    return res.redirect('/chat?v=3');
+  }
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   res.sendFile(path.join(__dirname, 'public', 'chat.html'));
+});
+
+// Chat debug endpoint - stores last 50 debug entries for remote inspection
+const chatDebugLog = [];
+app.post('/api/chat-debug', (req, res) => {
+  chatDebugLog.push({ ...req.body, ip: req.ip, at: new Date().toISOString() });
+  if (chatDebugLog.length > 50) chatDebugLog.shift();
+  res.json({ ok: true });
+});
+app.get('/api/chat-debug', (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'unauthorized' });
+  res.json(chatDebugLog);
 });
 
 // API endpoint for chat config (gateway WS URL)

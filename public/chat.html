@@ -514,9 +514,24 @@
     const errorBanner = document.getElementById('error-banner');
     const errorMessage = document.getElementById('error-message');
 
+    // Debug log - POST errors to server for remote debugging
+    const debugLog = [];
+    function dbg(msg, data) {
+      const entry = { ts: new Date().toISOString(), msg, data };
+      debugLog.push(entry);
+      console.log('[chat-debug]', msg, data || '');
+      // POST debug info to server
+      fetch('/api/chat-debug', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry)
+      }).catch(() => {});
+    }
+
     async function init() {
       await loadUser();
       await loadConfig();
+      dbg('init', { wsUrl: gatewayConfig?.gatewayWsUrl?.substring(0, 60), hasToken: !!gatewayConfig?.gatewayToken });
       connectWebSocket();
       setupInputListeners();
     }
@@ -556,7 +571,7 @@
         else if (!wsUrl.includes('://')) wsUrl = 'wss://' + wsUrl;
 
         ws = new WebSocket(wsUrl);
-        ws.onopen = () => console.log('WS open, waiting for challenge...');
+        ws.onopen = () => { dbg('ws-open'); };
         ws.onmessage = (event) => {
           try { handleMessage(JSON.parse(event.data)); }
           catch (err) { console.error('Parse error:', err); }
@@ -588,11 +603,11 @@
     }
 
     function handleMessage(data) {
-      console.log('<<', data.event || data.type, data);
+      dbg('ws-msg', { event: data.event || data.type, ok: data.ok, error: data.error?.message, state: data.payload?.state });
 
       // Challenge-response auth (OpenClaw gateway protocol)
       if (data.event === 'connect.challenge') {
-        console.log('Got challenge, authenticating...');
+        dbg('auth-challenge');
         wsSend({
           type: 'req', id: 'connect-1', method: 'connect',
           params: {
