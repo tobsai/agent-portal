@@ -597,9 +597,8 @@
           type: 'req', id: 'connect-1', method: 'connect',
           params: {
             minProtocol: 3, maxProtocol: 3,
-            client: { id: 'cli', version: '1.0.0', platform: 'web', mode: 'cli' },
+            client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
             role: 'operator',
-            scopes: ['operator.read', 'operator.write'],
             auth: { token: gatewayConfig.gatewayToken },
             userAgent: 'agent-portal-chat/1.0'
           }
@@ -614,7 +613,7 @@
             reconnectAttempts = 0;
             updateConnectionStatus('connected', 'Connected');
             hideError();
-            wsSend({ type: 'req', id: 'hist-1', method: 'chat.history', params: {} });
+            wsSend({ type: 'req', id: 'hist-1', method: 'chat.history', params: { sessionKey: 'agent:main:main' } });
           } else {
             const err = data.error?.message || 'Auth failed';
             showError(err.includes('pairing') ? 'Device pairing required. Ask admin to approve.' : err);
@@ -808,7 +807,8 @@
       if (!ws || ws.readyState !== WebSocket.OPEN) { showError('Not connected'); return; }
 
       addMessage('user', text);
-      wsSend({ type: 'req', id: 'send-' + Date.now(), method: 'chat.send', params: { message: text } });
+      const sendId = 'send-' + Date.now();
+      wsSend({ type: 'req', id: sendId, method: 'chat.send', params: { sessionKey: 'agent:main:main', message: text, idempotencyKey: sendId } });
       addLoadingIndicator();
       isWaitingForResponse = true;
       messageInput.value = '';
