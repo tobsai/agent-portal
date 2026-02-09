@@ -381,6 +381,20 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
+app.get('/chat', (req, res) => {
+  if (!req.isAuthenticated()) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'public', 'chat.html'));
+});
+
+// API endpoint for chat config (gateway WS URL)
+app.get('/api/chat-config', (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'unauthorized' });
+  res.json({
+    gatewayWsUrl: process.env.GATEWAY_WS_URL || '',
+    gatewayToken: process.env.GATEWAY_TOKEN || ''
+  });
+});
+
 // ============ AUTH ROUTES ============
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 app.get('/auth/google/callback',
@@ -842,6 +856,13 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Chat config (gateway WebSocket URL)
+app.get('/api/chat/config', requireAuth, (req, res) => {
+  res.json({
+    gatewayWsUrl: process.env.GATEWAY_WS_URL || null
+  });
 });
 
 // ============ ERROR HANDLING ============
