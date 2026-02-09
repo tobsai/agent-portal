@@ -608,6 +608,14 @@
 
       // RPC responses
       if (data.type === 'res') {
+        if (!data.ok && data.error) {
+          console.error('RPC error:', data.id, data.error);
+          if (data.id !== 'connect-1' && data.id !== 'hist-1') {
+            showError(data.error.message || 'Request failed');
+            removeLoadingIndicator();
+            isWaitingForResponse = false;
+          }
+        }
         if (data.id === 'connect-1') {
           if (data.ok) {
             reconnectAttempts = 0;

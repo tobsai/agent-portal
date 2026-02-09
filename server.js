@@ -383,6 +383,7 @@ app.get('/dashboard', (req, res) => {
 
 app.get('/chat', (req, res) => {
   if (!req.isAuthenticated()) return res.redirect('/');
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'chat.html'));
 });
 
