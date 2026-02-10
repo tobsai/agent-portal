@@ -1,9 +1,5 @@
 # Agent Portal Railway Deployment
-# Deploys to Railway on push to main
-#
-# Setup required:
-# 1. Add RAILWAY_TOKEN secret in GitHub repo settings
-
+# Deploys to Railway on push to main using Railway CLI
 name: Deploy to Railway
 
 on:
@@ -12,11 +8,6 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  RAILWAY_PROJECT_ID: 9d7b61b4-c326-4571-873f-cefa31e5ea7f
-  RAILWAY_SERVICE_ID: 55dd45a8-0142-4825-a4d8-860c3d559be9
-  RAILWAY_ENVIRONMENT_ID: 805fd218-5ff8-4365-9682-06b2d5971bf5
-
 jobs:
   deploy:
     name: Deploy Agent Portal
@@ -24,48 +15,12 @@ jobs:
     timeout-minutes: 10
     
     steps:
-      - name: Trigger Railway Redeploy
-        run: |
-          RESPONSE=$(curl -s -X POST https://backboard.railway.app/graphql/v2 \
-            -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "query": "mutation { serviceInstanceRedeploy(serviceId: \"${{ env.RAILWAY_SERVICE_ID }}\", environmentId: \"${{ env.RAILWAY_ENVIRONMENT_ID }}\") }"
-            }')
-          
-          echo "Response: $RESPONSE"
-          
-          if echo "$RESPONSE" | jq -e '.data.serviceInstanceRedeploy == true' > /dev/null; then
-            echo "✅ Redeploy triggered successfully"
-          else
-            echo "❌ Failed to trigger redeploy"
-            exit 1
-          fi
-
-      - name: Check Deployment Status
-        run: |
-          echo "Waiting for deployment to complete..."
-          sleep 15
-          
-          for i in {1..30}; do
-            STATUS=$(curl -s -X POST https://backboard.railway.app/graphql/v2 \
-              -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              -d '{"query":"query { service(id: \"${{ env.RAILWAY_SERVICE_ID }}\") { serviceInstances { edges { node { latestDeployment { status } } } } } }"}' \
-              | jq -r '.data.service.serviceInstances.edges[0].node.latestDeployment.status')
-            
-            echo "Attempt $i/30: Status = $STATUS"
-            
-            if [ "$STATUS" = "SUCCESS" ]; then
-              echo "✅ Deployment successful!"
-              exit 0
-            elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CRASHED" ]; then
-              echo "❌ Deployment failed!"
-              exit 1
-            fi
-            
-            sleep 10
-          done
-          
-          echo "⚠️ Deployment timed out (may still be in progress)"
-          exit 0
+      - uses: actions/checkout@v4
+      
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+      
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service 55dd45a8-0142-4825-a4d8-860c3d559be9 --environment production --detach
