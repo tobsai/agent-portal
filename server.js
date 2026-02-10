@@ -23,6 +23,9 @@ const fs = require('fs');
 const http = require('http');
 const WebSocket = require('ws');
 
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.SESSION_SECRET || 'agent-portal-dev-secret';
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
@@ -416,12 +419,46 @@ app.get('/api/chat-config', (req, res) => {
 });
 
 // ============ AUTH ROUTES ============
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+app.get('/auth/google', (req, res, next) => {
+  // Store mobile flag in session so callback knows where to redirect
+  if (req.query.mobile === '1') req.session.mobileAuth = true;
+  passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+});
 app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
-  (req, res) => res.redirect('/dashboard')
+  (req, res) => {
+    const isMobile = req.session.mobileAuth;
+    delete req.session.mobileAuth;
+    if (isMobile) {
+      // Generate JWT for mobile app
+      const token = jwt.sign({ userId: req.user.id, email: req.user.email }, JWT_SECRET, { expiresIn: '90d' });
+      return res.redirect(`com.mapletree.agent-portal://auth/callback?token=${encodeURIComponent(token)}`);
+    }
+    res.redirect('/dashboard');
+  }
 );
 app.get('/auth/logout', (req, res) => { req.logout(() => res.redirect('/')); });
+
+// JWT auth middleware for mobile app — runs before API routes
+app.use('/api', async (req, res, next) => {
+  if (req.isAuthenticated()) return next(); // session auth takes priority
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    // Skip if it looks like an agent API key
+    if (token.startsWith('ak_')) return next();
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      const user = await db.get('SELECT * FROM users WHERE id = $1', [decoded.userId]);
+      if (user) {
+        req.user = user;
+        req.isAuthenticated = () => true;
+      }
+    } catch (e) { /* invalid token, continue unauthenticated */ }
+  }
+  next();
+});
+
 app.get('/api/me', (req, res) => {
   if (req.isAuthenticated()) {
     res.json({ id: req.user.id, name: req.user.name, email: req.user.email, picture: req.user.picture, isAdmin: req.user.is_admin });
