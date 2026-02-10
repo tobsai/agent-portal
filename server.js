@@ -420,17 +420,13 @@ app.get('/api/chat-config', (req, res) => {
 
 // ============ AUTH ROUTES ============
 app.get('/auth/google', (req, res, next) => {
-  // Store mobile flag in session so callback knows where to redirect
-  if (req.query.mobile === '1') req.session.mobileAuth = true;
-  passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+  const state = req.query.mobile === '1' ? 'mobile' : 'web';
+  passport.authenticate('google', { scope: ['profile', 'email'], state })(req, res, next);
 });
 app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
   (req, res) => {
-    const isMobile = req.session.mobileAuth;
-    delete req.session.mobileAuth;
-    if (isMobile) {
-      // Generate JWT for mobile app
+    if (req.query.state === 'mobile') {
       const token = jwt.sign({ userId: req.user.id, email: req.user.email }, JWT_SECRET, { expiresIn: '90d' });
       return res.redirect(`com.mapletree.agent-portal://auth/callback?token=${encodeURIComponent(token)}`);
     }
