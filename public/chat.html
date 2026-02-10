@@ -584,6 +584,11 @@
         ws.onclose = (event) => {
           console.log('WS closed:', event.code, event.reason);
           updateConnectionStatus('error', 'Disconnected');
+          // Reset send lock so chat doesn't freeze after reconnect
+          if (isWaitingForResponse) {
+            isWaitingForResponse = false;
+            removeLoadingIndicator();
+          }
           scheduleReconnect();
         };
       } catch (err) {
@@ -797,6 +802,7 @@
     function removeLoadingIndicator() {
       const el = document.getElementById('loading-indicator');
       if (el) el.remove();
+      if (window._responseTimeout) { clearTimeout(window._responseTimeout); window._responseTimeout = null; }
     }
 
     function scrollToBottom() { messagesContainer.scrollTop = messagesContainer.scrollHeight; }
@@ -842,6 +848,15 @@
       messageInput.style.height = 'auto';
       sendBtn.disabled = true;
       setTimeout(() => { sendBtn.disabled = false; }, 500);
+      // Safety timeout: unlock after 120s if no response received
+      if (window._responseTimeout) clearTimeout(window._responseTimeout);
+      window._responseTimeout = setTimeout(() => {
+        if (isWaitingForResponse) {
+          isWaitingForResponse = false;
+          removeLoadingIndicator();
+          console.warn('Response timeout — unlocking chat input');
+        }
+      }, 120000);
     }
 
     function logout() { window.location.href = '/auth/logout'; }
