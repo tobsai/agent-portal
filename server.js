@@ -412,8 +412,7 @@ app.get('/api/chat-debug', (req, res) => {
 });
 
 // API endpoint for chat config (gateway WS URL)
-app.get('/api/chat-config', (req, res) => {
-  if (!req.isAuthenticated()) return res.status(401).json({ error: 'unauthorized' });
+app.get('/api/chat-config', requireAuth, (req, res) => {
   res.json({
     gatewayWsUrl: process.env.GATEWAY_WS_URL || '',
     gatewayToken: process.env.GATEWAY_TOKEN || ''
