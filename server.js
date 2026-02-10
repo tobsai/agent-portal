@@ -348,9 +348,11 @@ function broadcast(event, data) {
 }
 
 function requireAuth(req, res, next) {
+  // JWT middleware already ran — if user is authenticated (session or JWT), allow through
+  if (req.isAuthenticated()) return next();
+  // Otherwise try agent API key
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) return requireAgentKey(req, res, next);
-  if (req.isAuthenticated()) return next();
   res.status(401).json({ error: 'Authentication required' });
 }
 
