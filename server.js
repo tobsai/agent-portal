@@ -907,6 +907,70 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ============ DOCS / MDX VIEWER ============
+app.get('/docs', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'docs.html'));
+});
+
+// List available docs from a predefined set of workspace files
+app.get('/api/docs', requireAuth, async (req, res) => {
+  try {
+    const docs = [
+      { id: 'memory-systems-proposal', title: 'Memory & Systems Proposal', path: 'research/memory-and-systems-proposal.md' },
+      { id: 'blog-first-week', title: 'Blog: My First Week with OpenClaw', path: 'projects/tobias-gunn-v2/content/posts/first-week-with-openclaw/content.mdoc' },
+      { id: 'blog-content-strategy', title: 'Blog Content Strategy', path: 'research/blog-content-strategy.md' },
+      { id: 'capability-expansion', title: 'Capability Expansion Ideas', path: 'research/capability-expansion-ideas.md' },
+      { id: 'roadtrip-app', title: 'Detour App Concept', path: 'research/roadtrip-app-concept.md' },
+      { id: 'scaling-agents', title: 'Scaling Agents Research', path: 'research/scaling-agents-research.md' },
+      { id: 'product-analytics', title: 'Product Analytics Comparison', path: 'research/product-analytics-comparison.md' },
+      { id: 'personal-org', title: 'Personal Organization System', path: 'research/personal-organization-system.md' },
+      { id: 'work-ai-strategy', title: 'Work AI Strategy', path: 'research/work-ai-strategy.md' },
+      { id: 'ai-phone-calls', title: 'AI Phone Calls Research', path: 'research/ai-phone-calls.md' },
+      { id: 'credit-card', title: 'Credit Card Recommendation', path: 'research/credit-card-recommendation.md' },
+      { id: 'florida-property', title: 'Florida Vacation Property', path: 'research/florida-vacation-property.md' },
+      { id: 'family-app-ideas', title: 'Family App Ideas', path: 'research/family-app-ideas.md' },
+      { id: 'punch-list', title: 'Master Punch List', path: 'memory/punch-list.md' },
+    ];
+    res.json(docs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Fetch a doc's content from GitHub
+app.get('/api/docs/:id', requireAuth, async (req, res) => {
+  try {
+    const docMap = {
+      'memory-systems-proposal': 'research/memory-and-systems-proposal.md',
+      'blog-first-week': 'projects/tobias-gunn-v2/content/posts/first-week-with-openclaw/content.mdoc',
+      'blog-content-strategy': 'research/blog-content-strategy.md',
+      'capability-expansion': 'research/capability-expansion-ideas.md',
+      'roadtrip-app': 'research/roadtrip-app-concept.md',
+      'scaling-agents': 'research/scaling-agents-research.md',
+      'product-analytics': 'research/product-analytics-comparison.md',
+      'personal-org': 'research/personal-organization-system.md',
+      'work-ai-strategy': 'research/work-ai-strategy.md',
+      'ai-phone-calls': 'research/ai-phone-calls.md',
+      'credit-card': 'research/credit-card-recommendation.md',
+      'florida-property': 'research/florida-vacation-property.md',
+      'family-app-ideas': 'research/family-app-ideas.md',
+      'punch-list': 'memory/punch-list.md',
+    };
+    
+    const filePath = docMap[req.params.id];
+    if (!filePath) return res.status(404).json({ error: 'Doc not found' });
+    
+    // Fetch from GitHub (talos-config repo has workspace files)
+    const ghUrl = `https://raw.githubusercontent.com/tobsai/talos-config/main/workspace/${filePath}`;
+    const resp = await fetch(ghUrl);
+    
+    if (!resp.ok) {
+      return res.status(404).json({ error: 'File not found in repo' });
+    }
+    
+    const content = await resp.text();
+    res.json({ id: req.params.id, path: filePath, content });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
