@@ -958,9 +958,13 @@ app.get('/api/docs/:id', requireAuth, async (req, res) => {
     const filePath = docMap[req.params.id];
     if (!filePath) return res.status(404).json({ error: 'Doc not found' });
     
-    // Fetch from GitHub (talos-config repo has workspace files)
-    const ghUrl = `https://raw.githubusercontent.com/tobsai/talos-config/main/workspace/${filePath}`;
-    const resp = await fetch(ghUrl);
+    // Fetch from GitHub API (private repo needs auth)
+    const ghToken = process.env.GITHUB_TOKEN;
+    const ghUrl = `https://api.github.com/repos/tobsai/talos-config/contents/workspace/${filePath}`;
+    const headers = { 'Accept': 'application/vnd.github.v3.raw', 'User-Agent': 'agent-portal' };
+    if (ghToken) headers['Authorization'] = `token ${ghToken}`;
+    
+    const resp = await fetch(ghUrl, { headers });
     
     if (!resp.ok) {
       return res.status(404).json({ error: 'File not found in repo' });
