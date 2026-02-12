@@ -6,6 +6,7 @@ let touchStartY = 0;
 let touchStartX = 0;
 let draggedElement = null;
 let placeholder = null;
+let isLoading = false;
 
 // DOM elements
 const columns = {
@@ -28,10 +29,65 @@ let currentUser = null;
 
 // Initialize
 async function init() {
-  await loadUser();
-  setupDropZones();
-  await loadTasks();
-  connectSSE();
+  showLoadingState();
+  try {
+    await loadUser();
+    setupDropZones();
+    await loadTasks();
+    connectSSE();
+  } catch (err) {
+    showError('Failed to initialize app. Please refresh the page.');
+    console.error('Initialization error:', err);
+  } finally {
+    hideLoadingState();
+  }
+}
+
+// Loading state
+function showLoadingState() {
+  isLoading = true;
+  Object.values(columns).forEach(col => {
+    col.innerHTML = '<div class="loading-spinner"></div>';
+  });
+}
+
+function hideLoadingState() {
+  isLoading = false;
+  document.querySelectorAll('.loading-spinner').forEach(el => el.remove());
+}
+
+// Error notification
+function showError(message, duration = 5000) {
+  const existing = document.querySelector('.error-toast');
+  if (existing) existing.remove();
+  
+  const toast = document.createElement('div');
+  toast.className = 'error-toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  setTimeout(() => toast.classList.add('show'), 10);
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+// Success notification
+function showSuccess(message, duration = 3000) {
+  const existing = document.querySelector('.success-toast');
+  if (existing) existing.remove();
+  
+  const toast = document.createElement('div');
+  toast.className = 'success-toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  setTimeout(() => toast.classList.add('show'), 10);
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
 }
 
 // Load current user
@@ -85,10 +141,14 @@ async function loadAdminApiKey() {
 async function loadTasks() {
   try {
     const res = await fetch('/api/tasks');
+    if (!res.ok) throw new Error('Failed to fetch tasks');
     tasks = await res.json();
     renderAll();
   } catch (err) {
     console.error('Failed to load tasks:', err);
+    showError('Failed to load tasks. Retrying...');
+    // Retry after 2 seconds
+    setTimeout(loadTasks, 2000);
   }
 }
 
@@ -416,9 +476,13 @@ function removePlaceholder() {
 async function updateTaskStatus(taskId, newStatus) {
   const apiKey = localStorage.getItem('portalApiKey');
   if (!apiKey) {
-    alert('No API key stored. Cannot move tasks without authentication.');
+    showError('No API key stored. Cannot move tasks without authentication.');
     return;
   }
+  
+  // Show loading indicator on the card
+  const card = document.querySelector(`.card[data-id="${taskId}"]`);
+  if (card) card.classList.add('updating');
   
   try {
     const res = await fetch(`/api/tasks/${taskId}`, {
@@ -432,12 +496,19 @@ async function updateTaskStatus(taskId, newStatus) {
     
     if (!res.ok) {
       const err = await res.json();
-      alert('Failed to move task: ' + (err.error || 'Unknown error'));
+      showError('Failed to move task: ' + (err.error || 'Unknown error'));
+      throw new Error(err.error || 'Failed to update task');
     }
     // SSE will handle the UI update
   } catch (err) {
     console.error('Failed to update task:', err);
-    alert('Network error moving task');
+    if (err.message.includes('fetch')) {
+      showError('Network error moving task. Please check your connection.');
+    }
+    // Reload tasks to restore correct state
+    await loadTasks();
+  } finally {
+    if (card) card.classList.remove('updating');
   }
 }
 
