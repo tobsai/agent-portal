@@ -32,6 +32,9 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 
 const PORT = process.env.PORT || 3847;
 
+// Feature Flags
+const FEATURE_ACTIVITY_DASHBOARD = process.env.FEATURE_ACTIVITY_DASHBOARD === 'true';
+
 // Trust proxy for Railway
 app.set('trust proxy', 1);
 
@@ -910,6 +913,13 @@ app.get('/api/usage/history', requireAuth, async (req, res) => {
     
     res.json(history);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============ FEATURE FLAGS ============
+app.get('/api/features', requireAuth, (req, res) => {
+  res.json({
+    activityDashboard: FEATURE_ACTIVITY_DASHBOARD
+  });
 });
 
 // ============ TOOL USAGE ============

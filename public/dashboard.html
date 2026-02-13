@@ -412,6 +412,41 @@
         </div>
       </div>
 
+      <!-- Sub-Agent Panel -->
+      <div class="section" id="subagent-panel">
+        <div class="section-header">
+          <span class="section-title">🤖 Sub-Agents</span>
+          <span class="section-count" id="subagent-running-count">0 running</span>
+        </div>
+        <div class="subagent-grid" id="subagent-grid">
+          <div class="empty" style="padding:1rem;font-size:0.75rem;color:var(--text-dim);text-align:center;grid-column:1/-1;">No sub-agents</div>
+        </div>
+      </div>
+
+      <!-- Thread Status Board -->
+      <div class="section" id="thread-board-section">
+        <div class="section-header">
+          <span class="section-title">📋 Thread Status</span>
+          <span class="section-count" id="thread-total-count">0 threads</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:1rem;margin-bottom:1rem;">
+          <div class="thread-board" id="thread-board">
+            <!-- Columns will be rendered here -->
+          </div>
+          <!-- Momentum Score -->
+          <div class="momentum-container" id="momentum-score">
+            <div class="momentum-title">⚡ Momentum</div>
+            <div class="momentum-gauge" style="--momentum-percent:0%">
+              <div class="momentum-inner">
+                <div class="momentum-value" id="momentum-value">0</div>
+                <div class="momentum-label">%</div>
+              </div>
+            </div>
+            <div class="momentum-desc" id="momentum-desc">No active threads</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Active Work -->
       <div class="section">
         <div class="section-header">
@@ -844,9 +879,121 @@ function renderActivityFeed(events) {
   }).join('');
 }
 
+// Sub-agent activity
+async function loadSubagentActivity() {
+  try {
+    const res = await fetch('/api/subagent-activity?hours=24');
+    const subagentData = await res.json();
+    renderSubagentActivity(subagentData);
+  } catch (err) {
+    console.error('Failed to load subagent activity:', err);
+  }
+}
+
+function renderSubagentActivity(subagentData) {
+  const { running, completed, failed, stats } = subagentData;
+  
+  document.getElementById('subagent-running-count').textContent = `${running.length} running`;
+  
+  const grid = document.getElementById('subagent-grid');
+  
+  const allToShow = [...running, ...completed.slice(0, 5), ...failed.slice(0, 3)];
+  
+  if (allToShow.length === 0) {
+    grid.innerHTML = '<div class="empty" style="padding:1rem;font-size:0.75rem;color:var(--text-dim);text-align:center;grid-column:1/-1;">No sub-agents</div>';
+    return;
+  }
+  
+  grid.innerHTML = allToShow.map(s => {
+    const isRunning = s.status === 'running' || s.status === 'spawned';
+    const isFailed = s.status === 'failed';
+    const cardClass = isRunning ? 'running' : (isFailed ? 'failed' : '');
+    const badgeClass = s.status === 'running' || s.status === 'spawned' ? 'running' : (s.status === 'completed' ? 'completed' : 'failed');
+    const spinner = isRunning ? '<div class="subagent-spinner"></div>' : '';
+    
+    return `<div class="subagent-card ${cardClass}">
+      ${spinner}
+      <div class="subagent-label">${esc(s.subagent_label)}</div>
+      <div class="subagent-task">${esc(s.task || 'No task description')}</div>
+      <div class="subagent-meta">
+        <span class="subagent-badge ${badgeClass}">${esc(s.status)}</span>
+        ${s.model ? `<span class="tag" style="font-size:0.6rem;">${esc(s.model)}</span>` : ''}
+        ${s.runtime_seconds ? `<span style="font-size:0.65rem;color:var(--text-dim);">${s.runtime_seconds}s</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Thread activity
+async function loadThreadActivity() {
+  try {
+    const res = await fetch('/api/thread-activity');
+    const threadData = await res.json();
+    renderThreadActivity(threadData);
+  } catch (err) {
+    console.error('Failed to load thread activity:', err);
+  }
+}
+
+function renderThreadActivity(threadData) {
+  const { open, inProgress, blocked, waiting, stats } = threadData;
+  
+  document.getElementById('thread-total-count').textContent = `${stats.total} threads`;
+  
+  const board = document.getElementById('thread-board');
+  
+  const columns = [
+    { title: 'Open', threads: open, color: 'var(--blue)' },
+    { title: 'In Progress', threads: inProgress, color: 'var(--green)' },
+    { title: 'Blocked', threads: blocked, color: 'var(--red)' },
+    { title: 'Waiting', threads: waiting, color: 'var(--yellow)' }
+  ];
+  
+  board.innerHTML = columns.map(col => {
+    const threadCards = col.threads.map(t => {
+      const age = getTimeAgo(t.last_update);
+      return `<div class="thread-card">
+        <div class="thread-title">${esc(t.title)}</div>
+        <div class="thread-age">${age}</div>
+        ${t.next_action ? `<div class="thread-next">→ ${esc(t.next_action)}</div>` : ''}
+      </div>`;
+    }).join('');
+    
+    return `<div class="thread-column">
+      <div class="thread-column-title">${col.title} (${col.threads.length})</div>
+      ${threadCards || '<div class="empty" style="padding:0.5rem;font-size:0.7rem;color:var(--text-dim);text-align:center;">None</div>'}
+    </div>`;
+  }).join('');
+  
+  // Update momentum score
+  const momentumPercent = stats.momentumScore || 0;
+  document.getElementById('momentum-value').textContent = momentumPercent;
+  document.querySelector('.momentum-gauge').style.setProperty('--momentum-percent', `${momentumPercent}%`);
+  
+  const momentumDesc = momentumPercent >= 70 ? '🚀 High momentum' :
+                       momentumPercent >= 40 ? '⚡ Moderate momentum' :
+                       '⚠️ Low momentum';
+  document.getElementById('momentum-desc').textContent = momentumDesc;
+}
+
+function getTimeAgo(timestamp) {
+  const ts = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  const now = new Date();
+  const diffMs = now - ts;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+}
+
 function render() {
   renderUsage();
   loadToolUsage();
+  loadSubagentActivity();
+  loadThreadActivity();
   renderWork('active-work', data.active, 'active-count', true);
   renderWork('completed-work', data.completed, 'completed-count', false);
   renderThreads('threads-open', data.threadsOpen || [], 'threads-open-count', true);
@@ -1121,6 +1268,18 @@ function connectWS() {
         // Reload tool usage on new event
         loadToolUsage();
         flashSection('tool-usage-section');
+        break;
+      
+      case 'subagent-activity':
+        // Reload sub-agent activity
+        loadSubagentActivity();
+        flashSection('subagent-panel');
+        break;
+      
+      case 'thread-activity':
+        // Reload thread activity
+        loadThreadActivity();
+        flashSection('thread-board-section');
         break;
       
       default:
