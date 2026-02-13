@@ -20,8 +20,63 @@
       background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
       overflow: hidden;
       display: flex;
+      flex-direction: column;
+    }
+    
+    /* Header Navigation */
+    .header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 1rem 2rem;
+      background: rgba(15, 12, 41, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .header-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .header-logo {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #fff;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .header-right {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+    
+    .header-link {
+      color: rgba(255, 255, 255, 0.7);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+    
+    .header-link:hover {
+      color: #fff;
+    }
+    
+    .main-content {
+      flex: 1;
+      display: flex;
       align-items: center;
       justify-content: center;
+      padding-top: 80px;
     }
 
     /* Animated background */
@@ -235,6 +290,15 @@
 </script>
 </head>
 <body>
+  <header class="header">
+    <div class="header-content">
+      <a href="/" class="header-logo">🦞 Talos</a>
+      <div class="header-right">
+        <a href="/auth/google" class="header-link">Sign In</a>
+      </div>
+    </div>
+  </header>
+
   <div class="bg-animation">
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
@@ -243,7 +307,8 @@
 
   <div class="particles" id="particles"></div>
 
-  <div class="container">
+  <div class="main-content">
+    <div class="container">
     <div class="glass-card">
       <div class="logo">🤖</div>
       <h1>Agent Portal</h1>
@@ -274,6 +339,7 @@
         </div>
       </div>
     </div>
+  </div>
   </div>
 
   <script>

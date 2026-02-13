@@ -37,29 +37,32 @@
       overflow: hidden;
     }
 
-    /* Header */
+    /* Header & Navigation */
     header {
-      display: flex; justify-content: space-between; align-items: center;
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center;
       padding: 0.75rem 1.5rem;
       border-bottom: 1px solid var(--border);
-      position: sticky; top: 0; z-index: 100;
-      background: rgba(10,10,15,0.95); backdrop-filter: blur(12px);
+      position: sticky; 
+      top: 0; 
+      z-index: 100;
+      background: rgba(10,10,15,0.95); 
+      backdrop-filter: blur(12px);
+    }
+    
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
     }
     
     .logo { 
-      font-size: 1rem; 
+      font-size: 1.1rem; 
       font-weight: 600; 
       display: flex; 
       align-items: center; 
       gap: 0.5rem;
-    }
-    
-    .logo .dot { 
-      width: 8px; 
-      height: 8px; 
-      border-radius: 50%; 
-      background: var(--green); 
-      box-shadow: 0 0 8px var(--green); 
     }
     
     .logo a {
@@ -71,6 +74,31 @@
     }
     
     .logo a:hover {
+      color: var(--accent);
+    }
+    
+    .nav-links {
+      display: flex;
+      gap: 0.25rem;
+    }
+    
+    .nav-link {
+      font-size: 0.85rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: all 0.15s;
+      font-weight: 500;
+    }
+    
+    .nav-link:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+    }
+    
+    .nav-link.active {
+      background: var(--accent-dim);
       color: var(--accent);
     }
     
@@ -400,19 +428,20 @@
 </head>
 <body>
   <header>
-    <div class="logo">
-      <div class="dot"></div>
-      <a href="/dashboard">Agent Portal</a>
-      <span style="color: var(--text-dim); margin-left: 0.5rem;">/ Architecture</span>
+    <div class="header-left">
+      <div class="logo">
+        <a href="/">🦞 Talos</a>
+      </div>
+      <nav class="nav-links">
+        <a href="/dashboard" class="nav-link">Dashboard</a>
+        <a href="/architecture" class="nav-link active">Architecture</a>
+      </nav>
     </div>
     <div class="header-right">
       <div class="conn" id="ws-status">
         <div class="dot"></div>
         <span>Connecting...</span>
       </div>
-      <a href="/dashboard" class="btn-s" style="text-decoration: none;">📊 Dashboard</a>
-      <a href="/docs" class="btn-s" style="text-decoration: none;">📄 Docs</a>
-      <a href="/chat" class="btn-s" style="text-decoration: none;">💬 Chat</a>
       <div class="user" id="user-info"></div>
       <a href="/auth/logout" class="btn-s" style="text-decoration: none;">Logout</a>
     </div>
@@ -539,11 +568,17 @@
         const x = centerX + Math.cos(angle) * radius;
         const y = centerY + Math.sin(angle) * radius;
         
+        // Map status to visual state
+        let visualStatus = 'idle';
+        if (sub.status === 'running' || sub.status === 'pending') visualStatus = 'active';
+        else if (sub.status === 'failed' || sub.status === 'stale') visualStatus = 'error';
+        else if (sub.status === 'completed') visualStatus = 'idle';
+        
         createNode(`sub-${i}`, {
           type: 'subagent',
-          title: `Sub-agent #${i + 1}`,
+          title: sub.label || `Sub-agent #${i + 1}`,
           subtitle: sub.model,
-          status: sub.status === 'running' ? 'active' : sub.status === 'failed' ? 'error' : 'idle',
+          status: visualStatus,
           task: sub.task,
           meta: {
             'Runtime': sub.runtime,
@@ -554,8 +589,8 @@
         });
       });
 
-      // SLM node (bottom right, only if active)
-      if (data.slm.status === 'active' || data.slm.activeModel) {
+      // SLM node (ISSUE 3 FIX: always show if models exist OR if active)
+      if (data.slm && (data.slm.models.length > 0 || data.slm.status === 'active')) {
         createNode('slm', {
           type: 'slm',
           title: 'Ollama',
@@ -629,7 +664,38 @@
       };
     }
 
-    // Draw connections between nodes
+    // Calculate intersection point of line with rectangle edge
+    function getEdgeIntersection(x1, y1, x2, y2, nodeElement) {
+      const rect = nodeElement.getBoundingClientRect();
+      const nodeX = parseFloat(nodeElement.style.left) + rect.width / 2;
+      const nodeY = parseFloat(nodeElement.style.top) + rect.height / 2;
+      
+      // Calculate intersection with rectangle boundary
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      
+      // Half dimensions
+      const hw = rect.width / 2;
+      const hh = rect.height / 2;
+      
+      // Find intersection point
+      let t = 1;
+      if (Math.abs(dx) > 0.001) {
+        const tx = dx > 0 ? hw / dx : -hw / dx;
+        if (tx < t) t = tx;
+      }
+      if (Math.abs(dy) > 0.001) {
+        const ty = dy > 0 ? hh / dy : -hh / dy;
+        if (ty < t) t = ty;
+      }
+      
+      return {
+        x: nodeX + dx * t,
+        y: nodeY + dy * t
+      };
+    }
+
+    // Draw connections between nodes (ISSUE 4 FIX: connect to edges, not centers)
     function drawConnections(connections) {
       const svg = document.querySelector('.connections');
       
@@ -639,11 +705,24 @@
         
         if (!fromNode || !toNode) return;
         
+        // Get actual center positions
+        const fromRect = fromNode.element.getBoundingClientRect();
+        const toRect = toNode.element.getBoundingClientRect();
+        
+        const fromCenterX = fromNode.x;
+        const fromCenterY = fromNode.y;
+        const toCenterX = toNode.x;
+        const toCenterY = toNode.y;
+        
+        // Calculate edge intersection points
+        const fromEdge = getEdgeIntersection(fromCenterX, fromCenterY, toCenterX, toCenterY, fromNode.element);
+        const toEdge = getEdgeIntersection(toCenterX, toCenterY, fromCenterX, fromCenterY, toNode.element);
+        
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', fromNode.x);
-        line.setAttribute('y1', fromNode.y);
-        line.setAttribute('x2', toNode.x);
-        line.setAttribute('y2', toNode.y);
+        line.setAttribute('x1', fromEdge.x);
+        line.setAttribute('y1', fromEdge.y);
+        line.setAttribute('x2', toEdge.x);
+        line.setAttribute('y2', toEdge.y);
         
         // Active connections get animation
         const fromStatus = fromNode.element.classList.contains('active');

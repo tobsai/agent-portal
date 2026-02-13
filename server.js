@@ -1324,12 +1324,17 @@ app.get('/api/architecture', requireAuth, async (req, res) => {
   try {
     const now = new Date();
     const day24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
     
     // Get primary agent stats
-    const [usageRecent, activeSubagents, allSubagents] = await Promise.all([
+    const [usageRecent, recentSubagents] = await Promise.all([
       db.query('SELECT * FROM usage_records WHERE timestamp >= $1 ORDER BY timestamp DESC LIMIT 100', [day24h]),
-      db.query(`SELECT s.*, a.name as agent_name FROM subagents s LEFT JOIN agents a ON s.agent_id = a.id WHERE s.status IN ('running', 'pending') ORDER BY s.started_at DESC`),
-      db.query(`SELECT s.*, a.name as agent_name FROM subagents s LEFT JOIN agents a ON s.agent_id = a.id ORDER BY s.started_at DESC LIMIT 30`)
+      // ISSUE 1 FIX: Only show running sub-agents OR completed/failed within last hour
+      db.query(`SELECT s.*, a.name as agent_name FROM subagents s 
+                LEFT JOIN agents a ON s.agent_id = a.id 
+                WHERE (s.status = 'running' OR s.status = 'pending')
+                   OR (s.status IN ('completed', 'failed') AND s.completed_at >= $1)
+                ORDER BY s.started_at DESC`, [oneHourAgo])
     ]);
     
     // Calculate primary agent context usage (approximate from recent usage)
@@ -1348,14 +1353,14 @@ app.get('/api/architecture', requireAuth, async (req, res) => {
     const primaryAgent = {
       name: 'Talos',
       model: activeModel,
-      status: activeSubagents.length > 0 || usageRecent.length > 0 ? 'active' : 'idle',
+      status: recentSubagents.length > 0 || usageRecent.length > 0 ? 'active' : 'idle',
       uptime: formatUptime(uptime),
       contextUsed: Math.min(contextUsed, 200000),
       contextMax: 200000
     };
     
-    // Format sub-agents
-    const subAgents = allSubagents.map(s => {
+    // Format sub-agents with stale detection
+    const subAgents = recentSubagents.map(s => {
       const startedAt = new Date(s.started_at);
       const runtime = s.completed_at 
         ? Math.floor((new Date(s.completed_at) - startedAt) / 1000)
@@ -1367,23 +1372,74 @@ app.get('/api/architecture', requireAuth, async (req, res) => {
         metadata = typeof s.metadata === 'string' ? JSON.parse(s.metadata) : (s.metadata || {});
       } catch (e) {}
       
+      const tokens = metadata.tokens || 0;
+      
+      // ISSUE 2 FIX: Detect stale/dead sub-agents
+      // A sub-agent with 0 tokens and started > 24h ago is stale
+      let status = s.status || 'running';
+      if (status === 'running' && tokens === 0 && runtime > 86400) {
+        status = 'stale';
+      }
+      
       return {
         id: s.id,
         task: s.task || s.label || 'Unnamed task',
         model: metadata.model || 'sonnet',
-        status: s.status || 'running',
+        status: status,
         startedAt: s.started_at,
         runtime: formatUptime(runtime),
-        tokens: metadata.tokens || 0
+        tokens: tokens
       };
     });
     
-    // SLM status (hardcoded for now - could be extended with actual Ollama API integration)
-    const slm = {
+    // ISSUE 3 FIX: Check Ollama live status
+    let slm = {
       status: 'idle',
-      models: ['qwen3:14b', 'deepseek-r1:14b', 'qwen2.5-coder:7b'],
+      models: [],
       activeModel: null
     };
+    
+    try {
+      // Try Ollama API (localhost first, then cloudflare tunnel)
+      const ollamaUrls = [
+        'http://localhost:11434',
+        'https://pets-huntington-experimental-odds.trycloudflare.com'
+      ];
+      
+      let ollamaData = null;
+      for (const baseUrl of ollamaUrls) {
+        try {
+          const [tagsRes, psRes] = await Promise.all([
+            fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(2000) }),
+            fetch(`${baseUrl}/api/ps`, { signal: AbortSignal.timeout(2000) })
+          ]);
+          
+          if (tagsRes.ok && psRes.ok) {
+            ollamaData = {
+              tags: await tagsRes.json(),
+              ps: await psRes.json()
+            };
+            break;
+          }
+        } catch (e) {
+          // Try next URL
+          continue;
+        }
+      }
+      
+      if (ollamaData) {
+        slm.models = ollamaData.tags.models?.map(m => m.name) || [];
+        const runningModels = ollamaData.ps.models || [];
+        if (runningModels.length > 0) {
+          slm.status = 'active';
+          slm.activeModel = runningModels[0].name;
+        } else {
+          slm.status = 'idle';
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch Ollama status:', err);
+    }
     
     // Build connection graph
     const connections = [
@@ -1392,6 +1448,11 @@ app.get('/api/architecture', requireAuth, async (req, res) => {
     subAgents.forEach((sub, idx) => {
       connections.push({ from: 'primary', to: `sub-${idx}` });
     });
+    
+    // Add SLM connection if available
+    if (slm.models.length > 0 || slm.status === 'active') {
+      connections.push({ from: 'primary', to: 'slm' });
+    }
     
     res.json({ primaryAgent, subAgents, slm, connections });
   } catch (err) { 

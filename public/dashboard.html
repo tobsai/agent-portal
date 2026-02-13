@@ -29,16 +29,68 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
-    /* Header */
+    /* Header & Navigation */
     header {
-      display: flex; justify-content: space-between; align-items: center;
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center;
       padding: 0.75rem 1.5rem;
       border-bottom: 1px solid var(--border);
-      position: sticky; top: 0; z-index: 50;
-      background: rgba(10,10,15,0.85); backdrop-filter: blur(12px);
+      position: sticky; 
+      top: 0; 
+      z-index: 50;
+      background: rgba(10,10,15,0.85); 
+      backdrop-filter: blur(12px);
     }
-    .logo { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
-    .logo .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+    
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    
+    .logo { 
+      font-size: 1.1rem; 
+      font-weight: 600; 
+      display: flex; 
+      align-items: center; 
+      gap: 0.5rem; 
+    }
+    
+    .logo a {
+      color: var(--text);
+      text-decoration: none;
+    }
+    
+    .logo a:hover {
+      color: var(--accent);
+    }
+    
+    .nav-links {
+      display: flex;
+      gap: 0.25rem;
+    }
+    
+    .nav-link {
+      font-size: 0.85rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: all 0.15s;
+      font-weight: 500;
+    }
+    
+    .nav-link:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+    }
+    
+    .nav-link.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    
     .header-right { display: flex; align-items: center; gap: 0.75rem; }
     .conn { font-size: 0.7rem; color: var(--text-dim); display: flex; align-items: center; gap: 0.35rem; }
     .conn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); }
@@ -306,12 +358,17 @@
 </head>
 <body>
   <header>
-    <div class="logo"><span class="dot"></span> Agent Portal</div>
+    <div class="header-left">
+      <div class="logo">
+        <a href="/">🦞 Talos</a>
+      </div>
+      <nav class="nav-links">
+        <a href="/dashboard" class="nav-link active">Dashboard</a>
+        <a href="/architecture" class="nav-link">Architecture</a>
+      </nav>
+    </div>
     <div class="header-right">
       <div class="conn" id="conn"><span class="dot"></span> connecting</div>
-      <a href="/architecture" class="btn-s">🔀 Architecture</a>
-      <a href="/docs" class="btn-s">📄 Docs</a>
-      <a href="/chat" class="btn-s">💬 Chat</a>
       <button class="btn-token" onclick="openModal('agents-modal')">🔑 API Tokens</button>
       <div class="user" id="user-info">
         <div class="avatar" id="user-avatar"></div>
