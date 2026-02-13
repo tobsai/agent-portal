@@ -550,9 +550,26 @@ let ws, data = { active: [], completed: [], subagents: [], scheduled: [], activi
 
 async function init() {
   await loadUser();
+  await checkFeatureFlags();
   await loadDashboard();
   await checkTokenBanner();
   connectWS();
+}
+
+async function checkFeatureFlags() {
+  try {
+    const r = await fetch('/api/features');
+    if (!r.ok) return;
+    const features = await r.json();
+    
+    // Hide activity dashboard section if feature is disabled
+    if (!features.activityDashboard) {
+      const section = document.getElementById('tool-usage-section');
+      if (section) section.style.display = 'none';
+    }
+  } catch (e) {
+    console.error('Failed to load feature flags:', e);
+  }
 }
 
 async function checkTokenBanner() {

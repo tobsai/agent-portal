@@ -924,6 +924,9 @@ app.get('/api/features', requireAuth, (req, res) => {
 
 // ============ TOOL USAGE ============
 app.post('/api/tool-usage', requireAuth, async (req, res) => {
+  if (!FEATURE_ACTIVITY_DASHBOARD) {
+    return res.status(404).json({ error: 'Feature not available' });
+  }
   try {
     const { agentId, timestamp, tool, category, description, model, tokensUsed, duration, metadata = {} } = req.body;
     
@@ -958,6 +961,9 @@ app.post('/api/tool-usage', requireAuth, async (req, res) => {
 });
 
 app.get('/api/tool-usage', requireAuth, async (req, res) => {
+  if (!FEATURE_ACTIVITY_DASHBOARD) {
+    return res.status(404).json({ error: 'Feature not available' });
+  }
   try {
     const hours = parseInt(req.query.hours) || 24;
     const agentId = req.agent?.id || req.query.agent_id;
@@ -1027,6 +1033,9 @@ app.get('/api/tool-usage', requireAuth, async (req, res) => {
 
 // ============ SUB-AGENT ACTIVITY ============
 app.post('/api/subagent-activity', requireAuth, async (req, res) => {
+  if (!FEATURE_ACTIVITY_DASHBOARD) {
+    return res.status(404).json({ error: 'Feature not available' });
+  }
   try {
     const { agentId, subagentLabel, sessionKey, status, task, model, startedAt, completedAt, tokensUsed, runtime, result } = req.body;
     
@@ -1060,6 +1069,9 @@ app.post('/api/subagent-activity', requireAuth, async (req, res) => {
 });
 
 app.get('/api/subagent-activity', requireAuth, async (req, res) => {
+  if (!FEATURE_ACTIVITY_DASHBOARD) {
+    return res.status(404).json({ error: 'Feature not available' });
+  }
   try {
     const hours = parseInt(req.query.hours) || 24;
     const agentId = req.agent?.id || req.query.agent_id;
@@ -1113,6 +1125,9 @@ app.get('/api/subagent-activity', requireAuth, async (req, res) => {
 
 // ============ THREAD ACTIVITY ============
 app.post('/api/thread-activity', requireAuth, async (req, res) => {
+  if (!FEATURE_ACTIVITY_DASHBOARD) {
+    return res.status(404).json({ error: 'Feature not available' });
+  }
   try {
     const { agentId, threadId, title, status, lastUpdate, category, blockedOn, nextAction } = req.body;
     
@@ -1160,6 +1175,9 @@ app.post('/api/thread-activity', requireAuth, async (req, res) => {
 });
 
 app.get('/api/thread-activity', requireAuth, async (req, res) => {
+  if (!FEATURE_ACTIVITY_DASHBOARD) {
+    return res.status(404).json({ error: 'Feature not available' });
+  }
   try {
     const agentId = req.agent?.id || req.query.agent_id;
     
