@@ -242,7 +242,12 @@ if (isProduction) {
     pool: pgPool
   };
 } else {
-  const Database = require('better-sqlite3');
+  let Database;
+  try { Database = require('better-sqlite3'); } catch(e) {
+    console.error('better-sqlite3 not available, SQLite fallback disabled');
+    console.error('Set DATABASE_URL for PostgreSQL');
+    process.exit(1);
+  }
   const dataDir = path.join(__dirname, 'data');
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
