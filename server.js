@@ -146,6 +146,23 @@ if (isProduction) {
         );
         CREATE INDEX IF NOT EXISTS idx_usage_agent_time ON usage_records(agent_id, timestamp DESC);
 
+        -- Tool usage tracking
+        CREATE TABLE IF NOT EXISTS tool_usage (
+          id SERIAL PRIMARY KEY,
+          agent_id TEXT NOT NULL,
+          timestamp TIMESTAMPTZ DEFAULT NOW(),
+          tool TEXT NOT NULL,
+          category TEXT,
+          description TEXT,
+          model TEXT,
+          tokens_used INTEGER,
+          duration_ms INTEGER,
+          metadata JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_tool_usage_timestamp ON tool_usage(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_tool_usage_agent ON tool_usage(agent_id);
+
         -- Sessions table for connect-pg-simple
         CREATE TABLE IF NOT EXISTS sessions (
           sid VARCHAR NOT NULL COLLATE "default",
@@ -251,6 +268,21 @@ if (isProduction) {
           event_type TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_usage_agent_time ON usage_records(agent_id, timestamp DESC);
+        CREATE TABLE IF NOT EXISTS tool_usage (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          agent_id TEXT NOT NULL,
+          timestamp TEXT DEFAULT (datetime('now')),
+          tool TEXT NOT NULL,
+          category TEXT,
+          description TEXT,
+          model TEXT,
+          tokens_used INTEGER,
+          duration_ms INTEGER,
+          metadata TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_tool_usage_timestamp ON tool_usage(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_tool_usage_agent ON tool_usage(agent_id);
         CREATE TABLE IF NOT EXISTS someday_maybe (
           id TEXT PRIMARY KEY,
           agent_id TEXT,
@@ -810,6 +842,109 @@ app.get('/api/usage/history', requireAuth, async (req, res) => {
     
     res.json(history);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============ TOOL USAGE ============
+app.post('/api/tool-usage', requireAuth, async (req, res) => {
+  try {
+    const { agentId, timestamp, tool, category, description, model, tokensUsed, duration, metadata = {} } = req.body;
+    
+    if (!agentId || !tool) {
+      return res.status(400).json({ error: 'agentId and tool are required' });
+    }
+    
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const ts = timestamp || now;
+    
+    await db.run(
+      `INSERT INTO tool_usage (id, agent_id, timestamp, tool, category, description, model, tokens_used, duration_ms, metadata, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [id, agentId, ts, tool, category || null, description || null, model || null, tokensUsed || null, duration || null, JSON.stringify(metadata), now]
+    );
+    
+    const record = await db.get('SELECT * FROM tool_usage WHERE id = $1', [id]);
+    
+    // Broadcast to WebSocket clients
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'tool-usage', data: record }));
+      }
+    });
+    
+    res.json(record);
+  } catch (err) { 
+    console.error('Error creating tool usage:', err);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
+app.get('/api/tool-usage', requireAuth, async (req, res) => {
+  try {
+    const hours = parseInt(req.query.hours) || 24;
+    const agentId = req.agent?.id || req.query.agent_id;
+    const startTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    
+    const query = agentId
+      ? 'SELECT * FROM tool_usage WHERE agent_id = $1 AND timestamp >= $2 ORDER BY timestamp DESC'
+      : 'SELECT * FROM tool_usage WHERE timestamp >= $1 ORDER BY timestamp DESC';
+    const params = agentId ? [agentId, startTime] : [startTime];
+    
+    const events = await db.query(query, params);
+    
+    // Aggregations
+    const byHour = {};
+    const byTool = {};
+    const byCategory = {};
+    const byModel = {};
+    let totalTokens = 0;
+    
+    events.forEach(e => {
+      // Parse metadata if it's a string (SQLite)
+      if (typeof e.metadata === 'string') {
+        try { e.metadata = JSON.parse(e.metadata); } catch {}
+      }
+      
+      // Group by hour
+      const hour = (e.timestamp instanceof Date ? e.timestamp.toISOString() : e.timestamp).substring(0, 13); // YYYY-MM-DDTHH
+      if (!byHour[hour]) byHour[hour] = { timestamp: hour, count: 0, categories: {} };
+      byHour[hour].count++;
+      if (e.category) {
+        byHour[hour].categories[e.category] = (byHour[hour].categories[e.category] || 0) + 1;
+      }
+      
+      // Group by tool
+      byTool[e.tool] = (byTool[e.tool] || 0) + 1;
+      
+      // Group by category
+      if (e.category) {
+        byCategory[e.category] = (byCategory[e.category] || 0) + 1;
+      }
+      
+      // Group by model
+      if (e.model) {
+        const isLocal = e.model.includes('ollama') || e.model.includes('qwen') || e.model.includes('deepseek');
+        const modelGroup = isLocal ? 'local' : 'cloud';
+        byModel[modelGroup] = (byModel[modelGroup] || 0) + 1;
+      }
+      
+      // Sum tokens
+      if (e.tokens_used) totalTokens += e.tokens_used;
+    });
+    
+    res.json({
+      events,
+      totalCount: events.length,
+      totalTokens,
+      byHour: Object.values(byHour).sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+      byTool: Object.entries(byTool).map(([tool, count]) => ({ tool, count })).sort((a, b) => b.count - a.count),
+      byCategory: Object.entries(byCategory).map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count),
+      byModel: Object.entries(byModel).map(([model, count]) => ({ model, count }))
+    });
+  } catch (err) { 
+    console.error('Error fetching tool usage:', err);
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 // ============ SOMEDAY/MAYBE ============

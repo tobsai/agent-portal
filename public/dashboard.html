@@ -202,8 +202,38 @@
     .usage-bar-label { font-size: 0.6rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
     .usage-bar-value { font-size: 0.65rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 0.15rem; }
 
+    /* Activity & Tools */
+    .tool-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+    .tool-stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;
+    }
+    .tool-stat-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .tool-stat-value { font-size: 1.5rem; font-weight: 600; color: var(--text); }
+    .tool-stat-sub { font-size: 0.7rem; color: var(--text-dim); }
+    .tool-charts { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+    .tool-chart-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem; min-height: 250px;
+    }
+    .tool-chart-title { font-size: 0.8rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-muted); }
+    .tool-activity-feed {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem; max-height: 300px; overflow-y: auto;
+    }
+    .tool-activity-item {
+      padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+      display: flex; gap: 0.75rem; align-items: flex-start;
+    }
+    .tool-activity-item:last-child { border-bottom: none; }
+    .tool-activity-time { font-size: 0.65rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; flex-shrink: 0; width: 50px; }
+    .tool-activity-content { flex: 1; min-width: 0; }
+    .tool-activity-tool { font-size: 0.7rem; font-weight: 600; color: var(--accent); }
+    .tool-activity-desc { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     @media (max-width: 768px) {
       .usage-grid { grid-template-columns: 1fr; }
+      .tool-charts { grid-template-columns: 1fr; }
       .layout { grid-template-columns: 1fr; }
       .sidebar { border-left: none; border-top: 1px solid var(--border); max-height: 400px; }
       .user span { display: none; }
@@ -213,6 +243,7 @@
   !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageviewId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
   posthog.init('phc_QBrEydH4duDZXg7OeNTpOrCb2lB77yn1S54FrnCt8Pp',{api_host:'https://analytics.mtree.io',person_profiles:'identified_only'})
 </script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <header>
@@ -270,6 +301,55 @@
             <span class="section-title">Last 7 Days</span>
           </div>
           <div class="usage-chart" id="usage-chart"></div>
+        </div>
+      </div>
+
+      <!-- Activity & Tools -->
+      <div class="section" id="tool-usage-section">
+        <div class="section-header">
+          <span class="section-title">🛠️ Activity & Tools</span>
+          <span class="section-count" id="tool-period">Last 24h</span>
+        </div>
+        
+        <!-- Stats Cards -->
+        <div class="tool-stats">
+          <div class="tool-stat-card">
+            <div class="tool-stat-label">Total Actions</div>
+            <div class="tool-stat-value" id="tool-total">0</div>
+            <div class="tool-stat-sub">today</div>
+          </div>
+          <div class="tool-stat-card">
+            <div class="tool-stat-label">Most Used</div>
+            <div class="tool-stat-value" id="tool-most">—</div>
+            <div class="tool-stat-sub" id="tool-most-count">0 uses</div>
+          </div>
+          <div class="tool-stat-card">
+            <div class="tool-stat-label">Cloud / Local</div>
+            <div class="tool-stat-value" id="tool-ratio">—</div>
+            <div class="tool-stat-sub">model distribution</div>
+          </div>
+          <div class="tool-stat-card">
+            <div class="tool-stat-label">Active Hours</div>
+            <div class="tool-stat-value" id="tool-hours">0</div>
+            <div class="tool-stat-sub">unique hours today</div>
+          </div>
+        </div>
+        
+        <!-- Charts -->
+        <div class="tool-charts">
+          <div class="tool-chart-card">
+            <div class="tool-chart-title">24-Hour Timeline</div>
+            <canvas id="timeline-chart" height="150"></canvas>
+          </div>
+          <div class="tool-chart-card">
+            <div class="tool-chart-title">Tool Usage</div>
+            <canvas id="tool-pie-chart" height="150"></canvas>
+          </div>
+        </div>
+        
+        <!-- Recent Activity Feed -->
+        <div class="tool-activity-feed" id="tool-activity-feed">
+          <div class="empty" style="padding:1rem;font-size:0.75rem;color:var(--text-dim);text-align:center;">No activity yet</div>
         </div>
       </div>
 
@@ -538,8 +618,176 @@ function flashSection(id) {
   setTimeout(() => { el.style.animation = ''; }, 500);
 }
 
+// Tool usage charts
+let timelineChart = null;
+let toolPieChart = null;
+
+async function loadToolUsage() {
+  try {
+    const res = await fetch('/api/tool-usage?hours=24');
+    const toolData = await res.json();
+    renderToolUsage(toolData);
+  } catch (err) {
+    console.error('Failed to load tool usage:', err);
+  }
+}
+
+function renderToolUsage(toolData) {
+  const { events, totalCount, totalTokens, byHour, byTool, byCategory, byModel } = toolData;
+  
+  // Stats cards
+  document.getElementById('tool-total').textContent = totalCount;
+  
+  const mostUsedTool = byTool.length > 0 ? byTool[0] : null;
+  document.getElementById('tool-most').textContent = mostUsedTool ? mostUsedTool.tool : '—';
+  document.getElementById('tool-most-count').textContent = mostUsedTool ? `${mostUsedTool.count} uses` : '0 uses';
+  
+  const cloudCount = byModel.find(m => m.model === 'cloud')?.count || 0;
+  const localCount = byModel.find(m => m.model === 'local')?.count || 0;
+  const ratio = cloudCount + localCount > 0 ? `${cloudCount}/${localCount}` : '—';
+  document.getElementById('tool-ratio').textContent = ratio;
+  
+  const uniqueHours = new Set(events.map(e => {
+    const ts = e.timestamp instanceof Date ? e.timestamp.toISOString() : e.timestamp;
+    return ts.substring(0, 13);
+  })).size;
+  document.getElementById('tool-hours').textContent = uniqueHours;
+  
+  // Timeline chart
+  renderTimelineChart(byHour, byCategory);
+  
+  // Tool pie chart
+  renderToolPieChart(byTool);
+  
+  // Activity feed
+  renderActivityFeed(events.slice(0, 20));
+}
+
+function renderTimelineChart(byHour, byCategory) {
+  const ctx = document.getElementById('timeline-chart');
+  if (!ctx) return;
+  
+  // Get last 24 hours
+  const now = new Date();
+  const hours = [];
+  for (let i = 23; i >= 0; i--) {
+    const h = new Date(now.getTime() - i * 60 * 60 * 1000);
+    hours.push(h.toISOString().substring(0, 13));
+  }
+  
+  const categoryColors = {
+    development: 'rgba(96, 165, 250, 0.8)',
+    communication: 'rgba(52, 211, 153, 0.8)',
+    research: 'rgba(167, 139, 250, 0.8)',
+    monitoring: 'rgba(251, 191, 36, 0.8)',
+    maintenance: 'rgba(248, 113, 113, 0.8)',
+  };
+  
+  // Build datasets
+  const categories = Object.keys(categoryColors);
+  const datasets = categories.map(cat => ({
+    label: cat,
+    data: hours.map(h => {
+      const hourData = byHour.find(d => d.timestamp === h);
+      return hourData?.categories?.[cat] || 0;
+    }),
+    backgroundColor: categoryColors[cat],
+    borderWidth: 0
+  }));
+  
+  if (timelineChart) {
+    timelineChart.destroy();
+  }
+  
+  timelineChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: hours.map(h => h.substring(11, 13) + ':00'),
+      datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#71717a', font: { size: 10 } } },
+        y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#71717a', font: { size: 10 } }, beginAtZero: true }
+      },
+      plugins: {
+        legend: { display: true, labels: { color: '#e4e4e7', font: { size: 11 }, padding: 8 } },
+        tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', titleColor: '#e4e4e7', bodyColor: '#e4e4e7' }
+      }
+    }
+  });
+}
+
+function renderToolPieChart(byTool) {
+  const ctx = document.getElementById('tool-pie-chart');
+  if (!ctx) return;
+  
+  const topTools = byTool.slice(0, 8);
+  const colors = [
+    'rgba(129, 140, 248, 0.8)',
+    'rgba(52, 211, 153, 0.8)',
+    'rgba(251, 191, 36, 0.8)',
+    'rgba(167, 139, 250, 0.8)',
+    'rgba(96, 165, 250, 0.8)',
+    'rgba(248, 113, 113, 0.8)',
+    'rgba(134, 239, 172, 0.8)',
+    'rgba(253, 224, 71, 0.8)',
+  ];
+  
+  if (toolPieChart) {
+    toolPieChart.destroy();
+  }
+  
+  toolPieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: topTools.map(t => t.tool),
+      datasets: [{
+        data: topTools.map(t => t.count),
+        backgroundColor: colors,
+        borderWidth: 2,
+        borderColor: '#0a0a0f'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'right', labels: { color: '#e4e4e7', font: { size: 10 }, padding: 6 } },
+        tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', titleColor: '#e4e4e7', bodyColor: '#e4e4e7' }
+      }
+    }
+  });
+}
+
+function renderActivityFeed(events) {
+  const feed = document.getElementById('tool-activity-feed');
+  if (!feed) return;
+  
+  if (events.length === 0) {
+    feed.innerHTML = '<div class="empty" style="padding:1rem;font-size:0.75rem;color:var(--text-dim);text-align:center;">No activity yet</div>';
+    return;
+  }
+  
+  feed.innerHTML = events.map(e => {
+    const ts = e.timestamp instanceof Date ? e.timestamp : new Date(e.timestamp);
+    const timeStr = ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const desc = e.description || 'No description';
+    return `<div class="tool-activity-item">
+      <div class="tool-activity-time">${esc(timeStr)}</div>
+      <div class="tool-activity-content">
+        <div class="tool-activity-tool">${esc(e.tool)}</div>
+        <div class="tool-activity-desc" title="${esc(desc)}">${esc(desc)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function render() {
   renderUsage();
+  loadToolUsage();
   renderWork('active-work', data.active, 'active-count', true);
   renderWork('completed-work', data.completed, 'completed-count', false);
   renderThreads('threads-open', data.threadsOpen || [], 'threads-open-count', true);
@@ -808,6 +1056,12 @@ function connectWS() {
       case 'usage:new':
         // Reload usage stats
         loadUsageStats();
+        break;
+      
+      case 'tool-usage':
+        // Reload tool usage on new event
+        loadToolUsage();
+        flashSection('tool-usage-section');
         break;
       
       default:
