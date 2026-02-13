@@ -489,6 +489,11 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
+app.get('/architecture', (req, res) => {
+  if (!req.isAuthenticated()) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'public', 'architecture.html'));
+});
+
 // Redirect old cached /chat to new path
 app.get('/chat', (req, res) => {
   if (!req.isAuthenticated()) return res.redirect('/');
@@ -1313,6 +1318,94 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ============ ARCHITECTURE TOPOLOGY ============
+app.get('/api/architecture', requireAuth, async (req, res) => {
+  try {
+    const now = new Date();
+    const day24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    
+    // Get primary agent stats
+    const [usageRecent, activeSubagents, allSubagents] = await Promise.all([
+      db.query('SELECT * FROM usage_records WHERE timestamp >= $1 ORDER BY timestamp DESC LIMIT 100', [day24h]),
+      db.query(`SELECT s.*, a.name as agent_name FROM subagents s LEFT JOIN agents a ON s.agent_id = a.id WHERE s.status IN ('running', 'pending') ORDER BY s.started_at DESC`),
+      db.query(`SELECT s.*, a.name as agent_name FROM subagents s LEFT JOIN agents a ON s.agent_id = a.id ORDER BY s.started_at DESC LIMIT 30`)
+    ]);
+    
+    // Calculate primary agent context usage (approximate from recent usage)
+    let contextUsed = 0;
+    let activeModel = 'opus';
+    usageRecent.forEach(r => {
+      contextUsed += (r.input_tokens || 0);
+      if (r.model?.includes('opus')) activeModel = 'opus';
+      else if (r.model?.includes('sonnet')) activeModel = 'sonnet';
+    });
+    
+    // Get agent uptime (time since first usage record)
+    const firstUsage = await db.get('SELECT timestamp FROM usage_records ORDER BY timestamp ASC LIMIT 1');
+    const uptime = firstUsage ? Math.floor((now - new Date(firstUsage.timestamp)) / 1000) : 0;
+    
+    const primaryAgent = {
+      name: 'Talos',
+      model: activeModel,
+      status: activeSubagents.length > 0 || usageRecent.length > 0 ? 'active' : 'idle',
+      uptime: formatUptime(uptime),
+      contextUsed: Math.min(contextUsed, 200000),
+      contextMax: 200000
+    };
+    
+    // Format sub-agents
+    const subAgents = allSubagents.map(s => {
+      const startedAt = new Date(s.started_at);
+      const runtime = s.completed_at 
+        ? Math.floor((new Date(s.completed_at) - startedAt) / 1000)
+        : Math.floor((now - startedAt) / 1000);
+      
+      // Parse metadata to get model and tokens
+      let metadata = {};
+      try {
+        metadata = typeof s.metadata === 'string' ? JSON.parse(s.metadata) : (s.metadata || {});
+      } catch (e) {}
+      
+      return {
+        id: s.id,
+        task: s.task || s.label || 'Unnamed task',
+        model: metadata.model || 'sonnet',
+        status: s.status || 'running',
+        startedAt: s.started_at,
+        runtime: formatUptime(runtime),
+        tokens: metadata.tokens || 0
+      };
+    });
+    
+    // SLM status (hardcoded for now - could be extended with actual Ollama API integration)
+    const slm = {
+      status: 'idle',
+      models: ['qwen3:14b', 'deepseek-r1:14b', 'qwen2.5-coder:7b'],
+      activeModel: null
+    };
+    
+    // Build connection graph
+    const connections = [
+      { from: 'user', to: 'primary' }
+    ];
+    subAgents.forEach((sub, idx) => {
+      connections.push({ from: 'primary', to: `sub-${idx}` });
+    });
+    
+    res.json({ primaryAgent, subAgents, slm, connections });
+  } catch (err) { 
+    console.error('Error fetching architecture:', err);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
+function formatUptime(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
 
 // ============ DOCS / MDX VIEWER ============
 app.get('/docs', requireAuth, (req, res) => {
