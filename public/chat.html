@@ -38,6 +38,9 @@
       flex-direction: column;
     }
 
+    /* Embed mode — hide header when inside iframe */
+    body.embed-mode header { display: none; }
+
     /* Header */
     header {
       display: flex;
@@ -449,6 +452,7 @@
 </script>
 </head>
 <body>
+  <script>if(new URLSearchParams(location.search).get('embed')==='1')document.body.classList.add('embed-mode');</script>
   <!-- Header -->
   <header>
     <div class="logo">

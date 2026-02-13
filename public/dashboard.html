@@ -29,346 +29,170 @@
       --purple-dim: rgba(167,139,250,0.15);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
     /* Header & Navigation */
     header {
-      display: flex; 
-      justify-content: space-between; 
-      align-items: center;
+      display: flex; justify-content: space-between; align-items: center;
       padding: 0.75rem 1.5rem;
       border-bottom: 1px solid var(--border);
-      position: sticky; 
-      top: 0; 
-      z-index: 50;
-      background: rgba(10,10,15,0.85); 
-      backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(10,10,15,0.85); backdrop-filter: blur(12px);
       flex-shrink: 0;
     }
-    
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 1.5rem;
-    }
-    
-    .logo { 
-      font-size: 1.1rem; 
-      font-weight: 600; 
-      display: flex; 
-      align-items: center; 
-      gap: 0.5rem; 
-    }
-    
-    .logo a {
-      color: var(--text);
-      text-decoration: none;
-    }
-    
-    .logo a:hover {
-      color: var(--accent);
-    }
-    
-    .nav-links {
-      display: flex;
-      gap: 0.25rem;
-    }
-    
+    .header-left { display: flex; align-items: center; gap: 1.5rem; }
+    .logo { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+    .logo a { color: var(--text); text-decoration: none; }
+    .logo a:hover { color: var(--accent); }
+    .nav-links { display: flex; gap: 0.25rem; }
     .nav-link {
-      font-size: 0.85rem;
-      padding: 0.4rem 0.75rem;
-      border-radius: 6px;
-      color: var(--text-muted);
-      text-decoration: none;
-      transition: all 0.15s;
-      font-weight: 500;
+      font-size: 0.85rem; padding: 0.4rem 0.75rem; border-radius: 6px;
+      color: var(--text-muted); text-decoration: none; transition: all 0.15s; font-weight: 500;
     }
-    
-    .nav-link:hover {
-      background: var(--surface-hover);
-      color: var(--text);
-    }
-    
-    .nav-link.active {
-      background: var(--accent-dim);
-      color: var(--accent);
-    }
-    
+    .nav-link:hover { background: var(--surface-hover); color: var(--text); }
+    .nav-link.active { background: var(--accent-dim); color: var(--accent); }
     .header-right { display: flex; align-items: center; gap: 0.75rem; }
     .user { display: flex; align-items: center; gap: 0.5rem; }
     .user img { width: 28px; height: 28px; border-radius: 50%; }
     .user span { font-size: 0.8rem; color: var(--text-muted); }
     .btn-s { font-size: 0.75rem; padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; text-decoration: none; }
     .btn-s:hover { background: var(--surface-hover); color: var(--text); }
-
-    /* Avatar fallback */
     .avatar { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
     .avatar img { width: 100%; height: 100%; object-fit: cover; }
     .avatar-fallback { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-dim); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600; }
 
-    /* Main Layout */
-    .dashboard-container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 2rem 1.5rem;
-      width: 100%;
+    /* Split Layout */
+    .split-container {
+      flex: 1; display: flex; overflow: hidden;
     }
 
-    /* Scheduled Tasks */
+    /* Left Panel — Scheduled Tasks */
+    .panel-left {
+      width: 50%; border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .panel-left-scroll {
+      flex: 1; overflow-y: auto; padding: 1.5rem;
+    }
+
+    /* Right Panel — Chat */
+    .panel-right {
+      width: 50%; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .panel-right iframe {
+      flex: 1; border: none; width: 100%; height: 100%;
+    }
+    .chat-expand {
+      display: flex; align-items: center; justify-content: center;
+      padding: 0.4rem; border-top: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0;
+    }
+    .chat-expand a {
+      font-size: 0.75rem; color: var(--text-muted); text-decoration: none;
+      display: flex; align-items: center; gap: 0.35rem;
+    }
+    .chat-expand a:hover { color: var(--accent); }
+
+    /* Section Headers */
     .section-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;
     }
+    .section-title { font-size: 1.25rem; font-weight: 600; color: var(--text); }
+    .last-updated { font-size: 0.7rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
 
-    .section-title {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .last-updated {
-      font-size: 0.7rem;
-      color: var(--text-dim);
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    .task-group {
-      margin-bottom: 2.5rem;
-    }
-
+    /* Task Groups */
+    .task-group { margin-bottom: 1.5rem; }
     .group-title {
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-      margin-bottom: 0.75rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
+      font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.5rem;
+      display: flex; align-items: center; gap: 0.5rem;
     }
+    .group-count { font-size: 0.65rem; color: var(--text-dim); background: var(--surface); padding: 0.15rem 0.5rem; border-radius: 999px; }
 
-    .group-count {
-      font-size: 0.65rem;
-      color: var(--text-dim);
-      background: var(--surface);
-      padding: 0.15rem 0.5rem;
-      border-radius: 999px;
-    }
-
+    /* Task Cards */
     .task-card {
-      background: var(--surface);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      padding: 1rem;
-      margin-bottom: 0.75rem;
-      transition: all 0.15s;
+      background: var(--surface); border: 2px solid var(--border); border-radius: 10px;
+      padding: 0.85rem; margin-bottom: 0.6rem; transition: all 0.15s;
     }
+    .task-card:hover { background: var(--surface-hover); }
+    .task-card.ok { border-color: var(--green); }
+    .task-card.overdue { border-color: var(--yellow); }
+    .task-card.error { border-color: var(--red); }
+    .task-card.disabled { border-color: var(--border); opacity: 0.6; }
 
-    .task-card:hover {
-      background: var(--surface-hover);
-    }
-
-    .task-card.ok {
-      border-color: var(--green);
-    }
-
-    .task-card.overdue {
-      border-color: var(--yellow);
-    }
-
-    .task-card.error {
-      border-color: var(--red);
-    }
-
-    .task-card.disabled {
-      border-color: var(--border);
-      opacity: 0.6;
-    }
-
-    .task-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 0.75rem;
-    }
-
-    .task-title {
-      font-weight: 600;
-      font-size: 0.95rem;
-      color: var(--text);
-      line-height: 1.4;
-    }
-
+    .task-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; }
+    .task-title { font-weight: 600; font-size: 0.9rem; color: var(--text); line-height: 1.4; }
     .task-status {
-      font-size: 0.65rem;
-      padding: 0.2rem 0.5rem;
-      border-radius: 4px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      flex-shrink: 0;
+      font-size: 0.6rem; padding: 0.15rem 0.45rem; border-radius: 4px;
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;
     }
-
-    .task-status.ok {
-      background: var(--green-dim);
-      color: var(--green);
-    }
-
-    .task-status.error {
-      background: var(--red-dim);
-      color: var(--red);
-    }
-
-    .task-status.overdue {
-      background: var(--yellow-dim);
-      color: var(--yellow);
-    }
+    .task-status.ok { background: var(--green-dim); color: var(--green); }
+    .task-status.error { background: var(--red-dim); color: var(--red); }
+    .task-status.overdue { background: var(--yellow-dim); color: var(--yellow); }
 
     .task-meta {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 0.4rem 1rem;
-      font-size: 0.75rem;
-      font-family: 'JetBrains Mono', monospace;
+      display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.75rem;
+      font-size: 0.7rem; font-family: 'JetBrains Mono', monospace;
     }
-
-    .task-meta-label {
-      color: var(--text-dim);
-    }
-
-    .task-meta-value {
-      color: var(--text-muted);
-      text-align: right;
-    }
-
+    .task-meta-label { color: var(--text-dim); }
+    .task-meta-value { color: var(--text-muted); text-align: right; }
     .task-outcome {
-      margin-top: 0.5rem;
-      padding-top: 0.5rem;
-      border-top: 1px solid var(--border);
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      line-height: 1.5;
+      margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--border);
+      font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;
     }
 
-    .empty {
-      text-align: center;
-      padding: 2rem;
-      color: var(--text-dim);
-      font-size: 0.85rem;
-    }
-
-    .empty .icon {
-      font-size: 1.5rem;
-      margin-bottom: 0.5rem;
-    }
+    .empty { text-align: center; padding: 1.5rem; color: var(--text-dim); font-size: 0.85rem; }
+    .empty .icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
 
     /* Collapsible */
-    .collapsible-header {
-      cursor: pointer;
-      user-select: none;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
+    .collapsible-header { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 0.5rem; }
+    .collapsible-header::before { content: '▼'; font-size: 0.6rem; transition: transform 0.2s; }
+    .collapsible-header.collapsed::before { transform: rotate(-90deg); }
+    .collapsible-content { max-height: 2000px; overflow: hidden; transition: max-height 0.3s ease-out; }
+    .collapsible-content.collapsed { max-height: 0; }
 
-    .collapsible-header::before {
-      content: '▼';
-      font-size: 0.6rem;
-      transition: transform 0.2s;
-    }
-
-    .collapsible-header.collapsed::before {
-      transform: rotate(-90deg);
-    }
-
-    .collapsible-content {
-      max-height: 1000px;
-      overflow: hidden;
-      transition: max-height 0.3s ease-out;
-    }
-
-    .collapsible-content.collapsed {
-      max-height: 0;
-    }
-
-    /* Activity Timeline */
+    /* Activity Timeline (below split) */
     .timeline-section {
-      margin-top: 3rem;
-      padding-top: 3rem;
-      border-top: 1px solid var(--border);
+      flex-shrink: 0; border-top: 1px solid var(--border);
+      padding: 1.25rem 1.5rem;
     }
-
     .chart-container {
-      position: relative;
-      height: 300px;
-      margin-top: 1.5rem;
-      padding: 1.5rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
+      position: relative; height: 200px; margin-top: 0.75rem;
+      padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
     }
+    .chart-legend { display: flex; gap: 1.5rem; justify-content: center; margin-top: 0.75rem; font-size: 0.75rem; }
+    .legend-item { display: flex; align-items: center; gap: 0.5rem; }
+    .legend-color { width: 14px; height: 14px; border-radius: 3px; }
+    .legend-color.primary { background: var(--blue); }
+    .legend-color.subagent { background: var(--purple); }
+    .legend-color.cron { background: var(--green); }
 
-    .chart-legend {
-      display: flex;
-      gap: 1.5rem;
-      justify-content: center;
-      margin-top: 1rem;
-      font-size: 0.8rem;
+    /* Timeline collapse toggle */
+    .timeline-toggle {
+      display: flex; align-items: center; gap: 0.5rem; cursor: pointer; user-select: none;
     }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .legend-color {
-      width: 16px;
-      height: 16px;
-      border-radius: 3px;
-    }
-
-    .legend-color.primary {
-      background: var(--blue);
-    }
-
-    .legend-color.subagent {
-      background: var(--purple);
-    }
-
-    .legend-color.cron {
-      background: var(--green);
-    }
+    .timeline-toggle .arrow { font-size: 0.6rem; transition: transform 0.2s; }
+    .timeline-toggle.collapsed .arrow { transform: rotate(-90deg); }
+    .timeline-body { transition: max-height 0.3s ease-out; max-height: 500px; overflow: hidden; }
+    .timeline-body.collapsed { max-height: 0; padding: 0; }
 
     /* Responsive */
-    @media (max-width: 768px) {
-      .dashboard-container {
-        padding: 1.5rem 1rem;
-      }
-
-      .user span {
-        display: none;
-      }
-
-      .chart-container {
-        height: 250px;
-      }
+    @media (max-width: 900px) {
+      .split-container { flex-direction: column; }
+      .panel-left, .panel-right { width: 100%; height: 50%; }
+      .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
+      .user span { display: none; }
     }
   </style>
-<script>
-  !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageviewId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
-  posthog.init('phc_QBrEydH4duDZXg7OeNTpOrCb2lB77yn1S54FrnCt8Pp',{api_host:'https://analytics.mtree.io',person_profiles:'identified_only'})
-</script>
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageviewId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_QBrEydH4duDZXg7OeNTpOrCb2lB77yn1S54FrnCt8Pp',{api_host:'https://analytics.mtree.io',person_profiles:'identified_only'})
+  </script>
 </head>
 <body>
   <header>
     <div class="header-left">
-      <div class="logo">
-        <a href="/">🦞 Talos</a>
-      </div>
+      <div class="logo"><a href="/">🦞 Talos</a></div>
       <nav class="nav-links">
         <a href="/dashboard" class="nav-link active">Dashboard</a>
         <a href="/architecture" class="nav-link">Architecture</a>
@@ -384,82 +208,76 @@
     </div>
   </header>
 
-  <div class="dashboard-container">
-    <!-- Scheduled Tasks Section -->
-    <div class="section-header">
-      <h1 class="section-title">📅 Scheduled Tasks</h1>
-      <div class="last-updated" id="last-updated">—</div>
+  <!-- Two-Panel Split -->
+  <div class="split-container">
+    <!-- Left: Scheduled Tasks -->
+    <div class="panel-left">
+      <div class="panel-left-scroll">
+        <div class="section-header">
+          <h1 class="section-title">📅 Scheduled Tasks</h1>
+          <div class="last-updated" id="last-updated">—</div>
+        </div>
+
+        <div class="task-group" id="recurring-group">
+          <div class="group-title collapsible-header" onclick="toggleGroup('recurring')">
+            Recurring <span class="group-count" id="recurring-count">0</span>
+          </div>
+          <div class="collapsible-content" id="recurring-content"></div>
+        </div>
+
+        <div class="task-group" id="oneshots-group">
+          <div class="group-title collapsible-header" onclick="toggleGroup('oneshots')">
+            Upcoming One-shots <span class="group-count" id="oneshots-count">0</span>
+          </div>
+          <div class="collapsible-content" id="oneshots-content"></div>
+        </div>
+
+        <div class="task-group" id="disabled-group">
+          <div class="group-title collapsible-header collapsed" onclick="toggleGroup('disabled')">
+            Disabled/Completed <span class="group-count" id="disabled-count">0</span>
+          </div>
+          <div class="collapsible-content collapsed" id="disabled-content"></div>
+        </div>
+      </div>
     </div>
 
-    <!-- Recurring -->
-    <div class="task-group" id="recurring-group">
-      <div class="group-title collapsible-header" onclick="toggleGroup('recurring')">
-        Recurring
-        <span class="group-count" id="recurring-count">0</span>
+    <!-- Right: Embedded Chat -->
+    <div class="panel-right">
+      <iframe src="/c?embed=1" id="chat-frame"></iframe>
+      <div class="chat-expand">
+        <a href="/c" title="Open full-screen chat">↗ Full-screen chat</a>
       </div>
-      <div class="collapsible-content" id="recurring-content"></div>
     </div>
+  </div>
 
-    <!-- Upcoming One-shots -->
-    <div class="task-group" id="oneshots-group">
-      <div class="group-title collapsible-header" onclick="toggleGroup('oneshots')">
-        Upcoming One-shots
-        <span class="group-count" id="oneshots-count">0</span>
-      </div>
-      <div class="collapsible-content" id="oneshots-content"></div>
+  <!-- Activity Timeline (collapsible, below split) -->
+  <div class="timeline-section" id="timeline-section">
+    <div class="timeline-toggle" onclick="toggleTimeline()">
+      <span class="arrow">▼</span>
+      <span class="section-title" style="font-size:1rem;">📊 Activity (24h)</span>
     </div>
-
-    <!-- Disabled/Completed -->
-    <div class="task-group" id="disabled-group">
-      <div class="group-title collapsible-header collapsed" onclick="toggleGroup('disabled')">
-        Disabled/Completed
-        <span class="group-count" id="disabled-count">0</span>
-      </div>
-      <div class="collapsible-content collapsed" id="disabled-content"></div>
-    </div>
-
-    <!-- Activity Timeline Section -->
-    <div class="timeline-section">
-      <div class="section-header">
-        <h1 class="section-title">📊 Activity Timeline (24 Hours)</h1>
-      </div>
-
+    <div class="timeline-body" id="timeline-body">
       <div class="chart-container">
         <canvas id="activity-chart"></canvas>
       </div>
-
       <div class="chart-legend">
-        <div class="legend-item">
-          <div class="legend-color primary"></div>
-          <span>Primary Agent</span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-color subagent"></div>
-          <span>Sub-agents</span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-color cron"></div>
-          <span>Cron Jobs</span>
-        </div>
+        <div class="legend-item"><div class="legend-color primary"></div><span>Primary</span></div>
+        <div class="legend-item"><div class="legend-color subagent"></div><span>Sub-agents</span></div>
+        <div class="legend-item"><div class="legend-color cron"></div><span>Cron</span></div>
       </div>
     </div>
   </div>
 
   <script>
-    // ========== Scheduled Tasks ==========
     let scheduledTasks = [];
-    let refreshInterval = null;
     let activityChart = null;
 
     async function init() {
       await loadUser();
       await loadScheduledTasks();
       await loadActivityTimeline();
-      // Refresh scheduled tasks every 60 seconds
-      refreshInterval = setInterval(loadScheduledTasks, 60000);
-      // Refresh activity timeline every 5 minutes
+      setInterval(loadScheduledTasks, 60000);
       setInterval(loadActivityTimeline, 300000);
-      // Update relative times every 10 seconds
       setInterval(updateRelativeTimes, 10000);
     }
 
@@ -470,16 +288,10 @@
         const avatarEl = document.getElementById('user-avatar');
         const nameEl = document.getElementById('user-name');
         nameEl.textContent = u.name || u.email;
-
         if (u.picture) {
           const img = document.createElement('img');
-          img.src = u.picture;
-          img.alt = u.name || '';
-          img.referrerPolicy = 'no-referrer';
-          img.onerror = () => {
-            avatarEl.innerHTML = '';
-            avatarEl.appendChild(makeAvatarFallback(u.name || u.email));
-          };
+          img.src = u.picture; img.alt = u.name || ''; img.referrerPolicy = 'no-referrer';
+          img.onerror = () => { avatarEl.innerHTML = ''; avatarEl.appendChild(makeAvatarFallback(u.name || u.email)); };
           avatarEl.appendChild(img);
         } else {
           avatarEl.appendChild(makeAvatarFallback(u.name || u.email));
@@ -490,8 +302,7 @@
     function makeAvatarFallback(name) {
       const div = document.createElement('div');
       div.className = 'avatar-fallback';
-      const initials = (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-      div.textContent = initials;
+      div.textContent = (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
       return div;
     }
 
@@ -500,45 +311,24 @@
         const res = await fetch('/api/scheduled-tasks');
         const data = await res.json();
         scheduledTasks = data.tasks || [];
-        
         if (data.updatedAt) {
-          const lastUpdated = new Date(data.updatedAt);
-          document.getElementById('last-updated').textContent = 'Updated ' + formatRelativeTime(lastUpdated);
+          document.getElementById('last-updated').textContent = 'Updated ' + formatRelativeTime(new Date(data.updatedAt));
         }
-
         renderScheduledTasks();
-      } catch (err) {
-        console.error('Failed to load scheduled tasks:', err);
-      }
+      } catch (err) { console.error('Failed to load scheduled tasks:', err); }
     }
 
     function renderScheduledTasks() {
-      const now = new Date();
-      
-      // Categorize tasks
-      const recurring = [];
-      const oneshots = [];
-      const disabled = [];
-
+      const recurring = [], oneshots = [], disabled = [];
       scheduledTasks.forEach(task => {
-        if (!task.enabled) {
-          disabled.push(task);
-        } else if (task.schedule && task.schedule.kind === 'at') {
-          oneshots.push(task);
-        } else {
-          recurring.push(task);
-        }
+        if (!task.enabled) disabled.push(task);
+        else if (task.schedule && task.schedule.kind === 'at') oneshots.push(task);
+        else recurring.push(task);
       });
-
-      // Sort oneshots by date
       oneshots.sort((a, b) => new Date(a.nextRunAt) - new Date(b.nextRunAt));
-
-      // Render each group
       renderTaskGroup('recurring', recurring);
       renderTaskGroup('oneshots', oneshots);
       renderTaskGroup('disabled', disabled);
-
-      // Update counts
       document.getElementById('recurring-count').textContent = recurring.length;
       document.getElementById('oneshots-count').textContent = oneshots.length;
       document.getElementById('disabled-count').textContent = disabled.length;
@@ -546,246 +336,111 @@
 
     function renderTaskGroup(groupId, tasks) {
       const container = document.getElementById(`${groupId}-content`);
-      
       if (tasks.length === 0) {
         container.innerHTML = '<div class="empty"><div class="icon">📭</div>No tasks</div>';
         return;
       }
-
       container.innerHTML = tasks.map(task => {
-        const borderClass = getTaskBorderClass(task);
-        const statusClass = getTaskStatusClass(task);
-        const statusText = getTaskStatusText(task);
-
-        return `<div class="task-card ${borderClass}">
+        const bc = getTaskBorderClass(task), sc = getTaskStatusClass(task), st = getTaskStatusText(task);
+        return `<div class="task-card ${bc}">
           <div class="task-header">
             <div class="task-title">${esc(task.name)}</div>
-            <div class="task-status ${statusClass}">${statusText}</div>
+            <div class="task-status ${sc}">${st}</div>
           </div>
           <div class="task-meta">
-            <div class="task-meta-label">Schedule:</div>
-            <div class="task-meta-value">${esc(task.scheduleHuman || 'Unknown')}</div>
-            <div class="task-meta-label">Last ran:</div>
-            <div class="task-meta-value">${task.lastRunAt ? formatRelativeTime(new Date(task.lastRunAt)) : 'Never'}</div>
-            <div class="task-meta-label">Next run:</div>
-            <div class="task-meta-value">${task.nextRunAt ? formatRelativeTime(new Date(task.nextRunAt)) : '—'}</div>
+            <div class="task-meta-label">Schedule:</div><div class="task-meta-value">${esc(task.scheduleHuman || 'Unknown')}</div>
+            <div class="task-meta-label">Last ran:</div><div class="task-meta-value">${task.lastRunAt ? formatRelativeTime(new Date(task.lastRunAt)) : 'Never'}</div>
+            <div class="task-meta-label">Next run:</div><div class="task-meta-value">${task.nextRunAt ? formatRelativeTime(new Date(task.nextRunAt)) : '—'}</div>
           </div>
           ${task.lastOutcome ? `<div class="task-outcome">${esc(task.lastOutcome)}</div>` : ''}
         </div>`;
       }).join('');
     }
 
-    function getTaskBorderClass(task) {
-      if (!task.enabled) return 'disabled';
-      if (task.lastStatus === 'error' || task.lastStatus === 'failed') return 'error';
-      
-      // Check if overdue
-      if (task.nextRunAt) {
-        const nextRun = new Date(task.nextRunAt);
-        if (nextRun < new Date()) return 'overdue';
-      }
-      
-      if (task.lastStatus === 'ok' || task.lastStatus === 'completed') return 'ok';
+    function getTaskBorderClass(t) {
+      if (!t.enabled) return 'disabled';
+      if (t.lastStatus === 'error' || t.lastStatus === 'failed') return 'error';
+      if (t.nextRunAt && new Date(t.nextRunAt) < new Date()) return 'overdue';
+      if (t.lastStatus === 'ok' || t.lastStatus === 'completed') return 'ok';
       return '';
     }
-
-    function getTaskStatusClass(task) {
-      if (task.lastStatus === 'error' || task.lastStatus === 'failed') return 'error';
-      
-      // Check if overdue
-      if (task.nextRunAt) {
-        const nextRun = new Date(task.nextRunAt);
-        if (nextRun < new Date()) return 'overdue';
-      }
-      
-      if (task.lastStatus === 'ok' || task.lastStatus === 'completed') return 'ok';
+    function getTaskStatusClass(t) {
+      if (t.lastStatus === 'error' || t.lastStatus === 'failed') return 'error';
+      if (t.nextRunAt && new Date(t.nextRunAt) < new Date()) return 'overdue';
+      if (t.lastStatus === 'ok' || t.lastStatus === 'completed') return 'ok';
       return '';
     }
-
-    function getTaskStatusText(task) {
-      if (task.lastStatus === 'error' || task.lastStatus === 'failed') return 'Error';
-      
-      // Check if overdue
-      if (task.nextRunAt) {
-        const nextRun = new Date(task.nextRunAt);
-        if (nextRun < new Date()) return 'Overdue';
-      }
-      
-      if (task.lastStatus === 'ok' || task.lastStatus === 'completed') return 'OK';
+    function getTaskStatusText(t) {
+      if (t.lastStatus === 'error' || t.lastStatus === 'failed') return 'Error';
+      if (t.nextRunAt && new Date(t.nextRunAt) < new Date()) return 'Overdue';
+      if (t.lastStatus === 'ok' || t.lastStatus === 'completed') return 'OK';
       return '—';
     }
 
     function formatRelativeTime(date) {
-      const now = new Date();
-      const diffMs = date - now;
+      const now = new Date(), diffMs = date - now;
       const diffMins = Math.floor(Math.abs(diffMs) / 60000);
       const diffHours = Math.floor(diffMins / 60);
       const diffDays = Math.floor(diffHours / 24);
-      const isPast = diffMs < 0;
-
+      const past = diffMs < 0;
       if (diffMins < 1) return 'just now';
-      if (diffMins < 60) return `${isPast ? '' : 'in '}${diffMins} minute${diffMins > 1 ? 's' : ''}${isPast ? ' ago' : ''}`;
-      if (diffHours < 24) return `${isPast ? '' : 'in '}${diffHours} hour${diffHours > 1 ? 's' : ''}${isPast ? ' ago' : ''}`;
-      if (diffDays < 7) return `${isPast ? '' : 'in '}${diffDays} day${diffDays > 1 ? 's' : ''}${isPast ? ' ago' : ''}`;
-      
-      // Format as date
-      if (isPast) {
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      } else {
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      }
+      if (diffMins < 60) return `${past ? '' : 'in '}${diffMins}m${past ? ' ago' : ''}`;
+      if (diffHours < 24) return `${past ? '' : 'in '}${diffHours}h${past ? ' ago' : ''}`;
+      if (diffDays < 7) return `${past ? '' : 'in '}${diffDays}d${past ? ' ago' : ''}`;
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
-    function updateRelativeTimes() {
-      renderScheduledTasks();
+    function updateRelativeTimes() { renderScheduledTasks(); }
+
+    function toggleGroup(id) {
+      document.querySelector(`#${id}-group .collapsible-header`).classList.toggle('collapsed');
+      document.getElementById(`${id}-content`).classList.toggle('collapsed');
     }
 
-    function toggleGroup(groupId) {
-      const header = document.querySelector(`#${groupId}-group .collapsible-header`);
-      const content = document.getElementById(`${groupId}-content`);
-      
-      header.classList.toggle('collapsed');
-      content.classList.toggle('collapsed');
+    function toggleTimeline() {
+      document.querySelector('.timeline-toggle').classList.toggle('collapsed');
+      document.getElementById('timeline-body').classList.toggle('collapsed');
     }
 
-    function esc(str) {
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
-    }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-    // ========== Activity Timeline ==========
+    // ===== Activity Timeline =====
     async function loadActivityTimeline() {
       try {
         const res = await fetch('/api/activity-timeline');
         const data = await res.json();
         renderActivityChart(data.hours);
-      } catch (err) {
-        console.error('Failed to load activity timeline:', err);
-      }
+      } catch (err) { console.error('Failed to load activity timeline:', err); }
     }
 
     function renderActivityChart(hours) {
       const ctx = document.getElementById('activity-chart').getContext('2d');
-      
-      // Prepare labels (hour format)
-      const labels = hours.map(h => {
-        const date = new Date(h.hour);
-        return date.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
-      });
-
-      // Prepare datasets
-      const primaryData = hours.map(h => h.primary);
-      const subagentData = hours.map(h => h.subagent);
-      const cronData = hours.map(h => h.cron);
-
-      // Highlight current hour
-      const now = new Date();
-      const currentHourIndex = hours.findIndex(h => {
-        const hourDate = new Date(h.hour);
-        return hourDate.getHours() === now.getHours();
-      });
-
-      // Destroy existing chart if it exists
-      if (activityChart) {
-        activityChart.destroy();
-      }
-
+      const labels = hours.map(h => new Date(h.hour).toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }));
+      if (activityChart) activityChart.destroy();
       activityChart = new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: labels,
+          labels,
           datasets: [
-            {
-              label: 'Primary Agent',
-              data: primaryData,
-              backgroundColor: 'rgba(96, 165, 250, 0.8)',
-              borderColor: 'rgba(96, 165, 250, 1)',
-              borderWidth: 1
-            },
-            {
-              label: 'Sub-agents',
-              data: subagentData,
-              backgroundColor: 'rgba(167, 139, 250, 0.8)',
-              borderColor: 'rgba(167, 139, 250, 1)',
-              borderWidth: 1
-            },
-            {
-              label: 'Cron Jobs',
-              data: cronData,
-              backgroundColor: 'rgba(52, 211, 153, 0.8)',
-              borderColor: 'rgba(52, 211, 153, 1)',
-              borderWidth: 1
-            }
+            { label: 'Primary', data: hours.map(h => h.primary), backgroundColor: 'rgba(96,165,250,0.8)', borderColor: 'rgba(96,165,250,1)', borderWidth: 1 },
+            { label: 'Sub-agents', data: hours.map(h => h.subagent), backgroundColor: 'rgba(167,139,250,0.8)', borderColor: 'rgba(167,139,250,1)', borderWidth: 1 },
+            { label: 'Cron', data: hours.map(h => h.cron), backgroundColor: 'rgba(52,211,153,0.8)', borderColor: 'rgba(52,211,153,1)', borderWidth: 1 }
           ]
         },
         options: {
-          responsive: true,
-          maintainAspectRatio: false,
+          responsive: true, maintainAspectRatio: false,
           scales: {
-            x: {
-              stacked: true,
-              grid: {
-                color: 'rgba(255, 255, 255, 0.05)',
-                drawBorder: false
-              },
-              ticks: {
-                color: '#71717a',
-                maxRotation: 45,
-                minRotation: 45,
-                font: {
-                  size: 10,
-                  family: 'JetBrains Mono, monospace'
-                }
-              }
-            },
-            y: {
-              stacked: true,
-              beginAtZero: true,
-              grid: {
-                color: 'rgba(255, 255, 255, 0.05)',
-                drawBorder: false
-              },
-              ticks: {
-                color: '#71717a',
-                stepSize: 1,
-                font: {
-                  size: 11,
-                  family: 'Inter, sans-serif'
-                }
-              }
-            }
+            x: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false }, ticks: { color: '#71717a', maxRotation: 45, minRotation: 45, font: { size: 9, family: 'JetBrains Mono' } } },
+            y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false }, ticks: { color: '#71717a', stepSize: 1, font: { size: 10 } } }
           },
           plugins: {
-            legend: {
-              display: false
-            },
-            tooltip: {
-              backgroundColor: 'rgba(10, 10, 15, 0.95)',
-              titleColor: '#e4e4e7',
-              bodyColor: '#e4e4e7',
-              borderColor: 'rgba(255, 255, 255, 0.1)',
-              borderWidth: 1,
-              padding: 12,
-              displayColors: true,
-              callbacks: {
-                title: function(context) {
-                  return context[0].label;
-                },
-                label: function(context) {
-                  return `${context.dataset.label}: ${context.parsed.y}`;
-                }
-              }
-            }
+            legend: { display: false },
+            tooltip: { backgroundColor: 'rgba(10,10,15,0.95)', titleColor: '#e4e4e7', bodyColor: '#e4e4e7', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, padding: 10 }
           }
         }
       });
-
-      // Highlight current hour (add a visual indicator if needed)
-      // This could be done with a custom plugin, but for simplicity we'll leave it as is
     }
 
-    // Start
     init();
   </script>
 </body>
