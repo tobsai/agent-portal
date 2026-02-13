@@ -1759,7 +1759,8 @@ app.get('/api/activity-timeline', requireAuth, async (req, res) => {
 // Chat config (gateway WebSocket URL)
 app.get('/api/chat/config', requireAuth, (req, res) => {
   res.json({
-    gatewayWsUrl: process.env.GATEWAY_WS_URL || null
+    gatewayWsUrl: process.env.GATEWAY_WS_URL || '',
+    gatewayToken: process.env.GATEWAY_TOKEN || ''
   });
 });
 
