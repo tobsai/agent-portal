@@ -514,6 +514,7 @@
     let currentUser = null;
     let gatewayConfig = null;
     let currentRunId = null;
+    let messageQueue = []; // queued messages to send after current response
 
     const messagesContainer = document.getElementById('messages');
     const messageInput = document.getElementById('message-input');
@@ -687,6 +688,7 @@
           showError(payload.errorMessage || 'Agent error');
           isWaitingForResponse = false;
           currentRunId = null;
+          processQueue();
           return;
         }
 
@@ -701,6 +703,7 @@
               finalizeStreamingMessage(content);
               isWaitingForResponse = false;
               currentRunId = null;
+              processQueue();
             }
           }
         }
@@ -710,6 +713,7 @@
           removeLoadingIndicator();
           isWaitingForResponse = false;
           currentRunId = null;
+          processQueue();
         }
         return;
       }
@@ -722,6 +726,7 @@
         showError(typeof data.error === 'string' ? data.error : data.error.message || 'Unknown error');
         removeLoadingIndicator();
         isWaitingForResponse = false;
+        processQueue();
       }
     }
 
@@ -840,18 +845,29 @@
 
     function sendMessage() {
       const text = messageInput.value.trim();
-      if (!text || isWaitingForResponse) return;
+      if (!text) return;
       if (!ws || ws.readyState !== WebSocket.OPEN) { showError('Not connected'); return; }
 
+      // Always show the user message immediately
       addMessage('user', text);
+      messageInput.value = '';
+      messageInput.style.height = 'auto';
+
+      if (isWaitingForResponse) {
+        // Queue it — will dispatch after current response finishes
+        messageQueue.push(text);
+        updateQueueIndicator();
+        return;
+      }
+
+      dispatchMessage(text);
+    }
+
+    function dispatchMessage(text) {
       const sendId = 'send-' + Date.now();
       wsSend({ type: 'req', id: sendId, method: 'chat.send', params: { sessionKey: 'agent:main:main', message: text, idempotencyKey: sendId } });
       addLoadingIndicator();
       isWaitingForResponse = true;
-      messageInput.value = '';
-      messageInput.style.height = 'auto';
-      sendBtn.disabled = true;
-      setTimeout(() => { sendBtn.disabled = false; }, 500);
       // Safety timeout: unlock after 120s if no response received
       if (window._responseTimeout) clearTimeout(window._responseTimeout);
       window._responseTimeout = setTimeout(() => {
@@ -859,8 +875,34 @@
           isWaitingForResponse = false;
           removeLoadingIndicator();
           console.warn('Response timeout — unlocking chat input');
+          processQueue();
         }
       }, 120000);
+    }
+
+    function processQueue() {
+      updateQueueIndicator();
+      if (messageQueue.length > 0 && !isWaitingForResponse) {
+        const next = messageQueue.shift();
+        updateQueueIndicator();
+        dispatchMessage(next);
+      }
+    }
+
+    function updateQueueIndicator() {
+      let indicator = document.getElementById('queue-indicator');
+      if (messageQueue.length > 0) {
+        if (!indicator) {
+          indicator = document.createElement('div');
+          indicator.id = 'queue-indicator';
+          indicator.style.cssText = 'text-align:center;font-size:0.7rem;color:var(--text-dim);padding:0.25rem;font-family:JetBrains Mono,monospace;';
+          const inputArea = document.querySelector('.input-area');
+          inputArea.parentNode.insertBefore(indicator, inputArea);
+        }
+        indicator.textContent = `${messageQueue.length} message${messageQueue.length > 1 ? 's' : ''} queued`;
+      } else if (indicator) {
+        indicator.remove();
+      }
     }
 
     function logout() { window.location.href = '/auth/logout'; }
