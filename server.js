@@ -1454,6 +1454,9 @@ app.get('/api/architecture', requireAuth, async (req, res) => {
       connections.push({ from: 'primary', to: 'slm' });
     }
     
+    // Add n8n connection
+    connections.push({ from: 'primary', to: 'n8n' });
+    
     res.json({ primaryAgent, subAgents, slm, connections });
   } catch (err) { 
     console.error('Error fetching architecture:', err);
@@ -1539,6 +1542,21 @@ app.get('/api/docs/:id', requireAuth, async (req, res) => {
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Scheduled tasks (from JSON file bridge)
+app.get('/api/scheduled-tasks', requireAuth, async (req, res) => {
+  try {
+    const scheduledTasksPath = path.join(process.env.HOME || '/Users/talos', '.openclaw/workspace/memory/scheduled-tasks.json');
+    if (!fs.existsSync(scheduledTasksPath)) {
+      return res.json({ updatedAt: null, tasks: [] });
+    }
+    const data = JSON.parse(fs.readFileSync(scheduledTasksPath, 'utf-8'));
+    res.json(data);
+  } catch (err) {
+    console.error('Failed to read scheduled tasks:', err);
+    res.json({ updatedAt: null, tasks: [] });
+  }
 });
 
 // Chat config (gateway WebSocket URL)

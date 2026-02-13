@@ -511,8 +511,18 @@
     // Fetch architecture data
     async function fetchArchitecture() {
       try {
-        const res = await fetch('/api/architecture');
-        const data = await res.json();
+        const [archRes, n8nRes] = await Promise.all([
+          fetch('/api/architecture'),
+          fetch('https://n8n.mtree.io/healthz').catch(() => ({ ok: false }))
+        ]);
+        const data = await archRes.json();
+        
+        // Add n8n status
+        data.n8n = {
+          status: n8nRes.ok ? 'active' : 'idle',
+          url: 'https://n8n.mtree.io'
+        };
+        
         renderArchitecture(data);
       } catch (err) {
         console.error('Failed to fetch architecture:', err);
@@ -599,6 +609,21 @@
           models: data.slm.models,
           activeModel: data.slm.activeModel,
           x: centerX + 400,
+          y: centerY + 200
+        });
+      }
+
+      // n8n node
+      if (data.n8n) {
+        createNode('n8n', {
+          type: 'service',
+          title: 'n8n',
+          subtitle: 'Workflow Automation',
+          status: data.n8n.status,
+          meta: {
+            'URL': 'n8n.mtree.io'
+          },
+          x: centerX - 400,
           y: centerY + 200
         });
       }
@@ -774,6 +799,9 @@
           });
           if (nodes.slm) {
             connections.push({ from: 'primary', to: 'slm' });
+          }
+          if (nodes.n8n) {
+            connections.push({ from: 'primary', to: 'n8n' });
           }
           drawConnections(connections);
         }
