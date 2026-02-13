@@ -163,6 +163,42 @@ if (isProduction) {
         CREATE INDEX IF NOT EXISTS idx_tool_usage_timestamp ON tool_usage(timestamp);
         CREATE INDEX IF NOT EXISTS idx_tool_usage_agent ON tool_usage(agent_id);
 
+        -- Sub-agent activity tracking
+        CREATE TABLE IF NOT EXISTS subagent_activity (
+          id SERIAL PRIMARY KEY,
+          agent_id TEXT NOT NULL,
+          subagent_label TEXT NOT NULL,
+          session_key TEXT,
+          status TEXT NOT NULL,
+          task TEXT,
+          model TEXT,
+          started_at TIMESTAMPTZ,
+          completed_at TIMESTAMPTZ,
+          tokens_used INTEGER,
+          runtime_seconds INTEGER,
+          result TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_subagent_timestamp ON subagent_activity(started_at);
+        CREATE INDEX IF NOT EXISTS idx_subagent_status ON subagent_activity(status);
+
+        -- Thread activity tracking
+        CREATE TABLE IF NOT EXISTS thread_activity (
+          id SERIAL PRIMARY KEY,
+          agent_id TEXT NOT NULL,
+          thread_id TEXT NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL,
+          last_update TIMESTAMPTZ DEFAULT NOW(),
+          category TEXT,
+          blocked_on TEXT,
+          next_action TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_thread_status ON thread_activity(status);
+        CREATE INDEX IF NOT EXISTS idx_thread_agent ON thread_activity(agent_id);
+
         -- Sessions table for connect-pg-simple
         CREATE TABLE IF NOT EXISTS sessions (
           sid VARCHAR NOT NULL COLLATE "default",
@@ -283,6 +319,38 @@ if (isProduction) {
         );
         CREATE INDEX IF NOT EXISTS idx_tool_usage_timestamp ON tool_usage(timestamp);
         CREATE INDEX IF NOT EXISTS idx_tool_usage_agent ON tool_usage(agent_id);
+        CREATE TABLE IF NOT EXISTS subagent_activity (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          agent_id TEXT NOT NULL,
+          subagent_label TEXT NOT NULL,
+          session_key TEXT,
+          status TEXT NOT NULL,
+          task TEXT,
+          model TEXT,
+          started_at TEXT DEFAULT (datetime('now')),
+          completed_at TEXT,
+          tokens_used INTEGER,
+          runtime_seconds INTEGER,
+          result TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_subagent_timestamp ON subagent_activity(started_at);
+        CREATE INDEX IF NOT EXISTS idx_subagent_status ON subagent_activity(status);
+        CREATE TABLE IF NOT EXISTS thread_activity (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          agent_id TEXT NOT NULL,
+          thread_id TEXT NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL,
+          last_update TEXT DEFAULT (datetime('now')),
+          category TEXT,
+          blocked_on TEXT,
+          next_action TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_thread_status ON thread_activity(status);
+        CREATE INDEX IF NOT EXISTS idx_thread_agent ON thread_activity(agent_id);
         CREATE TABLE IF NOT EXISTS someday_maybe (
           id TEXT PRIMARY KEY,
           agent_id TEXT,
@@ -943,6 +1011,182 @@ app.get('/api/tool-usage', requireAuth, async (req, res) => {
     });
   } catch (err) { 
     console.error('Error fetching tool usage:', err);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
+// ============ SUB-AGENT ACTIVITY ============
+app.post('/api/subagent-activity', requireAuth, async (req, res) => {
+  try {
+    const { agentId, subagentLabel, sessionKey, status, task, model, startedAt, completedAt, tokensUsed, runtime, result } = req.body;
+    
+    if (!agentId || !subagentLabel || !status) {
+      return res.status(400).json({ error: 'agentId, subagentLabel, and status are required' });
+    }
+    
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    
+    await db.run(
+      `INSERT INTO subagent_activity (id, agent_id, subagent_label, session_key, status, task, model, started_at, completed_at, tokens_used, runtime_seconds, result, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [id, agentId, subagentLabel, sessionKey || null, status, task || null, model || null, startedAt || now, completedAt || null, tokensUsed || null, runtime || null, result || null, now]
+    );
+    
+    const record = await db.get('SELECT * FROM subagent_activity WHERE id = $1', [id]);
+    
+    // Broadcast to WebSocket clients
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'subagent-activity', data: record }));
+      }
+    });
+    
+    res.json(record);
+  } catch (err) { 
+    console.error('Error creating subagent activity:', err);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
+app.get('/api/subagent-activity', requireAuth, async (req, res) => {
+  try {
+    const hours = parseInt(req.query.hours) || 24;
+    const agentId = req.agent?.id || req.query.agent_id;
+    const startTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    
+    const query = agentId
+      ? 'SELECT * FROM subagent_activity WHERE agent_id = $1 AND started_at >= $2 ORDER BY started_at DESC'
+      : 'SELECT * FROM subagent_activity WHERE started_at >= $1 ORDER BY started_at DESC';
+    const params = agentId ? [agentId, startTime] : [startTime];
+    
+    const events = await db.query(query, params);
+    
+    // Categorize
+    const running = events.filter(e => e.status === 'running' || e.status === 'spawned');
+    const completed = events.filter(e => e.status === 'completed');
+    const failed = events.filter(e => e.status === 'failed');
+    
+    // Stats
+    const totalSpawns = events.length;
+    const avgRuntime = completed.length > 0
+      ? completed.reduce((sum, e) => sum + (e.runtime_seconds || 0), 0) / completed.length
+      : 0;
+    
+    // Model distribution
+    const byModel = {};
+    events.forEach(e => {
+      if (e.model) {
+        byModel[e.model] = (byModel[e.model] || 0) + 1;
+      }
+    });
+    
+    res.json({
+      events,
+      running,
+      completed: completed.slice(0, 10), // Last 10 completed
+      failed,
+      stats: {
+        totalSpawns,
+        avgRuntime: Math.round(avgRuntime),
+        runningCount: running.length,
+        completedCount: completed.length,
+        failedCount: failed.length
+      },
+      byModel: Object.entries(byModel).map(([model, count]) => ({ model, count }))
+    });
+  } catch (err) { 
+    console.error('Error fetching subagent activity:', err);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
+// ============ THREAD ACTIVITY ============
+app.post('/api/thread-activity', requireAuth, async (req, res) => {
+  try {
+    const { agentId, threadId, title, status, lastUpdate, category, blockedOn, nextAction } = req.body;
+    
+    if (!agentId || !threadId || !title || !status) {
+      return res.status(400).json({ error: 'agentId, threadId, title, and status are required' });
+    }
+    
+    const now = new Date().toISOString();
+    
+    // Check if thread exists (upsert)
+    const existing = await db.get('SELECT * FROM thread_activity WHERE thread_id = $1', [threadId]);
+    
+    if (existing) {
+      // Update existing thread
+      await db.run(
+        `UPDATE thread_activity 
+         SET agent_id = $1, title = $2, status = $3, last_update = $4, category = $5, blocked_on = $6, next_action = $7, updated_at = $8
+         WHERE thread_id = $9`,
+        [agentId, title, status, lastUpdate || now, category || null, blockedOn || null, nextAction || null, now, threadId]
+      );
+    } else {
+      // Insert new thread
+      const id = uuidv4();
+      await db.run(
+        `INSERT INTO thread_activity (id, agent_id, thread_id, title, status, last_update, category, blocked_on, next_action, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [id, agentId, threadId, title, status, lastUpdate || now, category || null, blockedOn || null, nextAction || null, now, now]
+      );
+    }
+    
+    const record = await db.get('SELECT * FROM thread_activity WHERE thread_id = $1', [threadId]);
+    
+    // Broadcast to WebSocket clients
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'thread-activity', data: record }));
+      }
+    });
+    
+    res.json(record);
+  } catch (err) { 
+    console.error('Error creating/updating thread activity:', err);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
+app.get('/api/thread-activity', requireAuth, async (req, res) => {
+  try {
+    const agentId = req.agent?.id || req.query.agent_id;
+    
+    const query = agentId
+      ? 'SELECT * FROM thread_activity WHERE agent_id = $1 ORDER BY last_update DESC'
+      : 'SELECT * FROM thread_activity ORDER BY last_update DESC';
+    const params = agentId ? [agentId] : [];
+    
+    const threads = await db.query(query, params);
+    
+    // Group by status
+    const open = threads.filter(t => t.status === 'open');
+    const inProgress = threads.filter(t => t.status === 'in-progress' || t.status === 'active');
+    const blocked = threads.filter(t => t.status === 'blocked');
+    const waiting = threads.filter(t => t.status === 'waiting');
+    const concluded = threads.filter(t => t.status === 'concluded');
+    
+    // Calculate momentum score
+    const activeCount = open.length + inProgress.length;
+    const totalCount = threads.filter(t => t.status !== 'concluded').length;
+    const momentumScore = totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0;
+    
+    res.json({
+      threads,
+      open,
+      inProgress,
+      blocked,
+      waiting,
+      concluded: concluded.slice(0, 5), // Last 5 concluded
+      stats: {
+        total: threads.length,
+        active: activeCount,
+        momentumScore
+      }
+    });
+  } catch (err) { 
+    console.error('Error fetching thread activity:', err);
     res.status(500).json({ error: err.message }); 
   }
 });

@@ -231,6 +231,65 @@
     .tool-activity-tool { font-size: 0.7rem; font-weight: 600; color: var(--accent); }
     .tool-activity-desc { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+    /* Sub-Agent Panel */
+    .subagent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+    .subagent-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.75rem; position: relative;
+    }
+    .subagent-card.running { border-color: var(--green); box-shadow: 0 0 8px var(--green-dim); }
+    .subagent-card.failed { border-color: var(--red); }
+    .subagent-label { font-size: 0.85rem; font-weight: 600; color: var(--text); margin-bottom: 0.25rem; }
+    .subagent-task { font-size: 0.7rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 0.5rem; }
+    .subagent-meta { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .subagent-badge { font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 500; }
+    .subagent-badge.running { background: var(--green-dim); color: var(--green); }
+    .subagent-badge.completed { background: var(--blue-dim); color: var(--blue); }
+    .subagent-badge.failed { background: rgba(248,113,113,0.15); color: var(--red); }
+    .subagent-spinner {
+      position: absolute; top: 0.5rem; right: 0.5rem;
+      width: 12px; height: 12px; border: 2px solid var(--green-dim);
+      border-top-color: var(--green); border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Thread Board */
+    .thread-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+    .thread-column {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 0.75rem; min-height: 150px;
+    }
+    .thread-column-title { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .thread-card {
+      background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 6px;
+      padding: 0.5rem; margin-bottom: 0.5rem;
+    }
+    .thread-card:hover { background: rgba(255,255,255,0.05); }
+    .thread-title { font-size: 0.75rem; font-weight: 500; color: var(--text); margin-bottom: 0.25rem; }
+    .thread-age { font-size: 0.65rem; color: var(--text-dim); }
+    .thread-next { font-size: 0.65rem; color: var(--text-muted); margin-top: 0.25rem; font-style: italic; }
+
+    /* Momentum Score */
+    .momentum-container {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem; text-align: center;
+    }
+    .momentum-title { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.75rem; }
+    .momentum-gauge {
+      width: 120px; height: 120px; margin: 0 auto;
+      position: relative; border-radius: 50%;
+      background: conic-gradient(var(--green) 0% var(--momentum-percent), var(--surface) var(--momentum-percent) 100%);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .momentum-inner {
+      width: 90px; height: 90px; background: var(--bg); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+    }
+    .momentum-value { font-size: 2rem; font-weight: 700; color: var(--text); }
+    .momentum-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+    .momentum-desc { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem; }
+
     @media (max-width: 768px) {
       .usage-grid { grid-template-columns: 1fr; }
       .tool-charts { grid-template-columns: 1fr; }
