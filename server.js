@@ -1721,8 +1721,8 @@ app.post('/api/live-sessions', requireAgentKey, async (req, res) => {
       );
     }
 
-    // Emit via WebSocket
-    if (io) io.emit('live-sessions', { sessions });
+    // Emit via WebSocket if available
+    if (typeof io !== 'undefined' && io) io.emit('live-sessions', { sessions });
     
     res.json({ success: true, count: sessions.length });
   } catch (err) {
