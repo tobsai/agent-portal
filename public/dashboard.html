@@ -357,22 +357,31 @@
       }).join('');
     }
 
+    function isOverdue(t) {
+      if (!t.nextRunAt) return false;
+      const now = Date.now(), next = new Date(t.nextRunAt).getTime();
+      if (next >= now) return false;
+      // Grace: overdue only if missed by more than the interval (or 30 min minimum)
+      const last = t.lastRunAt ? new Date(t.lastRunAt).getTime() : 0;
+      const interval = last ? Math.max(next - last, 1800000) : 1800000; // fallback 30 min
+      return (now - next) > interval;
+    }
     function getTaskBorderClass(t) {
       if (!t.enabled) return 'disabled';
       if (t.lastStatus === 'error' || t.lastStatus === 'failed') return 'error';
-      if (t.nextRunAt && new Date(t.nextRunAt) < new Date()) return 'overdue';
+      if (isOverdue(t)) return 'overdue';
       if (t.lastStatus === 'ok' || t.lastStatus === 'completed') return 'ok';
       return '';
     }
     function getTaskStatusClass(t) {
       if (t.lastStatus === 'error' || t.lastStatus === 'failed') return 'error';
-      if (t.nextRunAt && new Date(t.nextRunAt) < new Date()) return 'overdue';
+      if (isOverdue(t)) return 'overdue';
       if (t.lastStatus === 'ok' || t.lastStatus === 'completed') return 'ok';
       return '';
     }
     function getTaskStatusText(t) {
       if (t.lastStatus === 'error' || t.lastStatus === 'failed') return 'Error';
-      if (t.nextRunAt && new Date(t.nextRunAt) < new Date()) return 'Overdue';
+      if (isOverdue(t)) return 'Overdue';
       if (t.lastStatus === 'ok' || t.lastStatus === 'completed') return 'OK';
       return '—';
     }
