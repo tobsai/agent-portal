@@ -100,6 +100,33 @@
     .section-title { font-size: 1.25rem; font-weight: 600; color: var(--text); }
     .last-updated { font-size: 0.7rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
 
+    /* Session Cards */
+    .sessions-section { margin-bottom: 1.5rem; }
+    .session-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 0.75rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.75rem;
+    }
+    .session-card .pulse {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .session-card .pulse.active { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+    .session-card .pulse.idle { background: var(--text-dim); }
+    .session-card .pulse.cron { background: var(--blue); box-shadow: 0 0 6px var(--blue); }
+    .session-card .pulse.subagent { background: var(--purple); box-shadow: 0 0 6px var(--purple); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .session-info { flex: 1; min-width: 0; }
+    .session-label { font-weight: 600; font-size: 0.85rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-meta { font-size: 0.7rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; margin-top: 0.15rem; }
+    .session-badge {
+      font-size: 0.6rem; padding: 0.15rem 0.45rem; border-radius: 4px;
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;
+    }
+    .session-badge.main { background: var(--blue-dim); color: var(--blue); }
+    .session-badge.cron { background: var(--green-dim); color: var(--green); }
+    .session-badge.subagent { background: var(--purple-dim); color: var(--purple); }
+    .session-badge.idle { background: var(--surface); color: var(--text-dim); }
+    .no-sessions { text-align: center; padding: 1rem; color: var(--text-dim); font-size: 0.8rem; }
+
     /* Task Groups */
     .task-group { margin-bottom: 1.5rem; }
     .group-title {
@@ -214,7 +241,15 @@
     <!-- Left: Scheduled Tasks -->
     <div class="panel-left">
       <div class="panel-left-scroll">
-        <div class="section-header">
+        <!-- Active Sessions -->
+        <div class="sessions-section">
+          <div class="section-header">
+            <h1 class="section-title">🔴 Live Sessions</h1>
+          </div>
+          <div id="sessions-container"><div class="no-sessions">Loading...</div></div>
+        </div>
+
+        <div class="section-header" style="margin-top: 0.5rem;">
           <h1 class="section-title">📅 Scheduled Tasks</h1>
           <div class="last-updated" id="last-updated">—</div>
         </div>
@@ -275,11 +310,51 @@
 
     async function init() {
       await loadUser();
+      await loadLiveSessions();
       await loadScheduledTasks();
       await loadActivityTimeline();
+      setInterval(loadLiveSessions, 15000);
       setInterval(loadScheduledTasks, 60000);
       setInterval(loadActivityTimeline, 300000);
       setInterval(updateRelativeTimes, 10000);
+    }
+
+    async function loadLiveSessions() {
+      try {
+        const res = await fetch('/api/live-sessions');
+        const data = await res.json();
+        renderLiveSessions(data.sessions || []);
+      } catch (err) { console.error('Failed to load live sessions:', err); }
+    }
+
+    function renderLiveSessions(sessions) {
+      const container = document.getElementById('sessions-container');
+      if (!sessions.length) {
+        container.innerHTML = '<div class="no-sessions">No active sessions</div>';
+        return;
+      }
+      container.innerHTML = sessions.map(s => {
+        const isMain = s.session_key === 'agent:main:main';
+        const isCron = s.session_key.includes(':cron:');
+        const isSub = s.kind === 'subagent' || s.session_key.includes(':spawn:');
+        const pulseClass = isMain ? 'active' : isCron ? 'cron' : isSub ? 'subagent' : 'idle';
+        const badgeClass = isMain ? 'main' : isCron ? 'cron' : isSub ? 'subagent' : 'idle';
+        const badgeText = isMain ? 'Main' : isCron ? 'Cron' : isSub ? 'Sub-agent' : 'Session';
+        const label = s.label || (isMain ? 'Main Session' : s.session_key.split(':').pop());
+        const model = s.model ? s.model.replace('claude-', '') : '';
+        const tokens = s.total_tokens ? `${Math.round(s.total_tokens / 1000)}k tokens` : '';
+        const meta = [model, tokens, s.channel].filter(Boolean).join(' · ');
+        const msg = s.last_message ? s.last_message.substring(0, 80) + (s.last_message.length > 80 ? '…' : '') : '';
+        return `<div class="session-card">
+          <div class="pulse ${pulseClass}"></div>
+          <div class="session-info">
+            <div class="session-label">${esc(label)}</div>
+            <div class="session-meta">${esc(meta)}</div>
+            ${msg ? `<div class="session-meta" style="color:var(--text-muted);margin-top:0.2rem;">${esc(msg)}</div>` : ''}
+          </div>
+          <div class="session-badge ${badgeClass}">${badgeText}</div>
+        </div>`;
+      }).join('');
     }
 
     async function loadUser() {

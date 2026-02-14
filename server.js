@@ -218,6 +218,20 @@ if (isProduction) {
         CREATE INDEX IF NOT EXISTS idx_thread_status ON thread_activity(status);
         CREATE INDEX IF NOT EXISTS idx_thread_agent ON thread_activity(agent_id);
 
+        -- Live sessions (pushed by dashboard-sync)
+        CREATE TABLE IF NOT EXISTS live_sessions (
+          session_key TEXT PRIMARY KEY,
+          kind TEXT,
+          label TEXT,
+          channel TEXT,
+          model TEXT,
+          total_tokens INTEGER DEFAULT 0,
+          context_tokens INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'idle',
+          last_message TEXT,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
         -- Sessions table for connect-pg-simple
         CREATE TABLE IF NOT EXISTS sessions (
           sid VARCHAR NOT NULL COLLATE "default",
@@ -398,6 +412,18 @@ if (isProduction) {
           last_outcome TEXT,
           next_run_at TEXT,
           category TEXT,
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS live_sessions (
+          session_key TEXT PRIMARY KEY,
+          kind TEXT,
+          label TEXT,
+          channel TEXT,
+          model TEXT,
+          total_tokens INTEGER DEFAULT 0,
+          context_tokens INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'idle',
+          last_message TEXT,
           updated_at TEXT DEFAULT (datetime('now'))
         );
       `);
@@ -1660,6 +1686,47 @@ app.post('/api/scheduled-tasks', requireAgentKey, async (req, res) => {
     res.json({ success: true, count: tasks.length });
   } catch (err) {
     console.error('Failed to update scheduled tasks:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============ LIVE SESSIONS (Dashboard) ============
+app.get('/api/live-sessions', requireAuth, async (req, res) => {
+  try {
+    const sessions = await db.query('SELECT * FROM live_sessions ORDER BY updated_at DESC');
+    res.json({ sessions });
+  } catch (err) {
+    console.error('Failed to read live sessions:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/live-sessions', requireAgentKey, async (req, res) => {
+  try {
+    const { sessions } = req.body;
+    if (!Array.isArray(sessions)) {
+      return res.status(400).json({ error: 'sessions must be an array' });
+    }
+    const now = new Date().toISOString();
+
+    // Clear old sessions, then upsert current ones
+    await db.run('DELETE FROM live_sessions');
+
+    for (const s of sessions) {
+      await db.run(
+        `INSERT INTO live_sessions (session_key, kind, label, channel, model, total_tokens, context_tokens, status, last_message, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [s.session_key, s.kind || null, s.label || null, s.channel || null, s.model || null,
+         s.total_tokens || 0, s.context_tokens || 0, s.status || 'idle', s.last_message || null, now]
+      );
+    }
+
+    // Emit via WebSocket
+    if (io) io.emit('live-sessions', { sessions });
+    
+    res.json({ success: true, count: sessions.length });
+  } catch (err) {
+    console.error('Failed to update live sessions:', err);
     res.status(500).json({ error: err.message });
   }
 });
