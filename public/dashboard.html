@@ -509,8 +509,8 @@
       const sonnetTokens = data.sonnet?.total || 0;
 
       // Plan limits (approximate weekly limits for Anthropic Max plan)
-      const WEEKLY_OPUS_LIMIT = 45_000_000;  // ~45M tokens/week for Opus
-      const WEEKLY_SONNET_LIMIT = 90_000_000; // ~90M tokens/week for Sonnet
+      const WEEKLY_OPUS_LIMIT = 180_000_000;  // ~180M tokens/week for Opus (Max $200 = 20x Pro)
+      const WEEKLY_SONNET_LIMIT = 360_000_000; // ~360M tokens/week for Sonnet (Max $200 = 20x Pro)
 
       // Format numbers
       const formatTokens = (n) => {
