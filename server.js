@@ -511,6 +511,26 @@ function broadcast(event, data) {
   wsClients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(msg); });
 }
 
+// JWT auth middleware for mobile app — runs before API routes
+app.use('/api', async (req, res, next) => {
+  if (req.isAuthenticated()) return next(); // session auth takes priority
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    // Skip if it looks like an agent API key
+    if (token.startsWith('ak_')) return next();
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      const user = await db.get('SELECT * FROM users WHERE id = $1', [decoded.userId]);
+      if (user) {
+        req.user = user;
+        req.isAuthenticated = () => true;
+      }
+    } catch (e) { /* invalid token, continue unauthenticated */ }
+  }
+  next();
+});
+
 function requireAuth(req, res, next) {
   // JWT middleware already ran — if user is authenticated (session or JWT), allow through
   if (req.isAuthenticated()) return next();
@@ -604,26 +624,6 @@ app.get('/auth/google/callback',
   }
 );
 app.get('/auth/logout', (req, res) => { req.logout(() => res.redirect('/')); });
-
-// JWT auth middleware for mobile app — runs before API routes
-app.use('/api', async (req, res, next) => {
-  if (req.isAuthenticated()) return next(); // session auth takes priority
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    // Skip if it looks like an agent API key
-    if (token.startsWith('ak_')) return next();
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      const user = await db.get('SELECT * FROM users WHERE id = $1', [decoded.userId]);
-      if (user) {
-        req.user = user;
-        req.isAuthenticated = () => true;
-      }
-    } catch (e) { /* invalid token, continue unauthenticated */ }
-  }
-  next();
-});
 
 app.get('/api/me', (req, res) => {
   if (req.isAuthenticated()) {
