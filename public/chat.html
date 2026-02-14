@@ -508,9 +508,17 @@
   <script>if(new URLSearchParams(location.search).get('embed')==='1')document.body.classList.add('embed-mode');</script>
   <!-- Header -->
   <header>
-    <div class="logo">
-      <span class="dot"></span>
-      <span>Agent Portal</span>
+    <div style="display:flex;align-items:center;gap:1.5rem;">
+      <div class="logo">
+        <span class="dot"></span>
+        <a href="/" style="color:var(--text);text-decoration:none;font-weight:700;">🦞 Talos</a>
+      </div>
+      <nav style="display:flex;gap:0.25rem;">
+        <a href="/dashboard" style="padding:0.4rem 0.75rem;border-radius:6px;color:var(--text-muted);text-decoration:none;font-size:0.85rem;">Dashboard</a>
+        <a href="/architecture" style="padding:0.4rem 0.75rem;border-radius:6px;color:var(--text-muted);text-decoration:none;font-size:0.85rem;">Architecture</a>
+        <a href="/docs" style="padding:0.4rem 0.75rem;border-radius:6px;color:var(--text-muted);text-decoration:none;font-size:0.85rem;">Docs</a>
+        <a href="/c" style="padding:0.4rem 0.75rem;border-radius:6px;color:var(--accent);background:rgba(129,140,248,0.12);text-decoration:none;font-size:0.85rem;">Chat</a>
+      </nav>
     </div>
     <div class="header-right">
       <div class="conn" id="connection-status">
@@ -521,7 +529,6 @@
         <img src="" alt="" id="user-avatar" style="display: none;">
         <span id="user-name"></span>
       </div>
-      <a href="/dashboard" class="btn-s">Dashboard</a>
       <button class="btn-s" onclick="logout()">Logout</button>
     </div>
   </header>
