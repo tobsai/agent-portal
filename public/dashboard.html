@@ -106,6 +106,50 @@
       background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
       padding: 0.75rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.75rem;
     }
+
+    /* Usage Section */
+    .usage-section { margin-bottom: 1.5rem; }
+    .usage-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+    .usage-period-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 0.85rem;
+    }
+    .usage-period-label {
+      font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.6rem;
+    }
+    .usage-total {
+      font-size: 1.5rem; font-weight: 700; color: var(--text); margin-bottom: 0.15rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .usage-cost {
+      font-size: 0.75rem; color: var(--green); margin-bottom: 0.75rem;
+      font-family: 'JetBrains Mono', monospace; font-weight: 500;
+    }
+    .usage-models { display: flex; flex-direction: column; gap: 0.5rem; }
+    .usage-model-bar {
+      display: grid; grid-template-columns: 3.5rem 1fr 3.5rem; gap: 0.4rem; align-items: center;
+    }
+    .model-name {
+      font-size: 0.65rem; font-weight: 600; color: var(--text-dim); text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .bar-container {
+      height: 14px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .bar {
+      height: 100%; transition: width 0.3s ease-out;
+    }
+    .bar.opus { background: linear-gradient(90deg, var(--purple), #c084fc); }
+    .bar.sonnet { background: linear-gradient(90deg, var(--blue), #60a5fa); }
+    .model-tokens {
+      font-size: 0.65rem; color: var(--text-muted); text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    @media (max-width: 900px) {
+      .usage-grid { grid-template-columns: 1fr; }
+    }
     .session-card .pulse {
       width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
     }
@@ -249,6 +293,72 @@
           <div id="sessions-container"><div class="no-sessions">Loading...</div></div>
         </div>
 
+        <!-- Usage Section -->
+        <div class="usage-section" style="margin-bottom: 1.5rem;">
+          <div class="section-header">
+            <h1 class="section-title">💎 Token Usage</h1>
+          </div>
+          <div class="usage-grid">
+            <div class="usage-period-card">
+              <div class="usage-period-label">Last 24h</div>
+              <div class="usage-stats" id="usage-24h">
+                <div class="usage-total">—</div>
+                <div class="usage-cost">—</div>
+                <div class="usage-models">
+                  <div class="usage-model-bar">
+                    <span class="model-name">Opus</span>
+                    <div class="bar-container"><div class="bar opus" style="width: 0%"></div></div>
+                    <span class="model-tokens">—</span>
+                  </div>
+                  <div class="usage-model-bar">
+                    <span class="model-name">Sonnet</span>
+                    <div class="bar-container"><div class="bar sonnet" style="width: 0%"></div></div>
+                    <span class="model-tokens">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="usage-period-card">
+              <div class="usage-period-label">Last 7d</div>
+              <div class="usage-stats" id="usage-7d">
+                <div class="usage-total">—</div>
+                <div class="usage-cost">—</div>
+                <div class="usage-models">
+                  <div class="usage-model-bar">
+                    <span class="model-name">Opus</span>
+                    <div class="bar-container"><div class="bar opus" style="width: 0%"></div></div>
+                    <span class="model-tokens">—</span>
+                  </div>
+                  <div class="usage-model-bar">
+                    <span class="model-name">Sonnet</span>
+                    <div class="bar-container"><div class="bar sonnet" style="width: 0%"></div></div>
+                    <span class="model-tokens">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="usage-period-card">
+              <div class="usage-period-label">Last 30d</div>
+              <div class="usage-stats" id="usage-30d">
+                <div class="usage-total">—</div>
+                <div class="usage-cost">—</div>
+                <div class="usage-models">
+                  <div class="usage-model-bar">
+                    <span class="model-name">Opus</span>
+                    <div class="bar-container"><div class="bar opus" style="width: 0%"></div></div>
+                    <span class="model-tokens">—</span>
+                  </div>
+                  <div class="usage-model-bar">
+                    <span class="model-name">Sonnet</span>
+                    <div class="bar-container"><div class="bar sonnet" style="width: 0%"></div></div>
+                    <span class="model-tokens">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="section-header" style="margin-top: 0.5rem;">
           <h1 class="section-title">📅 Scheduled Tasks</h1>
           <div class="last-updated" id="last-updated">—</div>
@@ -311,9 +421,11 @@
     async function init() {
       await loadUser();
       await loadLiveSessions();
+      await loadUsage();
       await loadScheduledTasks();
       await loadActivityTimeline();
       setInterval(loadLiveSessions, 15000);
+      setInterval(loadUsage, 60000); // Refresh usage every minute
       setInterval(loadScheduledTasks, 60000);
       setInterval(loadActivityTimeline, 300000);
       setInterval(updateRelativeTimes, 10000);
@@ -373,6 +485,53 @@
           avatarEl.appendChild(makeAvatarFallback(u.name || u.email));
         }
       }
+    }
+
+    async function loadUsage() {
+      try {
+        const res = await fetch('/api/usage');
+        const data = await res.json();
+        renderUsage('24h', data.last24h);
+        renderUsage('7d', data.last7d);
+        renderUsage('30d', data.last30d);
+      } catch (err) { console.error('Failed to load usage:', err); }
+    }
+
+    function renderUsage(period, data) {
+      const container = document.getElementById(`usage-${period}`);
+      if (!data) return;
+
+      // Calculate totals and costs
+      const totalTokens = data.total || 0;
+      const opusTokens = data.opus?.total || 0;
+      const sonnetTokens = data.sonnet?.total || 0;
+
+      // Cost calculation (Opus: $15/M input, $75/M output; Sonnet: $3/M input, $15/M output)
+      const opusCost = ((data.opus?.input || 0) / 1000000 * 15) + ((data.opus?.output || 0) / 1000000 * 75);
+      const sonnetCost = ((data.sonnet?.input || 0) / 1000000 * 3) + ((data.sonnet?.output || 0) / 1000000 * 15);
+      const totalCost = opusCost + sonnetCost;
+
+      // Format numbers
+      const formatTokens = (n) => {
+        if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+        if (n >= 1000) return (n / 1000).toFixed(0) + 'k';
+        return n.toString();
+      };
+
+      const maxTokens = Math.max(opusTokens, sonnetTokens);
+      const opusWidth = maxTokens > 0 ? Math.round((opusTokens / maxTokens) * 100) : 0;
+      const sonnetWidth = maxTokens > 0 ? Math.round((sonnetTokens / maxTokens) * 100) : 0;
+
+      container.querySelector('.usage-total').textContent = formatTokens(totalTokens);
+      container.querySelector('.usage-cost').textContent = totalCost > 0 ? `$${totalCost.toFixed(2)}` : '$0.00';
+
+      const opusBar = container.querySelectorAll('.usage-model-bar')[0];
+      opusBar.querySelector('.bar').style.width = `${opusWidth}%`;
+      opusBar.querySelector('.model-tokens').textContent = formatTokens(opusTokens);
+
+      const sonnetBar = container.querySelectorAll('.usage-model-bar')[1];
+      sonnetBar.querySelector('.bar').style.width = `${sonnetWidth}%`;
+      sonnetBar.querySelector('.model-tokens').textContent = formatTokens(sonnetTokens);
     }
 
     function makeAvatarFallback(name) {
