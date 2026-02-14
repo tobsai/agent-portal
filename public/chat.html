@@ -259,6 +259,59 @@
       padding: 0 0.5rem;
     }
 
+    /* Message status badges */
+    .message-status {
+      font-size: 0.65rem;
+      padding: 0 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .message-status.sending {
+      color: var(--accent);
+    }
+    .message-status.queued {
+      color: var(--yellow);
+    }
+    .message-status .status-icon {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .message-status.sending .status-icon {
+      animation: pulse-status 1.2s infinite;
+    }
+    @keyframes pulse-status {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Queue banner */
+    .queue-banner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.4rem 1rem;
+      background: rgba(251,191,36,0.08);
+      border-top: 1px solid rgba(251,191,36,0.2);
+      font-size: 0.75rem;
+      color: var(--yellow);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .queue-banner .queue-dots span {
+      display: inline-block;
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: var(--yellow);
+      margin: 0 2px;
+      animation: bounce 1.4s infinite;
+    }
+    .queue-banner .queue-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .queue-banner .queue-dots span:nth-child(3) { animation-delay: 0.4s; }
+
     /* Loading indicator */
     .message.assistant.loading .message-bubble {
       display: flex;
@@ -738,7 +791,7 @@
 
     function clearMessages() { messagesContainer.innerHTML = ''; }
 
-    function addMessage(role, content, timestamp) {
+    function addMessage(role, content, timestamp, statusType) {
       const emptyState = messagesContainer.querySelector('.empty-state');
       if (emptyState) emptyState.remove();
 
@@ -761,11 +814,23 @@
       time.textContent = formatTimestamp(timestamp || new Date().toISOString());
 
       contentDiv.appendChild(bubble);
-      contentDiv.appendChild(time);
+
+      // Status badge for user messages
+      if (role === 'user' && statusType) {
+        const status = document.createElement('div');
+        status.className = 'message-status ' + statusType;
+        status.innerHTML = `<span class="status-icon"></span>${statusType === 'sending' ? 'Sending…' : 'Queued'}`;
+        contentDiv.appendChild(status);
+        messageDiv._statusEl = status;
+      } else {
+        contentDiv.appendChild(time);
+      }
+
       messageDiv.appendChild(avatar);
       messageDiv.appendChild(contentDiv);
       messagesContainer.appendChild(messageDiv);
       scrollToBottom();
+      return messageDiv;
     }
 
     function updateStreamingMessage(content) {
@@ -843,23 +908,29 @@
       });
     }
 
+    let activeUserMsg = null; // track the message being processed
+    let queuedUserMsgs = []; // track queued message elements
+
     function sendMessage() {
       const text = messageInput.value.trim();
       if (!text) return;
       if (!ws || ws.readyState !== WebSocket.OPEN) { showError('Not connected'); return; }
 
-      // Always show the user message immediately
-      addMessage('user', text);
       messageInput.value = '';
       messageInput.style.height = 'auto';
 
       if (isWaitingForResponse) {
-        // Queue it — will dispatch after current response finishes
-        messageQueue.push(text);
+        // Show as queued
+        const msgEl = addMessage('user', text, null, 'queued');
+        messageQueue.push({ text, el: msgEl });
+        queuedUserMsgs.push(msgEl);
         updateQueueIndicator();
         return;
       }
 
+      // Show as sending
+      const msgEl = addMessage('user', text, null, 'sending');
+      activeUserMsg = msgEl;
       dispatchMessage(text);
     }
 
@@ -874,34 +945,56 @@
         if (isWaitingForResponse) {
           isWaitingForResponse = false;
           removeLoadingIndicator();
+          markMessageDone(activeUserMsg);
           console.warn('Response timeout — unlocking chat input');
           processQueue();
         }
       }, 120000);
     }
 
+    function markMessageDone(msgEl) {
+      if (!msgEl || !msgEl._statusEl) return;
+      const parent = msgEl._statusEl.parentNode;
+      const time = document.createElement('div');
+      time.className = 'message-timestamp';
+      time.textContent = formatTimestamp(new Date().toISOString());
+      parent.replaceChild(time, msgEl._statusEl);
+      delete msgEl._statusEl;
+    }
+
     function processQueue() {
+      // Mark the completed message as done
+      markMessageDone(activeUserMsg);
+      activeUserMsg = null;
+
       updateQueueIndicator();
       if (messageQueue.length > 0 && !isWaitingForResponse) {
         const next = messageQueue.shift();
+        // Promote from queued → sending
+        if (next.el && next.el._statusEl) {
+          next.el._statusEl.className = 'message-status sending';
+          next.el._statusEl.innerHTML = '<span class="status-icon"></span>Sending…';
+        }
+        activeUserMsg = next.el;
+        queuedUserMsgs = queuedUserMsgs.filter(m => m !== next.el);
         updateQueueIndicator();
-        dispatchMessage(next);
+        dispatchMessage(next.text);
       }
     }
 
     function updateQueueIndicator() {
-      let indicator = document.getElementById('queue-indicator');
+      let banner = document.getElementById('queue-banner');
       if (messageQueue.length > 0) {
-        if (!indicator) {
-          indicator = document.createElement('div');
-          indicator.id = 'queue-indicator';
-          indicator.style.cssText = 'text-align:center;font-size:0.7rem;color:var(--text-dim);padding:0.25rem;font-family:JetBrains Mono,monospace;';
+        if (!banner) {
+          banner = document.createElement('div');
+          banner.id = 'queue-banner';
+          banner.className = 'queue-banner';
           const inputArea = document.querySelector('.input-area');
-          inputArea.parentNode.insertBefore(indicator, inputArea);
+          inputArea.parentNode.insertBefore(banner, inputArea);
         }
-        indicator.textContent = `${messageQueue.length} message${messageQueue.length > 1 ? 's' : ''} queued`;
-      } else if (indicator) {
-        indicator.remove();
+        banner.innerHTML = `<span class="queue-dots"><span></span><span></span><span></span></span> ${messageQueue.length} message${messageQueue.length > 1 ? 's' : ''} queued`;
+      } else if (banner) {
+        banner.remove();
       }
     }
 
