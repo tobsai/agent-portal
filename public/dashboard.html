@@ -274,6 +274,11 @@
       </nav>
     </div>
     <div class="header-right">
+      <!-- Health Status Indicator -->
+      <div id="health-indicator" class="health-status" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.75rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border);">
+        <div class="health-dot" style="width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim);"></div>
+        <span class="health-text" style="font-size: 0.75rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">Polling: Checking...</span>
+      </div>
       <div class="user" id="user-info">
         <div class="avatar" id="user-avatar"></div>
         <span id="user-name"></span>
@@ -422,15 +427,77 @@
 
     async function init() {
       await loadUser();
+      await loadAgentHealth();
       await loadLiveSessions();
       await loadUsage();
       await loadScheduledTasks();
       await loadActivityTimeline();
+      setInterval(loadAgentHealth, 30000); // Check health every 30 seconds
       setInterval(loadLiveSessions, 15000);
       setInterval(loadUsage, 60000); // Refresh usage every minute
       setInterval(loadScheduledTasks, 60000);
       setInterval(loadActivityTimeline, 300000);
       setInterval(updateRelativeTimes, 10000);
+    }
+    
+    async function loadAgentHealth() {
+      try {
+        const agentId = '689681ce-db81-4943-82f6-355e566c2603'; // Talos agent ID
+        const res = await fetch(`/api/agent-health?agent_id=${agentId}`);
+        if (!res.ok) {
+          updateHealthIndicator('unknown', 'No health data');
+          return;
+        }
+        const data = await res.json();
+        
+        const { staleness, iMessagePolling } = data;
+        const now = new Date();
+        
+        // Determine health status
+        let status = 'healthy';
+        let message = 'Active';
+        
+        if (staleness.reportStale) {
+          status = 'error';
+          message = `⚠️ No report (${staleness.minutesSinceReport}m ago)`;
+        } else if (staleness.pollStale) {
+          status = 'warning';
+          message = `⚠️ Poll stale (${staleness.minutesSincePoll}m ago)`;
+        } else if (iMessagePolling.pollingActive && staleness.minutesSincePoll !== null) {
+          status = 'healthy';
+          message = `✓ Active (${staleness.minutesSincePoll}m ago)`;
+        } else {
+          status = 'idle';
+          message = 'Idle';
+        }
+        
+        updateHealthIndicator(status, message);
+      } catch (err) {
+        console.error('Failed to load agent health:', err);
+        updateHealthIndicator('error', 'Health check failed');
+      }
+    }
+    
+    function updateHealthIndicator(status, message) {
+      const indicator = document.getElementById('health-indicator');
+      if (!indicator) return;
+      
+      const dot = indicator.querySelector('.health-dot');
+      const text = indicator.querySelector('.health-text');
+      
+      // Update dot color
+      const dotColors = {
+        healthy: 'var(--green)',
+        warning: 'var(--yellow)',
+        error: 'var(--red)',
+        idle: 'var(--text-dim)',
+        unknown: 'var(--text-dim)'
+      };
+      dot.style.background = dotColors[status] || 'var(--text-dim)';
+      
+      // Update text
+      text.textContent = `Polling: ${message}`;
+      text.style.color = status === 'healthy' ? 'var(--green)' : status === 'warning' ? 'var(--yellow)' : status === 'error' ? 'var(--red)' : 'var(--text-muted)';
     }
 
     async function loadLiveSessions() {

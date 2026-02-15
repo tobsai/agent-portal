@@ -1605,6 +1605,85 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ============ AGENT HEALTH MONITORING ============
+// In-memory store for agent health status (no DB needed)
+let agentHealthStatus = {};
+
+// POST /api/agent-health - Agent pushes health status
+app.post('/api/agent-health', requireAgentKey, (req, res) => {
+  try {
+    const { agentId, iMessagePolling, heartbeatActive, gatewayUptime } = req.body;
+    
+    if (!agentId) {
+      return res.status(400).json({ error: 'agentId is required' });
+    }
+    
+    const now = new Date().toISOString();
+    
+    // Store latest health status
+    agentHealthStatus[agentId] = {
+      agentId,
+      lastReportedAt: now,
+      iMessagePolling: iMessagePolling || {
+        lastPoll: null,
+        lastMessage: null,
+        messagesQueued: 0,
+        pollingActive: false
+      },
+      heartbeatActive: heartbeatActive !== undefined ? heartbeatActive : true,
+      gatewayUptime: gatewayUptime || 0
+    };
+    
+    // Broadcast health update via WebSocket
+    broadcast('agent-health', agentHealthStatus[agentId]);
+    
+    res.json({ success: true, timestamp: now });
+  } catch (err) {
+    console.error('Error updating agent health:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/agent-health - Retrieve latest health status
+app.get('/api/agent-health', requireAuth, (req, res) => {
+  try {
+    const agentId = req.query.agent_id;
+    
+    if (agentId) {
+      // Return specific agent health
+      const health = agentHealthStatus[agentId];
+      if (!health) {
+        return res.status(404).json({ error: 'No health data for this agent' });
+      }
+      
+      // Calculate staleness
+      const lastReportedAt = new Date(health.lastReportedAt);
+      const now = new Date();
+      const minutesSinceReport = Math.floor((now - lastReportedAt) / 1000 / 60);
+      
+      // Calculate polling staleness
+      const lastPoll = health.iMessagePolling?.lastPoll ? new Date(health.iMessagePolling.lastPoll) : null;
+      const minutesSincePoll = lastPoll ? Math.floor((now - lastPoll) / 1000 / 60) : null;
+      
+      return res.json({
+        ...health,
+        staleness: {
+          reportStale: minutesSinceReport > 10, // No report in 10+ min
+          pollStale: minutesSincePoll !== null && minutesSincePoll > 15, // No poll in 15+ min
+          minutesSinceReport,
+          minutesSincePoll
+        }
+      });
+    }
+    
+    // Return all agent health statuses
+    res.json(agentHealthStatus);
+  } catch (err) {
+    console.error('Error fetching agent health:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============ SCHEDULED TASKS (Dashboard) ============
 app.get('/api/scheduled-tasks', requireAuth, async (req, res) => {
   try {
