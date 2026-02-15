@@ -505,7 +505,12 @@
 </script>
 </head>
 <body>
-  <script>if(new URLSearchParams(location.search).get('embed')==='1')document.body.classList.add('embed-mode');</script>
+  <script>
+    // Embed mode detection: query param OR iframe
+    if (new URLSearchParams(location.search).get('embed') === '1' || window !== window.top) {
+      document.body.classList.add('embed-mode');
+    }
+  </script>
   <!-- Header -->
   <header>
     <div style="display:flex;align-items:center;gap:1.5rem;">
@@ -712,6 +717,8 @@
             updateConnectionStatus('connected', 'Connected');
             hideError();
             wsSend({ type: 'req', id: 'hist-1', method: 'chat.history', params: { sessionKey: 'agent:main:main' } });
+            // CRITICAL: Subscribe to chat events to receive push updates
+            wsSend({ type: 'req', id: 'sub-1', method: 'chat.subscribe', params: { sessionKey: 'agent:main:main' } });
           } else {
             const err = data.error?.message || 'Auth failed';
             showError(err.includes('pairing') ? 'Device pairing required. Ask admin to approve.' : err);
@@ -723,9 +730,39 @@
           const msgs = data.payload?.messages || [];
           clearMessages();
           msgs.forEach(msg => {
+            // Skip system messages
+            if (msg.role === 'system') return;
+            
             if (msg.role === 'user' || msg.role === 'assistant') {
               const content = extractText(msg.content);
-              if (content) addMessage(msg.role, content, msg.timestamp);
+              if (!content) return;
+              
+              // Filter tool noise from user messages
+              if (msg.role === 'user') {
+                if (content.startsWith('Read HEARTBEAT.md') || 
+                    content.startsWith('System:') || 
+                    content.startsWith('[media attached:') || 
+                    content.startsWith('Pre-compaction memory') ||
+                    content.includes('HEARTBEAT_OK') ||
+                    content.includes('NO_REPLY')) {
+                  return;
+                }
+              }
+              
+              // Filter tool noise from assistant messages
+              if (msg.role === 'assistant') {
+                if (content === 'NO_REPLY' || 
+                    content === 'HEARTBEAT_OK' ||
+                    content.includes('Read image file') ||
+                    content.includes('(no output)') ||
+                    content.includes('Process still running') ||
+                    content.includes('Command still running') ||
+                    content.includes('Process exited')) {
+                  return;
+                }
+              }
+              
+              addMessage(msg.role, content, msg.timestamp);
             }
           });
           return;
@@ -792,9 +829,34 @@
     }
 
     function extractText(content) {
-      if (typeof content === 'string') return content;
-      if (Array.isArray(content)) return content.filter(c => c.type === 'text').map(c => c.text).join('\n');
-      return '';
+      let text = '';
+      if (typeof content === 'string') {
+        text = content;
+      } else if (Array.isArray(content)) {
+        text = content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+      }
+      
+      // Filter tool noise patterns from streaming content
+      if (text) {
+        // Skip messages with tool output patterns
+        const toolPatterns = [
+          'Read image file',
+          '(no output)',
+          'Process still running',
+          'Command still running',
+          'Process exited',
+          'HEARTBEAT_OK',
+          'NO_REPLY'
+        ];
+        
+        for (const pattern of toolPatterns) {
+          if (text.includes(pattern)) {
+            return ''; // Filter out entirely if it contains tool noise
+          }
+        }
+      }
+      
+      return text;
     }
 
     function clearMessages() { messagesContainer.innerHTML = ''; }
