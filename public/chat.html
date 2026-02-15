@@ -571,6 +571,15 @@
   </div>
 
   <script>
+    // Extract JWT from URL param for embedded auth
+    const urlParams = new URLSearchParams(window.location.search);
+    const jwtToken = urlParams.get('token');
+    // Clean token from URL without reload
+    if (jwtToken) {
+      const cleanUrl = window.location.pathname + '?embed=1';
+      window.history.replaceState({}, '', cleanUrl);
+    }
+
     // State
     let ws = null;
     let reconnectTimer = null;
@@ -597,7 +606,7 @@
       // POST debug info to server
       fetch('/api/chat-debug', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) },
         body: JSON.stringify(entry)
       }).catch(() => {});
     }
@@ -612,7 +621,8 @@
 
     async function loadUser() {
       try {
-        const res = await fetch('/api/me');
+        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
+        const res = await fetch('/api/me', { headers });
         currentUser = await res.json();
         if (currentUser) {
           document.getElementById('user-name').textContent = currentUser.name || currentUser.email;
@@ -627,7 +637,8 @@
 
     async function loadConfig() {
       try {
-        const res = await fetch('/api/chat-config');
+        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
+        const res = await fetch('/api/chat-config', { headers });
         gatewayConfig = await res.json();
       } catch (err) { console.error('Failed to load config:', err); }
     }
