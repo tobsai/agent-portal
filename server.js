@@ -28,10 +28,22 @@ const JWT_SECRET = process.env.SESSION_SECRET || 'agent-portal-dev-secret';
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server, path: '/ws' });
+const wss = new WebSocket.Server({ noServer: true });
+const gwProxy = new WebSocket.Server({ noServer: true });
+
+// Manual upgrade handling for multiple WS paths
+server.on('upgrade', (req, socket, head) => {
+  const pathname = new URL(req.url, 'http://localhost').pathname;
+  if (pathname === '/ws/gateway') {
+    gwProxy.handleUpgrade(req, socket, head, (ws) => gwProxy.emit('connection', ws, req));
+  } else if (pathname === '/ws') {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  } else {
+    socket.destroy();
+  }
+});
 
 // Gateway WebSocket proxy - browser connects here, we proxy to the gateway
-const gwProxy = new WebSocket.Server({ server, path: '/ws/gateway' });
 gwProxy.on('connection', (clientWs, req) => {
   const gwUrl = (process.env.GATEWAY_WS_URL || '').replace(/^https?/, 'ws').replace(/^(?!wss?:\/\/)/, 'wss://');
   if (!gwUrl) { clientWs.close(1008, 'Gateway not configured'); return; }
