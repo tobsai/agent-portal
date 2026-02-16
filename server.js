@@ -1620,6 +1620,9 @@ app.get('/api/docs', requireAuth, async (req, res) => {
       { id: 'florida-property', title: 'Florida Vacation Property', path: 'research/florida-vacation-property.md' },
       { id: 'family-app-ideas', title: 'Family App Ideas', path: 'research/family-app-ideas.md' },
       { id: 'punch-list', title: 'Master Punch List', path: 'memory/punch-list.md' },
+      { id: 'conversation-accountability', title: 'RFC: Conversation Accountability Loop', path: 'docs/conversation-accountability-rfc.md' },
+      { id: 'monitoring-architecture', title: 'Monitoring Architecture', path: 'docs/monitoring-architecture.md' },
+      { id: 'feature-branch-workflow', title: 'Feature Branch Workflow', path: 'docs/feature-branch-workflow.md' },
     ];
     res.json(docs);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1643,6 +1646,9 @@ app.get('/api/docs/:id', requireAuth, async (req, res) => {
       'florida-property': 'research/florida-vacation-property.md',
       'family-app-ideas': 'research/family-app-ideas.md',
       'punch-list': 'memory/punch-list.md',
+      'conversation-accountability': 'docs/conversation-accountability-rfc.md',
+      'monitoring-architecture': 'docs/monitoring-architecture.md',
+      'feature-branch-workflow': 'docs/feature-branch-workflow.md',
     };
     
     const filePath = docMap[req.params.id];
