@@ -692,108 +692,28 @@
       else showError('Not connected');
     }
 
-    // --- Ed25519 Device Identity (Web Crypto) ---
-    const DEVICE_STORAGE_KEY = 'openclaw-webchat-device-identity';
-
-    function base64UrlEncode(buf) {
-      const bytes = new Uint8Array(buf);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
-
-    function base64UrlDecode(str) {
-      str = str.replace(/-/g, '+').replace(/_/g, '/');
-      while (str.length % 4) str += '=';
-      const binary = atob(str);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      return bytes.buffer;
-    }
-
-    async function getOrCreateDeviceIdentity() {
-      try {
-        const stored = localStorage.getItem(DEVICE_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          // Re-import keys from JWK
-          const privateKey = await crypto.subtle.importKey('jwk', parsed.privateKeyJwk, { name: 'Ed25519' }, true, ['sign']);
-          const publicKey = await crypto.subtle.importKey('jwk', parsed.publicKeyJwk, { name: 'Ed25519' }, true, []);
-          return { deviceId: parsed.deviceId, publicKeyRaw: base64UrlDecode(parsed.publicKeyRawB64u), privateKey, publicKey };
-        }
-      } catch (e) { console.warn('Failed to load device identity, regenerating:', e); }
-
-      // Generate new Ed25519 keypair
-      const keyPair = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
-      const rawPub = await crypto.subtle.exportKey('raw', keyPair.publicKey);
-      const pubJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
-      const privJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
-
-      // Device ID = SHA-256 hex of raw public key
-      const hashBuf = await crypto.subtle.digest('SHA-256', rawPub);
-      const hashArr = new Uint8Array(hashBuf);
-      const deviceId = Array.from(hashArr).map(b => b.toString(16).padStart(2, '0')).join('');
-      const publicKeyRawB64u = base64UrlEncode(rawPub);
-
-      localStorage.setItem(DEVICE_STORAGE_KEY, JSON.stringify({ deviceId, publicKeyRawB64u, publicKeyJwk: pubJwk, privateKeyJwk: privJwk }));
-      return { deviceId, publicKeyRaw: rawPub, privateKey: keyPair.privateKey, publicKey: keyPair.publicKey };
-    }
-
-    async function buildDeviceAuth(identity, token) {
-      const signedAt = Date.now();
-      const publicKeyB64u = base64UrlEncode(identity.publicKeyRaw);
-      const scopes = 'operator.read,operator.write';
-      // v1 payload: version|deviceId|clientId|clientMode|role|scopes|signedAtMs|token
-      const payload = `v1|${identity.deviceId}|webchat-ui|webchat|operator|${scopes}|${signedAt}|${token}`;
-      const encoded = new TextEncoder().encode(payload);
-      const sigBuf = await crypto.subtle.sign({ name: 'Ed25519' }, identity.privateKey, encoded);
-      return {
-        id: identity.deviceId,
-        publicKey: publicKeyB64u,
-        signature: base64UrlEncode(sigBuf),
-        signedAt
-      };
-    }
-    // --- End Device Identity ---
-
     function handleMessage(data) {
       dbg('ws-msg', { event: data.event || data.type, ok: data.ok, error: data.error?.message, state: data.payload?.state });
 
       // Challenge-response auth (OpenClaw gateway protocol)
       if (data.event === 'connect.challenge') {
         dbg('auth-challenge');
-        (async () => {
-          try {
-            const identity = await getOrCreateDeviceIdentity();
-            const device = await buildDeviceAuth(identity, gatewayConfig.gatewayToken);
-            wsSend({
-              type: 'req', id: 'connect-1', method: 'connect',
-              params: {
-                minProtocol: 3, maxProtocol: 3,
-                client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
-                role: 'operator',
-                scopes: ['operator.read', 'operator.write'],
-                device,
-                auth: { token: gatewayConfig.gatewayToken },
-                userAgent: 'agent-portal-chat/1.0'
-              }
-            });
-          } catch (e) {
-            console.error('Device auth failed:', e);
-            // Fallback without device (scopes will be stripped)
-            wsSend({
-              type: 'req', id: 'connect-1', method: 'connect',
-              params: {
-                minProtocol: 3, maxProtocol: 3,
-                client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
-                role: 'operator',
-                scopes: ['operator.read', 'operator.write'],
-                auth: { token: gatewayConfig.gatewayToken },
-                userAgent: 'agent-portal-chat/1.0'
-              }
-            });
-          }
-        })();
+        const connectParams = {
+          minProtocol: 3, maxProtocol: 3,
+          client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
+          role: 'operator',
+          scopes: ['operator.read', 'operator.write'],
+          auth: { token: gatewayConfig.gatewayToken },
+          userAgent: 'agent-portal-chat/1.0'
+        };
+        // Use server-signed device identity if available
+        if (gatewayConfig.device) {
+          connectParams.device = gatewayConfig.device;
+          dbg('using-device-identity', { deviceId: gatewayConfig.device.id });
+        } else {
+          dbg('no-device-identity', 'scopes will be limited');
+        }
+        wsSend({ type: 'req', id: 'connect-1', method: 'connect', params: connectParams });
         return;
       }
 

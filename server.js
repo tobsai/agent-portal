@@ -602,9 +602,31 @@ app.get('/api/chat-debug', (req, res) => {
 
 // API endpoint for chat config (gateway WS URL)
 app.get('/api/chat-config', requireAuth, (req, res) => {
+  const token = process.env.GATEWAY_TOKEN || '';
+  const deviceId = process.env.WEBCHAT_DEVICE_ID || '';
+  const publicKeyRaw = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
+  const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
+  
+  let device = null;
+  if (deviceId && publicKeyRaw && privateKeyPem) {
+    try {
+      const crypto = require('crypto');
+      const signedAt = Date.now();
+      const scopes = 'operator.read,operator.write';
+      const payload = `v1|${deviceId}|webchat-ui|webchat|operator|${scopes}|${signedAt}|${token}`;
+      const key = crypto.createPrivateKey(privateKeyPem);
+      const sig = crypto.sign(null, Buffer.from(payload, 'utf8'), key);
+      const sigB64u = sig.toString('base64url');
+      device = { id: deviceId, publicKey: publicKeyRaw, signature: sigB64u, signedAt };
+    } catch (e) {
+      console.error('Device signing failed:', e.message);
+    }
+  }
+  
   res.json({
     gatewayWsUrl: process.env.GATEWAY_WS_URL || '',
-    gatewayToken: process.env.GATEWAY_TOKEN || ''
+    gatewayToken: token,
+    device
   });
 });
 
