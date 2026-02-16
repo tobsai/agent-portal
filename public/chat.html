@@ -825,6 +825,7 @@
         const payload = data.payload || data.data || data;
         const state = payload.state; // 'delta', 'final', or 'error'
         const msg = payload.message;
+        console.log('[chat-event]', state, msg?.role, msg?.content?.substring?.(0, 50) || '');
 
         if (state === 'error') {
           removeLoadingIndicator();
