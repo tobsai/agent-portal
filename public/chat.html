@@ -658,10 +658,13 @@
 
         console.log('[chat] connecting to:', wsUrl);
         ws = new WebSocket(wsUrl);
+        ws.binaryType = 'arraybuffer';
         ws.onopen = () => { console.log('[chat] ws-open'); dbg('ws-open'); };
         ws.onmessage = (event) => {
-          try { handleMessage(JSON.parse(event.data)); }
-          catch (err) { console.error('Parse error:', err); }
+          try {
+            const text = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data);
+            handleMessage(JSON.parse(text));
+          } catch (err) { console.error('Parse error:', err); }
         };
         ws.onerror = (err) => console.error('[chat] WS error:', err, 'readyState:', ws?.readyState);
         ws.onclose = (event) => {

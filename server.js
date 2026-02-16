@@ -50,10 +50,10 @@ gwProxy.on('connection', (clientWs, req) => {
   console.log('[gw-proxy] new client, connecting to:', gwUrl);
   const gwWs = new WebSocket(gwUrl, { headers: { Origin: 'https://talos.mtree.io' } });
   gwWs.on('open', () => console.log('[gw-proxy] upstream connected'));
-  gwWs.on('message', (data) => { if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data); });
+  gwWs.on('message', (data, isBinary) => { if (clientWs.readyState === WebSocket.OPEN) clientWs.send(isBinary ? data : data.toString()); });
   gwWs.on('close', (code, reason) => { console.log('[gw-proxy] upstream closed:', code); clientWs.close(code, reason); });
   gwWs.on('error', (err) => { console.error('[gw-proxy] upstream error:', err.message); clientWs.close(1011, 'Gateway error'); });
-  clientWs.on('message', (data) => { if (gwWs.readyState === WebSocket.OPEN) gwWs.send(data); });
+  clientWs.on('message', (data, isBinary) => { if (gwWs.readyState === WebSocket.OPEN) gwWs.send(isBinary ? data : data.toString()); });
   clientWs.on('close', () => { gwWs.close(); });
   clientWs.on('error', () => { gwWs.close(); });
 });
