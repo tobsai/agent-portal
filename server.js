@@ -602,15 +602,18 @@ app.get('/api/chat-debug', (req, res) => {
 
 // API endpoint for chat config (gateway WS URL)
 app.get('/api/chat-config', requireAuth, (req, res) => {
-  res.json({
+  const config = {
     gatewayWsUrl: process.env.GATEWAY_WS_URL || '',
     gatewayToken: process.env.GATEWAY_TOKEN || '',
     hasDeviceIdentity: !!(process.env.WEBCHAT_DEVICE_ID && process.env.WEBCHAT_DEVICE_PRIVATE_KEY)
-  });
+  };
+  console.log('[chat-config] served:', { wsUrl: config.gatewayWsUrl, hasToken: !!config.gatewayToken, hasDevice: config.hasDeviceIdentity });
+  res.json(config);
 });
 
 // Sign device auth payload with nonce (called by chat.html after connect.challenge)
 app.post('/api/chat-sign', requireAuth, (req, res) => {
+  console.log('[chat-sign] called with nonce:', req.body?.nonce?.substring(0, 8) || 'none');
   const { nonce } = req.body || {};
   const token = process.env.GATEWAY_TOKEN || '';
   const deviceId = process.env.WEBCHAT_DEVICE_ID || '';
