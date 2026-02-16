@@ -268,6 +268,15 @@ if (isProduction) {
           PRIMARY KEY (sid)
         );
         CREATE INDEX IF NOT EXISTS IDX_session_expire ON sessions (expire);
+
+        -- Docs table
+        CREATE TABLE IF NOT EXISTS docs (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
       `);
     },
     async query(sql, params = []) {
@@ -452,6 +461,13 @@ if (isProduction) {
           context_tokens INTEGER DEFAULT 0,
           status TEXT DEFAULT 'idle',
           last_message TEXT,
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS docs (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL DEFAULT '',
+          created_at TEXT DEFAULT (datetime('now')),
           updated_at TEXT DEFAULT (datetime('now'))
         );
       `);
@@ -1597,77 +1613,90 @@ function formatUptime(seconds) {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
-// ============ DOCS / MDX VIEWER ============
+// ============ DOCS (Database-backed CRUD) ============
 app.get('/docs', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'docs.html'));
 });
 
-// List available docs from a predefined set of workspace files
+// Helper function to generate slug from title
+function slugify(title) {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+// List all docs (id, title, updated_at)
 app.get('/api/docs', requireAuth, async (req, res) => {
   try {
-    const docs = [
-      { id: 'memory-systems-proposal', title: 'Memory & Systems Proposal', path: 'research/memory-and-systems-proposal.md' },
-      { id: 'blog-first-week', title: 'Blog: My First Week with OpenClaw', path: 'projects/tobias-gunn-v2/content/posts/first-week-with-openclaw/content.mdoc' },
-      { id: 'blog-content-strategy', title: 'Blog Content Strategy', path: 'research/blog-content-strategy.md' },
-      { id: 'capability-expansion', title: 'Capability Expansion Ideas', path: 'research/capability-expansion-ideas.md' },
-      { id: 'roadtrip-app', title: 'Detour App Concept', path: 'research/roadtrip-app-concept.md' },
-      { id: 'scaling-agents', title: 'Scaling Agents Research', path: 'research/scaling-agents-research.md' },
-      { id: 'product-analytics', title: 'Product Analytics Comparison', path: 'research/product-analytics-comparison.md' },
-      { id: 'personal-org', title: 'Personal Organization System', path: 'research/personal-organization-system.md' },
-      { id: 'work-ai-strategy', title: 'Work AI Strategy', path: 'research/work-ai-strategy.md' },
-      { id: 'ai-phone-calls', title: 'AI Phone Calls Research', path: 'research/ai-phone-calls.md' },
-      { id: 'credit-card', title: 'Credit Card Recommendation', path: 'research/credit-card-recommendation.md' },
-      { id: 'florida-property', title: 'Florida Vacation Property', path: 'research/florida-vacation-property.md' },
-      { id: 'family-app-ideas', title: 'Family App Ideas', path: 'research/family-app-ideas.md' },
-      { id: 'punch-list', title: 'Master Punch List', path: 'memory/punch-list.md' },
-      { id: 'conversation-accountability', title: 'RFC: Conversation Accountability Loop', path: 'docs/conversation-accountability-rfc.md' },
-      { id: 'monitoring-architecture', title: 'Monitoring Architecture', path: 'docs/monitoring-architecture.md' },
-      { id: 'feature-branch-workflow', title: 'Feature Branch Workflow', path: 'docs/feature-branch-workflow.md' },
-    ];
+    const docs = await db.query('SELECT id, title, updated_at FROM docs ORDER BY title ASC');
     res.json(docs);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Fetch a doc's content from GitHub
+// Get single doc with content
 app.get('/api/docs/:id', requireAuth, async (req, res) => {
   try {
-    const docMap = {
-      'memory-systems-proposal': 'research/memory-and-systems-proposal.md',
-      'blog-first-week': 'projects/tobias-gunn-v2/content/posts/first-week-with-openclaw/content.mdoc',
-      'blog-content-strategy': 'research/blog-content-strategy.md',
-      'capability-expansion': 'research/capability-expansion-ideas.md',
-      'roadtrip-app': 'research/roadtrip-app-concept.md',
-      'scaling-agents': 'research/scaling-agents-research.md',
-      'product-analytics': 'research/product-analytics-comparison.md',
-      'personal-org': 'research/personal-organization-system.md',
-      'work-ai-strategy': 'research/work-ai-strategy.md',
-      'ai-phone-calls': 'research/ai-phone-calls.md',
-      'credit-card': 'research/credit-card-recommendation.md',
-      'florida-property': 'research/florida-vacation-property.md',
-      'family-app-ideas': 'research/family-app-ideas.md',
-      'punch-list': 'memory/punch-list.md',
-      'conversation-accountability': 'docs/conversation-accountability-rfc.md',
-      'monitoring-architecture': 'docs/monitoring-architecture.md',
-      'feature-branch-workflow': 'docs/feature-branch-workflow.md',
-    };
+    const doc = await db.get('SELECT * FROM docs WHERE id = $1', [req.params.id]);
+    if (!doc) return res.status(404).json({ error: 'Doc not found' });
+    res.json(doc);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Create new doc
+app.post('/api/docs', requireAuth, async (req, res) => {
+  try {
+    const { id, title, content = '' } = req.body;
+    if (!title) return res.status(400).json({ error: 'Title required' });
     
-    const filePath = docMap[req.params.id];
-    if (!filePath) return res.status(404).json({ error: 'Doc not found' });
+    // Auto-generate slug ID from title if not provided
+    const docId = id || slugify(title);
     
-    // Fetch from GitHub API (private repo needs auth)
-    const ghToken = process.env.GITHUB_TOKEN;
-    const ghUrl = `https://api.github.com/repos/tobsai/talos-config/contents/workspace/${filePath}`;
-    const headers = { 'Accept': 'application/vnd.github.v3.raw', 'User-Agent': 'agent-portal' };
-    if (ghToken) headers['Authorization'] = `token ${ghToken}`;
+    // Check for duplicates
+    const existing = await db.get('SELECT id FROM docs WHERE id = $1', [docId]);
+    if (existing) return res.status(400).json({ error: 'Doc with this ID already exists' });
     
-    const resp = await fetch(ghUrl, { headers });
+    const now = new Date().toISOString();
+    await db.run(
+      'INSERT INTO docs (id, title, content, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)',
+      [docId, title, content, now, now]
+    );
     
-    if (!resp.ok) {
-      return res.status(404).json({ error: 'File not found in repo' });
-    }
+    const doc = await db.get('SELECT * FROM docs WHERE id = $1', [docId]);
+    broadcast('doc:created', doc);
+    res.status(201).json(doc);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Update doc
+app.put('/api/docs/:id', requireAuth, async (req, res) => {
+  try {
+    const existing = await db.get('SELECT * FROM docs WHERE id = $1', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Doc not found' });
     
-    const content = await resp.text();
-    res.json({ id: req.params.id, path: filePath, content });
+    const { title, content } = req.body;
+    const now = new Date().toISOString();
+    
+    await db.run(
+      'UPDATE docs SET title = $1, content = $2, updated_at = $3 WHERE id = $4',
+      [title ?? existing.title, content ?? existing.content, now, req.params.id]
+    );
+    
+    const doc = await db.get('SELECT * FROM docs WHERE id = $1', [req.params.id]);
+    broadcast('doc:updated', doc);
+    res.json(doc);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Delete doc
+app.delete('/api/docs/:id', requireAuth, async (req, res) => {
+  try {
+    const existing = await db.get('SELECT id FROM docs WHERE id = $1', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Doc not found' });
+    
+    await db.run('DELETE FROM docs WHERE id = $1', [req.params.id]);
+    broadcast('doc:deleted', { id: req.params.id });
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1998,9 +2027,76 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// ============ DOCS SEEDING ============
+async function seedDocs() {
+  try {
+    // Check if docs table already has content
+    const existingDocs = await db.query('SELECT id FROM docs LIMIT 1');
+    if (existingDocs.length > 0) {
+      console.log('📄 Docs already seeded, skipping...');
+      return;
+    }
+
+    console.log('📄 Seeding docs from GitHub...');
+    
+    const docMap = {
+      'memory-systems-proposal': { title: 'Memory & Systems Proposal', path: 'research/memory-and-systems-proposal.md' },
+      'blog-first-week': { title: 'Blog: My First Week with OpenClaw', path: 'projects/tobias-gunn-v2/content/posts/first-week-with-openclaw/content.mdoc' },
+      'blog-content-strategy': { title: 'Blog Content Strategy', path: 'research/blog-content-strategy.md' },
+      'capability-expansion': { title: 'Capability Expansion Ideas', path: 'research/capability-expansion-ideas.md' },
+      'roadtrip-app': { title: 'Detour App Concept', path: 'research/roadtrip-app-concept.md' },
+      'scaling-agents': { title: 'Scaling Agents Research', path: 'research/scaling-agents-research.md' },
+      'product-analytics': { title: 'Product Analytics Comparison', path: 'research/product-analytics-comparison.md' },
+      'personal-org': { title: 'Personal Organization System', path: 'research/personal-organization-system.md' },
+      'work-ai-strategy': { title: 'Work AI Strategy', path: 'research/work-ai-strategy.md' },
+      'ai-phone-calls': { title: 'AI Phone Calls Research', path: 'research/ai-phone-calls.md' },
+      'credit-card': { title: 'Credit Card Recommendation', path: 'research/credit-card-recommendation.md' },
+      'florida-property': { title: 'Florida Vacation Property', path: 'research/florida-vacation-property.md' },
+      'family-app-ideas': { title: 'Family App Ideas', path: 'research/family-app-ideas.md' },
+      'punch-list': { title: 'Master Punch List', path: 'memory/punch-list.md' },
+      'conversation-accountability': { title: 'RFC: Conversation Accountability Loop', path: 'docs/conversation-accountability-rfc.md' },
+      'monitoring-architecture': { title: 'Monitoring Architecture', path: 'docs/monitoring-architecture.md' },
+      'feature-branch-workflow': { title: 'Feature Branch Workflow', path: 'docs/feature-branch-workflow.md' }
+    };
+
+    const ghToken = process.env.GITHUB_TOKEN;
+    const headers = { 'Accept': 'application/vnd.github.v3.raw', 'User-Agent': 'agent-portal' };
+    if (ghToken) headers['Authorization'] = `token ${ghToken}`;
+
+    let seededCount = 0;
+    for (const [id, doc] of Object.entries(docMap)) {
+      try {
+        const ghUrl = `https://api.github.com/repos/tobsai/talos-config/contents/workspace/${doc.path}`;
+        const resp = await fetch(ghUrl, { headers });
+        
+        let content = '';
+        if (resp.ok) {
+          content = await resp.text();
+        } else {
+          console.warn(`⚠️  Failed to fetch ${id} from GitHub, seeding with empty content`);
+        }
+
+        const now = new Date().toISOString();
+        await db.run(
+          'INSERT INTO docs (id, title, content, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)',
+          [id, doc.title, content, now, now]
+        );
+        seededCount++;
+      } catch (err) {
+        console.error(`Failed to seed doc ${id}:`, err.message);
+      }
+    }
+
+    console.log(`✅ Seeded ${seededCount} docs from GitHub`);
+  } catch (err) {
+    console.error('Error seeding docs:', err);
+  }
+}
+
 // ============ START ============
 async function start() {
   await db.init();
+  await seedDocs();
   server.listen(PORT, () => {
     console.log(`🚀 Agent Portal running at http://localhost:${PORT}`);
     console.log(`🔒 Google Auth: ${process.env.GOOGLE_CLIENT_ID ? 'Enabled' : 'Disabled'}`);
