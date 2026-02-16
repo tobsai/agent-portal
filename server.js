@@ -30,6 +30,22 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
+// Gateway WebSocket proxy - browser connects here, we proxy to the gateway
+const gwProxy = new WebSocket.Server({ server, path: '/ws/gateway' });
+gwProxy.on('connection', (clientWs, req) => {
+  const gwUrl = (process.env.GATEWAY_WS_URL || '').replace(/^https?/, 'ws').replace(/^(?!wss?:\/\/)/, 'wss://');
+  if (!gwUrl) { clientWs.close(1008, 'Gateway not configured'); return; }
+  console.log('[gw-proxy] new client, connecting to:', gwUrl);
+  const gwWs = new WebSocket(gwUrl, { headers: { Origin: 'https://talos.mtree.io' } });
+  gwWs.on('open', () => console.log('[gw-proxy] upstream connected'));
+  gwWs.on('message', (data) => { if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data); });
+  gwWs.on('close', (code, reason) => { console.log('[gw-proxy] upstream closed:', code); clientWs.close(code, reason); });
+  gwWs.on('error', (err) => { console.error('[gw-proxy] upstream error:', err.message); clientWs.close(1011, 'Gateway error'); });
+  clientWs.on('message', (data) => { if (gwWs.readyState === WebSocket.OPEN) gwWs.send(data); });
+  clientWs.on('close', () => { gwWs.close(); });
+  clientWs.on('error', () => { gwWs.close(); });
+});
+
 const PORT = process.env.PORT || 3847;
 
 // Feature Flags

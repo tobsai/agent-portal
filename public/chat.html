@@ -652,9 +652,9 @@
         return;
       }
       try {
-        let wsUrl = gatewayConfig.gatewayWsUrl;
-        if (wsUrl.startsWith('http')) wsUrl = wsUrl.replace(/^http/, 'ws');
-        else if (!wsUrl.includes('://')) wsUrl = 'wss://' + wsUrl;
+        // Use server-side WebSocket proxy instead of direct gateway connection
+        // This avoids Tailscale Funnel reachability issues from the browser
+        let wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/gateway';
 
         console.log('[chat] connecting to:', wsUrl);
         ws = new WebSocket(wsUrl);
