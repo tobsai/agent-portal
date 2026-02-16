@@ -602,6 +602,8 @@ app.get('/api/chat-debug', (req, res) => {
 
 // API endpoint for chat config (gateway WS URL)
 app.get('/api/chat-config', requireAuth, (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
   const config = {
     gatewayWsUrl: process.env.GATEWAY_WS_URL || '',
     gatewayToken: process.env.GATEWAY_TOKEN || '',

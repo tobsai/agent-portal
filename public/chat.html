@@ -638,8 +638,9 @@
     async function loadConfig() {
       try {
         const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
-        const res = await fetch('/api/chat-config', { headers });
+        const res = await fetch('/api/chat-config?_t=' + Date.now(), { headers, cache: 'no-store' });
         gatewayConfig = await res.json();
+        console.log('[chat] config loaded:', { wsUrl: gatewayConfig?.gatewayWsUrl, hasToken: !!gatewayConfig?.gatewayToken, hasDevice: gatewayConfig?.hasDeviceIdentity });
       } catch (err) { console.error('Failed to load config:', err); }
     }
 
@@ -655,13 +656,14 @@
         if (wsUrl.startsWith('http')) wsUrl = wsUrl.replace(/^http/, 'ws');
         else if (!wsUrl.includes('://')) wsUrl = 'wss://' + wsUrl;
 
+        console.log('[chat] connecting to:', wsUrl);
         ws = new WebSocket(wsUrl);
-        ws.onopen = () => { dbg('ws-open'); };
+        ws.onopen = () => { console.log('[chat] ws-open'); dbg('ws-open'); };
         ws.onmessage = (event) => {
           try { handleMessage(JSON.parse(event.data)); }
           catch (err) { console.error('Parse error:', err); }
         };
-        ws.onerror = (err) => console.error('WS error:', err);
+        ws.onerror = (err) => console.error('[chat] WS error:', err, 'readyState:', ws?.readyState);
         ws.onclose = (event) => {
           console.log('WS closed:', event.code, event.reason);
           updateConnectionStatus('error', 'Disconnected');
