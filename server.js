@@ -602,32 +602,42 @@ app.get('/api/chat-debug', (req, res) => {
 
 // API endpoint for chat config (gateway WS URL)
 app.get('/api/chat-config', requireAuth, (req, res) => {
+  res.json({
+    gatewayWsUrl: process.env.GATEWAY_WS_URL || '',
+    gatewayToken: process.env.GATEWAY_TOKEN || '',
+    hasDeviceIdentity: !!(process.env.WEBCHAT_DEVICE_ID && process.env.WEBCHAT_DEVICE_PRIVATE_KEY)
+  });
+});
+
+// Sign device auth payload with nonce (called by chat.html after connect.challenge)
+app.post('/api/chat-sign', requireAuth, (req, res) => {
+  const { nonce } = req.body || {};
   const token = process.env.GATEWAY_TOKEN || '';
   const deviceId = process.env.WEBCHAT_DEVICE_ID || '';
   const publicKeyRaw = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
   const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
   
-  let device = null;
-  if (deviceId && publicKeyRaw && privateKeyPem) {
-    try {
-      const crypto = require('crypto');
-      const signedAt = Date.now();
-      const scopes = 'operator.read,operator.write';
-      const payload = `v1|${deviceId}|webchat-ui|webchat|operator|${scopes}|${signedAt}|${token}`;
-      const key = crypto.createPrivateKey(privateKeyPem);
-      const sig = crypto.sign(null, Buffer.from(payload, 'utf8'), key);
-      const sigB64u = sig.toString('base64url');
-      device = { id: deviceId, publicKey: publicKeyRaw, signature: sigB64u, signedAt };
-    } catch (e) {
-      console.error('Device signing failed:', e.message);
-    }
+  if (!deviceId || !publicKeyRaw || !privateKeyPem) {
+    return res.json({ device: null, error: 'Device identity not configured' });
   }
   
-  res.json({
-    gatewayWsUrl: process.env.GATEWAY_WS_URL || '',
-    gatewayToken: token,
-    device
-  });
+  try {
+    const crypto = require('crypto');
+    const signedAt = Date.now();
+    const scopes = 'operator.read,operator.write';
+    const version = nonce ? 'v2' : 'v1';
+    const parts = [version, deviceId, 'webchat-ui', 'webchat', 'operator', scopes, String(signedAt), token];
+    if (nonce) parts.push(nonce);
+    const payload = parts.join('|');
+    const key = crypto.createPrivateKey(privateKeyPem);
+    const sig = crypto.sign(null, Buffer.from(payload, 'utf8'), key);
+    const device = { id: deviceId, publicKey: publicKeyRaw, signature: sig.toString('base64url'), signedAt };
+    if (nonce) device.nonce = nonce;
+    res.json({ device });
+  } catch (e) {
+    console.error('Device signing failed:', e.message);
+    res.json({ device: null, error: 'Signing failed' });
+  }
 });
 
 // ============ AUTH ROUTES ============

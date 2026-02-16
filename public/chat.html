@@ -698,22 +698,38 @@
       // Challenge-response auth (OpenClaw gateway protocol)
       if (data.event === 'connect.challenge') {
         dbg('auth-challenge');
-        const connectParams = {
-          minProtocol: 3, maxProtocol: 3,
-          client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
-          role: 'operator',
-          scopes: ['operator.read', 'operator.write'],
-          auth: { token: gatewayConfig.gatewayToken },
-          userAgent: 'agent-portal-chat/1.0'
-        };
-        // Use server-signed device identity if available
-        if (gatewayConfig.device) {
-          connectParams.device = gatewayConfig.device;
-          dbg('using-device-identity', { deviceId: gatewayConfig.device.id });
-        } else {
-          dbg('no-device-identity', 'scopes will be limited');
-        }
-        wsSend({ type: 'req', id: 'connect-1', method: 'connect', params: connectParams });
+        const nonce = data.payload?.nonce || '';
+        (async () => {
+          const connectParams = {
+            minProtocol: 3, maxProtocol: 3,
+            client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
+            role: 'operator',
+            scopes: ['operator.read', 'operator.write'],
+            auth: { token: gatewayConfig.gatewayToken },
+            userAgent: 'agent-portal-chat/1.0'
+          };
+          // Get server-signed device identity with nonce
+          if (gatewayConfig.hasDeviceIdentity) {
+            try {
+              const signResp = await fetch('/api/chat-sign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nonce }),
+                credentials: 'same-origin'
+              });
+              const signData = await signResp.json();
+              if (signData.device) {
+                connectParams.device = signData.device;
+                dbg('using-device-identity', { deviceId: signData.device.id, hasNonce: !!nonce });
+              } else {
+                dbg('device-sign-failed', signData.error);
+              }
+            } catch (e) {
+              dbg('device-sign-error', e.message);
+            }
+          }
+          wsSend({ type: 'req', id: 'connect-1', method: 'connect', params: connectParams });
+        })();
         return;
       }
 
