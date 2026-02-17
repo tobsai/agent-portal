@@ -181,10 +181,99 @@ const SPRITE_DATA = {"boss-attack.png":"iVBORw0KGgoAAAANSUhEUgAAAMAAAAAwCAYAAABH
     const SCALE = 4; // Scale up for better visibility
     const animations = new Map();
     
-    async function loadManifest() {
-      const response = await fetch('../../manifest.json');
-      return await response.json();
+    function loadManifest() {
+      return MANIFEST_DATA;
     }
+
+    const MANIFEST_DATA = {
+      "project": "Echo Unchained",
+      "palette": {
+        "count": 32,
+        "colors": [
+          {"name":"BLACK","color":"#0a0a0a"},{"name":"DARK_SHADOW","color":"#1a1a1a"},
+          {"name":"SHADOW","color":"#2a2a2a"},{"name":"GRAY_DARK","color":"#3a3a3a"},
+          {"name":"GRAY_MID","color":"#5a5a5a"},{"name":"GRAY_LIGHT","color":"#7a7a7a"},
+          {"name":"GRAY_PALE","color":"#9a9a9a"},{"name":"GREEN_DARK","color":"#2d4a2d"},
+          {"name":"GREEN_MID","color":"#4a6a4a"},{"name":"GREEN_LIGHT","color":"#6a8a6a"},
+          {"name":"GREEN_MOSS","color":"#5a7a5a"},{"name":"RUST_DARK","color":"#4a2a1a"},
+          {"name":"RUST_MID","color":"#6a4a2a"},{"name":"RUST_ORANGE","color":"#8a5a2a"},
+          {"name":"RUST_LIGHT","color":"#aa7a4a"},{"name":"BROWN_DARK","color":"#3a2a1a"},
+          {"name":"BLUE_DARK","color":"#2a3a4a"},{"name":"BLUE_MID","color":"#4a5a6a"},
+          {"name":"BLUE_LIGHT","color":"#6a7a8a"},{"name":"BLUE_ACCENT","color":"#5a8aaa"},
+          {"name":"ECHO_SKIN","color":"#d4a574"},{"name":"ECHO_SKIN_SHADE","color":"#b48a5a"},
+          {"name":"ECHO_HAIR","color":"#4a3a2a"},{"name":"ECHO_CLOTH","color":"#5a4a6a"},
+          {"name":"ECHO_CLOTH_SHADE","color":"#3a2a4a"},{"name":"ACCENT_RED","color":"#da4a4a"},
+          {"name":"ACCENT_YELLOW","color":"#eaaa3a"},{"name":"ACCENT_GREEN","color":"#5aaa5a"},
+          {"name":"ACCENT_BLUE","color":"#4a9ada"},{"name":"ACCENT_WHITE","color":"#eaeaea"},
+          {"name":"ENERGY_CYAN","color":"#5aaaaa"},{"name":"ENERGY_BRIGHT","color":"#aaefef"}
+        ]
+      },
+      "sprites": [
+        {
+          "name": "Echo", "type": "character",
+          "animations": [
+            {"name":"idle","file":"echo-idle.png","frameCount":2,"fps":2,"loop":true,"duration":1},
+            {"name":"run","file":"echo-run.png","frameCount":6,"fps":10,"loop":true,"duration":0.6},
+            {"name":"jump","file":"echo-jump.png","frameCount":2,"fps":6,"loop":false,"duration":0.33},
+            {"name":"dash","file":"echo-dash.png","frameCount":2,"fps":8,"loop":false,"duration":0.25},
+            {"name":"attack","file":"echo-attack.png","frameCount":4,"fps":12,"loop":false,"duration":0.33},
+            {"name":"hurt","file":"echo-hurt.png","frameCount":1,"fps":1,"loop":false,"duration":1},
+            {"name":"death","file":"echo-death.png","frameCount":3,"fps":6,"loop":false,"duration":0.5}
+          ]
+        },
+        {
+          "name": "Drone", "type": "enemy",
+          "animations": [
+            {"name":"idle","file":"drone-idle.png","frameCount":2,"fps":2,"loop":true,"duration":1},
+            {"name":"walk","file":"drone-walk.png","frameCount":4,"fps":8,"loop":true,"duration":0.5},
+            {"name":"attack","file":"drone-attack.png","frameCount":2,"fps":8,"loop":false,"duration":0.25},
+            {"name":"death","file":"drone-death.png","frameCount":2,"fps":6,"loop":false,"duration":0.33}
+          ]
+        },
+        {
+          "name": "Flying Enemy", "type": "enemy",
+          "animations": [
+            {"name":"fly","file":"flying-fly.png","frameCount":4,"fps":8,"loop":true,"duration":0.5},
+            {"name":"attack","file":"flying-attack.png","frameCount":2,"fps":8,"loop":false,"duration":0.25},
+            {"name":"death","file":"flying-death.png","frameCount":2,"fps":6,"loop":false,"duration":0.33}
+          ]
+        },
+        {
+          "name": "Turret", "type": "enemy",
+          "animations": [
+            {"name":"idle","file":"turret-idle.png","frameCount":1,"fps":1,"loop":false,"duration":1},
+            {"name":"firing","file":"turret-firing.png","frameCount":3,"fps":8,"loop":true,"duration":0.375},
+            {"name":"destroyed","file":"turret-destroyed.png","frameCount":2,"fps":4,"loop":false,"duration":0.5}
+          ]
+        },
+        {
+          "name": "Boss", "type": "boss",
+          "animations": [
+            {"name":"idle","file":"boss-idle.png","frameCount":2,"fps":2,"loop":true,"duration":1},
+            {"name":"attack","file":"boss-attack.png","frameCount":4,"fps":8,"loop":false,"duration":0.5},
+            {"name":"hurt","file":"boss-hurt.png","frameCount":1,"fps":1,"loop":false,"duration":1},
+            {"name":"death","file":"boss-death.png","frameCount":3,"fps":6,"loop":false,"duration":0.5}
+          ]
+        },
+        {
+          "name": "Items", "type": "items",
+          "items": [
+            {"name":"Health","file":"item-health.png","frameCount":2,"fps":2,"loop":true,"duration":1},
+            {"name":"Ammo","file":"item-ammo.png","frameCount":2,"fps":2,"loop":true,"duration":1},
+            {"name":"Power-Up","file":"item-powerup.png","frameCount":4,"fps":4,"loop":true,"duration":1},
+            {"name":"Checkpoint","file":"item-checkpoint.png","frameCount":2,"fps":2,"loop":true,"duration":1}
+          ]
+        },
+        {
+          "name": "Environment", "type": "environment",
+          "tiles": [
+            {"name":"Background","file":"env-background.png","variants":4},
+            {"name":"Ground","file":"env-ground.png","variants":3},
+            {"name":"Wall","file":"env-wall.png","variants":2}
+          ]
+        }
+      ]
+    };
     
     function drawSprite(canvas, imagePath, frameCount, currentFrame = 0) {
       const ctx = canvas.getContext('2d');
@@ -271,8 +360,8 @@ const SPRITE_DATA = {"boss-attack.png":"iVBORw0KGgoAAAANSUhEUgAAAMAAAAAwCAYAAABH
       return card;
     }
     
-    async function init() {
-      const manifest = await loadManifest();
+    function init() {
+      const manifest = loadManifest();
       
       // Render palette
       const paletteEl = document.getElementById('palette');
