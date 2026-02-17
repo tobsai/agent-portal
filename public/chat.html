@@ -772,7 +772,13 @@
           return;
         }
         if (data.id === 'hist-1') {
-          const msgs = data.payload?.messages || [];
+          const msgs = (data.payload?.messages || []).slice();
+          // Sort by timestamp to ensure correct display order
+          msgs.sort((a, b) => {
+            const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return ta - tb;
+          });
           clearMessages();
           msgs.forEach(msg => {
             // Skip system messages
@@ -836,9 +842,26 @@
           return;
         }
 
+        // Handle user message echo from subscription — ensure it appears
+        // BEFORE the assistant response (fixes response-above-question bug)
+        if (msg && msg.role === 'user') {
+          const content = extractText(msg.content);
+          if (content && !isWaitingForResponse) {
+            // Only add if this message isn't already in the DOM (sent from another surface like iMessage)
+            const existingMsgs = messagesContainer.querySelectorAll('.message.user .message-bubble');
+            const isDuplicate = Array.from(existingMsgs).some(el => el.textContent === content);
+            if (!isDuplicate) {
+              addMessage('user', content, msg.timestamp);
+            }
+          }
+          // Don't return — fall through in case state is also 'final'
+        }
+
         if (msg && msg.role === 'assistant') {
           const content = extractText(msg.content);
           if (content) {
+            // Ensure the loading indicator (which sits after the user message)
+            // is removed before we add the response
             removeLoadingIndicator();
             if (state === 'delta') {
               updateStreamingMessage(content);
@@ -852,8 +875,8 @@
           }
         }
 
-        if (state === 'final' && !msg) {
-          // final with no message (e.g. empty response)
+        if (state === 'final' && (!msg || (msg.role !== 'assistant' && msg.role !== 'user'))) {
+          // final with no actionable message (e.g. empty response)
           removeLoadingIndicator();
           isWaitingForResponse = false;
           currentRunId = null;
