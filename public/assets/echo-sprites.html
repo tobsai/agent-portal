@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Echo Unchained - Sprite Preview</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Courier New', monospace;
+      background: #1a1a1a;
+      color: #eaeaea;
+      padding: 40px;
+    }
+    
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+      border-bottom: 2px solid #4a4a4a;
+      padding-bottom: 20px;
+    }
+    
+    h1 {
+      font-size: 2.5em;
+      color: #5aaaaa;
+      text-shadow: 2px 2px 0 #2a3a4a;
+      margin-bottom: 10px;
+    }
+    
+    .subtitle {
+      color: #9a9a9a;
+      font-size: 1.1em;
+    }
+    
+    .section {
+      margin-bottom: 60px;
+    }
+    
+    h2 {
+      font-size: 1.8em;
+      color: #eaaa3a;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #3a3a3a;
+    }
+    
+    .sprite-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 30px;
+    }
+    
+    .sprite-card {
+      background: #2a2a2a;
+      border: 2px solid #4a4a4a;
+      border-radius: 8px;
+      padding: 20px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    
+    .sprite-card:hover {
+      transform: translateY(-4px);
+      border-color: #5aaaaa;
+    }
+    
+    .sprite-name {
+      font-size: 1.2em;
+      color: #5aaa5a;
+      margin-bottom: 15px;
+      font-weight: bold;
+    }
+    
+    .sprite-canvas {
+      background: #0a0a0a;
+      border: 1px solid #3a3a3a;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      width: 100%;
+      height: auto;
+    }
+    
+    .sprite-info {
+      font-size: 0.9em;
+      color: #7a7a7a;
+    }
+    
+    .sprite-info div {
+      margin-bottom: 5px;
+    }
+    
+    .play-btn {
+      background: #5aaaaa;
+      color: #0a0a0a;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      margin-top: 10px;
+      transition: background 0.2s;
+    }
+    
+    .play-btn:hover {
+      background: #6acaca;
+    }
+    
+    .play-btn.playing {
+      background: #da4a4a;
+    }
+    
+    footer {
+      text-align: center;
+      margin-top: 60px;
+      padding-top: 20px;
+      border-top: 2px solid #4a4a4a;
+      color: #7a7a7a;
+    }
+    
+    .palette {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    
+    .color-swatch {
+      width: 40px;
+      height: 40px;
+      border: 2px solid #4a4a4a;
+      border-radius: 4px;
+      cursor: pointer;
+      position: relative;
+    }
+    
+    .color-swatch:hover::after {
+      content: attr(data-name);
+      position: absolute;
+      bottom: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2a2a2a;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      white-space: nowrap;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎮 Echo Unchained</h1>
+    <p class="subtitle">Sprite Preview - SNES Aesthetic Pixel Art</p>
+  </header>
+  
+  <main id="app">
+    <div class="section">
+      <h2>🎨 Color Palette</h2>
+      <div class="palette" id="palette"></div>
+    </div>
+    
+    <div class="section" id="sprites"></div>
+  </main>
+  
+  <footer>
+    <p>Generated with Echo Sprite Generator</p>
+    <p>All sprites rendered at pixel-perfect resolution</p>
+  </footer>
+  
+  <script>
+const SPRITE_DATA = {"boss-attack.png":"iVBORw0KGgoAAAANSUhEUgAAAMAAAAAwCAYAAABHTnUeAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAJ4SURBVHic7dytcttAEMDxU6fIyKhYqNjYKDgPUGCUR9GjFBn0AYKDhO8RjIuMjqokSmWNrI873WlX9//NZMaT6GMt7e1Kp4mMAQAAyE6xdQBSHA6HZsnyzjlRx057/FvhIHwmz+l0WrSOtVZMEmmPf0vf19oQFQghtsqfVQaAZwVqJA6C38fj6N/f7vdksfjQGP+W+bNaB9BmacWZ2kbqwaw9filWHwAaKlC/4lhrvz4via+3jWQdTXv8Y1Lnj/cAoAIhhJT88VppqAL5zEL0txFzEJzP58EDXpZl0HZvt9vg7+u6XvW7aI+/S1L+fFu6ArAnsy+BxiqQTxVq12kr0Odo/tpHzAqE9KTmDx0AWWMAIGsMgAmVgGnbENrjj233D8Iul8vDtef1ei3mPHnsJk77uRqZo25nIdr9lWXZtPvLOX7poncAKhBCxM6fyQ6QYwV6dtCr+330O0jhE799eTHGmMb01q1eXx/O/8/390XnQ3r+cA8w4NmB1pD8xsSN/++fc9P+BG9MgCgDYKwCAVNS5k+Um+DqeBwMVksFNeZ/rFoue/pixf/jV/wHlCnzZ/ezQKE0Jn/X3PhPHx8P19Ctvc8CRRsA2isotpUqf+JPg5L8CBA7f5gFQtZ2fw+Q+hp27f1pj186OgCyNtkBqEAIIT1/6ADI2u7vAaY8+59YLbTHvzU6ALIW3AE0ViDnXGGtbUzv3Thd3XftzFku5WtdtMfftXX+ZNsB5pxw51wxd7nVAptJe/xSeHWAPVUgpCcpf7w7ABUIIaTkT7aXQIBhACB3DABkjQGArGX9JNg5V9R1vdpyqWmPXwI6AAAAAAAAAICd+wehzOd5TwOmRgAAAABJRU5ErkJggg==","boss-death.png":"iVBORw0KGgoAAAANSUhEUgAAAJAAAAAwCAYAAAD+WvNWAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAI1SURBVHic7ds9koIwGAbgsLMVFUdItYUVtaewtvIoHMXKeiuPQJ3K2iNQpWUbo8iSkF8TkveZ2Rl3FoGRjy9vskgIAAAAAAAYqXztqK7r0WR7zrm3Y0M8Xi5iXddj27ZG72GMoYgy8BX7BGDbvn3v8Nw0yr+fhsH3ISEi6wIyzTxr+4g9nCHD2bEqoHnmYYw9X5t0mNk+xlgXxTLDRTvflCADgRPtDrTf7xdbPKWUUEqNDyzec7/fCXl1o+cx+r6Pcncjw5nxHqK3IrcMF0uRBZRbhosJGQicFNOBSslwnxa8A3UInVlb7UDH4/Htzr1cLpXOusm0cMTrTjHDEf8bE8ejlI7ieGvnCPEgA4GTIBlINmx1w6DsQjG1hL39zojZynSpgnQgWZGkWjwqyHBq2c/CkOHCClZA4sNOedgCd+Gn8RspHkba589hWF4XwnD2H2ZhC3LKcKFln4F80slCschW2mV8rZSjA0l0TfPKcQkWTCpWO9CnZxGpzVpQPGoYwjShkJahgDZqt9u9ZZ7BcIY4f//tdrPq/MhA4MS5A4nnYVJVeoYLDR0InFh1IM55xRgbyey54Knpc8Y625X4PHEIp8nHfGaqLf2w7kA6F5xzXuluZ3seEFfxs7DUM1zqii+g3MiGrd/HlwAOnm+YIgsohwxnvG7zeD7Jdr1HpsgCIo8LvvbtVFEUutul7Od6DXKOmMaDExQQOHEawjjnVd/33raD7UEHAicoIHCCAgIAgI36AzUUBwPVog1QAAAAAElFTkSuQmCC","boss-hurt.png":"iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAE2SURBVGiB7ZixEYMwDEUhl8oVIzACNVOkpsoIGYERMgIVdaag9giM4MotqZQDn8G2LOJzoldxYGR9LEtGRcEwDMNEUFIZEkIsIeO11iRzkxgRQixN0wS9I6UkEXGJNZCaK7XBoaoOn9+VIp0PLSA05l02sOGEEmDGvJTycx3yhQ0bC0ZE9nvAW3HbttaQqes6yoF5nq33p2ny8i37FWABqWEBLnriwmXi3Old122yzziO5boOmFnoebNnFeDx2o6HLARnI9t8R/Y4hFKTvQDy0yjEuG3z9o6TKgZyAQA42yt1iuPA+Wn0ROeLX9gDLCA1qN+4o0ocilmJQ9/PfgVYQGqiC9neP+23yH4F0L1JaErt9UTXvSKfcdjGFnoFfCbUWpe+47B+ZB9CLCA1LCA12QtgmH/nDW6Habl/+UcfAAAAAElFTkSuQmCC","boss-idle.png":"iVBORw0KGgoAAAANSUhEUgAAAGAAAAAwCAYAAADuFn/PAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAGsSURBVHic7Zq9cYQwEIWRx5GiK0ElEFMKkUuhFEdXimKVQAlEm+JIGOM79IOkFfC+iJkTrE7vaZe9U9MAAAAAgAWR6kFSyjlkPBEli31mkiyClHJu2zboHmNMVSJwGegzxUPOTqSB5hQiJBfg+/HY/fxrmlKHPDXRAoRuWdczaklHpQ0UJcB2yxpjluuQCW6ekWRL+1KLgW5ZA2oykLcAXde9dIxSqlFKhcZd7hnHsWl+v8wSQ2tdRUrKzW12QK0G+giODJICAZiBAMxkF2BA47WLswj3ff+neD2fT+HTuq8X3l4PO02O/W3IxlNKzTaea445GaZpd95HufxbUO0GypKC3qUdpKP/5BHgjVNybuWUlDQQ3oJeUNJA2WqAnWzuInZ2shfhsy5+KQMhBTnIbSAIwAwEYMZZA0p3otydb2ku3wnXbiCkIGYgADOHU5D9Sw7Ecfka4ILbQFECEJEwxszN5mjGmvVRD59xtRzMKk30DiAi4TrcZBfVd1wpajLQbYuwz4IRkfAdFzuP2wpQCxCAGQjADARgBgIwc6gRIyKhtU42DgAAAACgGD+8AeZxjbx7GwAAAABJRU5ErkJggg==","drone-attack.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAD+SURBVGiB7ZYtEoMwEIU3nSoUqhpVHV3FEaKqOUKP0iNUV0WhUegcAV0VFUtFpzP0fwOEwPR9BjIsm5c3yW6IAAAAAPCviNgCuCRJ0vrEO+dYa2MbEEoAd26llNc/WmuWhnVAAe2YJhARNU3DisuyjJ2TZUBIAbHxMmBOnNL0YVxY2ytPbwPGEhCbxe6AwlrSh9u7Or5+N3lORPSxcG/LUtAQA34JmIIh817Ou3azr8WgHRBr4RxkVX1vg+XtsZpO0jxZVA0I0V69DIjZ37t3EGPM2xgppXdetgGhBPTl+Xz7XtXv9D4CYwmIDYpgbAEcnHOiruvBMQAAAAAAXa7epVkLDSwF6QAAAABJRU5ErkJggg==","drone-death.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAADySURBVGiB7dexDYMwEAXQS5TKFSNQpaDyHK48gqfIHBkhVWoq5qCioGIEV7SkQJEIQpHvIDHI/0kukIwxZ3M+iAAAAAASdQrtqJQaOAP3fR88dkxBk1RKDdZa1sBlWf4kCEVRfF2IpmlYz7xwOnddF9Qvz3POsFGdY08gNtYOmHpk2ce1836L+fxd8jtAHADnPWVubLFX3+mxSYg/ASIie19zt8xiltfjycA9AWhtAPbi9uS/+Nthc0BrzNAawyrOlrB2wJHO91DBAZgWQXVdL/bRWpiJBK5VtUmVKc4B8zKX+6+wF4fNAVtJPgAAAACQrhdZFTcqrdTrNQAAAABJRU5ErkJggg==","drone-idle.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAADFSURBVGiB7dbBDcMgDAVQt+rJJ0ZgBEZhBEbqCB2BURiBEThxTQ+5JFUPOJBYLf9JOUSybMsBAhEAAADApG6tgcy8SBLXWptza9ZvCmLmxXsvqU8xxmFDOLP+Q5I059wUZ62VpFWtf+/o5y+IVsDWy5jdeyhlRD+Xm34FHB5AKIVMWJ9f/frUswWIiPxzXCNasAW0G9Am2gJn/d816zcPYHsJSSl9jXHOjenqwvqHD8HPa6b0rt5rVP3pz4DpBwAAAADzegPZqztJS6ccGQAAAABJRU5ErkJggg==","drone-walk.png":"iVBORw0KGgoAAAANSUhEUgAAAIAAAAAgCAYAAADaInAlAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAEcSURBVHic7djBDYIwFMbxYjz1xAiMwCiMwAiO4giOwBScGYEReuoVD17QaOwr1dLH/5d4MGle+vFKKRgDAAAAAACAQ6hCB1prF0lh731w7RJozR80SWvt0nWdqPAwDEkvQs4GaM5/lhSd5zloXNM0krJfRTZgSX0XaswvWgC55WrAXvwif/QCuNX10//eudhSRdKSv6gdYE1LA2Klyn+KnUDvnKn7x+9oF98oyr9pB+iu6SYi1TtnhkveeWjIX+wjwGRuwB6kyB/9CIAOoh1A6+tVKI35gxfA+h10mqa3Y9q2TTOrD3I2QGv+6DPA61cm6adKqT00YE1L/mIPgf9uwN6kys8h8OCCdgDvfTWO4+YxpTp6fgAAAACAGndi1J2H8j1y7QAAAABJRU5ErkJggg==","echo-attack.png":"iVBORw0KGgoAAAANSUhEUgAAAIAAAAAgCAYAAADaInAlAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAG1SURBVHic7ZqvUoVAFMbPdUw8gulmx0wwmU12i4VyLSTDPgDBsUq5hUcgmUmG+wBmko9AXYs4yNyBc4DDn93vl5jZhW8P++2/A0QAAAAAAMA7dtIbgiCwXeVVVYmfOZe+McYWeUZERJ9f34PaueX4z3EpbcDpeKCX94+zZa/P93Tz+CZ95Cz6xpjOF6etPxVT64sM0Oe+uo7WKBiqX3d+kiSj2rXV+Lu4GN2qlTNV57uKeAmg36kmjFI6HQ9ERP+u54Crr9X5W4mfw+AZoCk4Z/Bcfe2Rv/b4uQyaATgsvVteespfOn4uagaI47izvMizvxc09Ei2ZrYSv2gJ4LhW09nQn16fXTkIAvtw98SqmxdZbx1pQ6X6U3eEq/GLl4CyLDvL9/s9keJI4Opr4Vr8zucBfMUYYznZTxjAUepTUJ8JYACH4ZgABnCcPhPAAB7QZQLxKUB7lw19Hf0kSXbGGHt7fWWpkXwSn0WbeecwSolauegwStWOQNAfr982gFoqGKyTdtoZewDPgQE8BwbwHBjAc0S71XoH2YfW923oT6+PGcBzxHkATr0lf4uG/np+NwMb4AfiOUo+a4A+DgAAAABJRU5ErkJggg==","echo-dash.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAEsSURBVGiBY2AYBaNgFIyCEQwYSdXAxcX1H5/8t2/fSDZzIO0n2bFXlpb8L5u6DatcV7YXg050D00DgNr2M5GimFDoE6uGXEAL+0kKgOEIWMjR1JXtxWCWOo3h1OwsBgYGBhQ2PQA17Sc7BSBbSE/PU9v+EZ8FRgOAFMXE1LG0bAfQwn644qhVq1Cqj2VhYSgGcXFx/Q9wSCDK0A0HFlA9IGhlP8m1wIMHD/DKKygokGrkgNoPDwD0GB8pYMQXgmQ1hGgBCJVBtAKjKWCgHQADA1UGkRwAtC7l6W0/SaHOxcX1H7ndbZY6jYEBrS1uljqNZo0hWtg/4suA0QAYaAcMNBgNgIF2wEADkkprKy0pogYcj117RpNagBb2j6YAUhQTO+RMy3bAQNo/LAEA96h/W6522tgAAAAASUVORK5CYII=","echo-death.png":"iVBORw0KGgoAAAANSUhEUgAAAGAAAAAgCAYAAADtwH1UAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAFwSURBVGiB7ZmhUsNAEIb/MqhVPEIeoAIVjY5Cg8GkorUd3gDTwRKDqWl1VXUVoqqig84joM6mpgwTYJLdzF0vd9lPJblLcrP/3f57CaAoiqIoihdG0huIqGpqN8aInzlkxME6rubV89v237bFLMP48VUFEHAl6dw2+7l9lB9EAij2ue5y02KWIc0L7N+nAFA7dk1sHtRJAAC1gF8q+N/vavGgi43FBkGloBg9KCgBYkSUgs751XsO9ulBtmEHi4iq+7snVt/NbulECCKq2gKd5oXTSXBczRsnoHQfJDbhsiwb25MkkT5y0KgHeCYoATipJbR9gNgDOCnIhQf0wYMesimrxF1vC/a7O2/EfBGbBwWVgmJEvAJCm2F9hy2AMWa02S1rdXiaF8Cvb0Gu6/DY0BTkGRXAM8FVQbF5UDAC9MGDJPU9F01BnhGtgNvkBpOXde0cwJ9rH5/G5hijRleAZ0Qr4FB+uRvJQOnyR0yxyAk1K5H8fB4EdwAAAABJRU5ErkJggg==","echo-hurt.png":"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAADeSURBVFiFY2AYBaNgpANGUjVwcXH9xyf/7ds3kswk2QFXlpb8L5u6DatcV7YXg050D0lmMpGimJDviVVDtgNoAVjI0dSV7cXAtvQaAwMDA8OvaC0Gs9RpDKdmZ5HlAKqEALmWM5AbAgxQn1MDDHgaIMkBxORxmpUDXFxc/wMcEohSu+HAAqIdQnIaePDgAV55BQUFkswbWmlg1AHD0gEk5wJSUzkhQFKhwcXF9R+53DdLncbAgFYXmKVOI6kwGvAoGHXAqANIygVWWlJENTiPXXs2dHIByeUAMepIKQcARnA6JJwZFNAAAAAASUVORK5CYII=","echo-idle.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAFeSURBVGiB7Zihc8IwFMY/dlNR01PVuwlUxdR0FXqYmU4Uy/EfMMFhV4PBdBqFRiFQExy6Co2KDYbeAeNCHpfwCM1PpU2avvu+9OU1QCAQCNSYBvUBIYTS9UspyXNyQg52WXRV72d6sm/QSfDaHjoVwLYBjzZfXo1xuQoWowxnDCDN92AprqtgagBlTtIKqBh0EsRpjsUoA4CDtm9cJAB2S/FU+xrYNMCrT2AfWwZ4K4AtSAKYZPe7rQOEEKr1/mk0djIbOxNiWXS1WZ5ah5CTYFmW2v4oiqhTGlEZ8F1I7biPJFMUAy7eBbiwbUBIgtwBcBME4A6AG3ISdJXluTAWQErZmMzGar/sjNMcOCpF4zR3WgzZNsCbbdCVAbXPAUEA7gC4qb0ApCTYjJ7w1f89uAbw7958pf9huSVI29Xby7PRgeN8tXayDbp4P2kF/JUbynAv8Or0xvTIm1IHbAHEPIgLJvyvSAAAAABJRU5ErkJggg==","echo-jump.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAFYSURBVGiBY2AYBaNgRANGUjVwcXH9xyf/7ds3ks0cSECyY68sLflfNnUbVrmubC8GneieIRUATKQoJhT7xKoZTICkABiOgIUcTV3ZXgxmqdMYTs3OYmBgYEBh0xpQuwwiKwAYGBhQPEwvz8PsIlAGkWTekMoCtCiDhlQA0AKQlAWg+WvA2wHULIOIdiwXF9f/AIcEotRuOLCAJgHBxcX1n5BHzVKnkWQ3yYXggwcP8MorKCiQauSAghFfBgypACAmadOtHUBvACuD2pZ+w6suyivrPyll0JAJABigdhk0pLIALQDJKWColfKEANEB8O3bN8YNBxag1MNmqdMYGND6AqTWwwMNRnwWGPEBMORqAWqXQUMmAGhVBo1mAVIUGygIMKS1LkPhMzAwYIgdu4a/tTaYwGgKIEXxhQcfaOeSAQLkjAgNKzCkPGSlJUXUgOexa89GawFiAQBEC4Y9YVYztwAAAABJRU5ErkJggg==","echo-run.png":"iVBORw0KGgoAAAANSUhEUgAAAMAAAAAgCAYAAABEmHeFAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAHHSURBVHic7ZshUwJBFIAfjumS2XTZMZgIJjPJrMWCAarjP9DAWKVQKJhJZhKB7JBJ/oStZ5EZUOdu33nH3b79vgTswu23M+/d7ttDBAAAAAAAACASOtovJEmS5bU759S/GRL42/JXD/Zj9pA9vr7/2TYa9uT89iWoCdCCvy3/Y03noujf9qkzCzSZgfC3568KgDawmgykIAMdfEyHBP9q/UsFwGjYk25/LKvJQERk73WdtCEDCf6m/I/KDmZX+BDybQN/G/7BLYGkwQzUFvCvzr/0HaBprGSgsuBfjb8qAHzWVqHVgTXgb8/fewmUJEl2fXUnzzOX2++mN8jmi2lwE1EE/jb91XuAzWaT256m6X/Gk8v3pDZ6Eom/Lf9gNsFWM5Av+NfjH0wAbGkyA7UB/Kv1D7YKBFAFBABEDQEAUaPeA1hfYxaBvy1/7wBwznXmi2m2e+rW7Y9FfpzEdftjcxUIwd+sf3BVIGsZSAv+1foHEwBWM5Av+NfjzyYYooYAgKghACBqVHuAi/RE7p/e9t6LyK/Pluv85zVCBX97/twBIGpU1QKfPyVLjY/kXp6del1/uf6s5fr42/NXLYEsltc04G/P/wvdE6n5FWLbVwAAAABJRU5ErkJggg==","env-background.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAD7SURBVFiF7ZbNDYMwDIUfVU+cMkIWsJQzI2SEjNARGKCjZARG4ByJBSKxACeu6QkJKEn5KQUK3wXJJNj4xXaAi3MTDRnjOHZCiI7NGIO6rgfX7xmVKqef2hv3LbSZcw7O+SqB/QKVKtd+DhFMwBm4bx3AmuinjkiSV33sOQFKdY+t1v46XoK3BKqq+poT+ZBBFbbEmwDGGIwxix2QJFfactKevvo+21iKrJg3BfqjcCpt5UmS+1SPb/6xTACS5EI/jzV7wBzlASBJEmetBQBYMAC28y7P89G9gAShyIrgmkOMQcHm9aPQBajhEAkwFVvt28ESaI7ixcX/8gJ3cE1vwivo7wAAAABJRU5ErkJggg==","env-ground.png":"iVBORw0KGgoAAAANSUhEUgAAADAAAAAQCAYAAABQrvyxAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAACbSURBVEiJ7ZXBEYAgDASjw4sqUool5E2VV4IlWEI60a9oUFQcZMb9clw4MoTOez9TwzgRKW4KgHJ9dRof1eojM9XzghmaFACSaywDsQxZPmtdFICZd+LtgS1NCRQjKexubIOtdb2hjzffPDCAwxu/QioYEZErUsHgjbdlcdqBr9OFEKqO0aJTqEX+ALVpPoB78rN+geY78AeozQJTFirf+54m4AAAAABJRU5ErkJggg==","env-wall.png":"iVBORw0KGgoAAAANSUhEUgAAACAAAAAQCAYAAAB3AH1ZAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAACKSURBVEiJxVTBEYAgDIseL6ZghO4/RUdgE33JqViPFih5wV0DIQ3dYowHEcECZgYA9PB3E3MgwrVIKamIOefH3sqvHHgfPBuVAO1LJBC4qS401JjAoBJS/AR1eQhVAmbkQ9UCbT7uthMYjLoNbi34utxVgARRgNc8EAWMmgdmAV4ov6DXcit/uQMn27wkFZLFnCIAAAAASUVORK5CYII=","flying-attack.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAACdSURBVGiB7dWhDoQwDIBhIKg9Go8whUahEKdOIVCnTqP3gLPgSDBsjEAz+n+WLS1dtxYFAAAAgBSN7Zac45ehBd1n2gWYf9/D9W2///4fh2CMWMaYqJ/13kfHrC5l9AKnTueOE5COr74DbilATg+j+itQX8roAYlTaNsTmkLq3wD1V0B9B2TPOrdY55KnjvoOoADSCUijANIJAICkFc8+OKr2pHhaAAAAAElFTkSuQmCC","flying-death.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAACOSURBVGiB7dUtEoAgEIZhNHIUjrJHMJlJJoPJZDCZzJ6K4EGomin+jrPj8D4VBj52YDEGAAAAwBNS+U07wxvFncnW2kuHjTHeWldTqR1AGwXQDqDtkwL8qTFm3wRPg/puTA69TP3h/LpJx+eh/aQYzrkkVwjh0T7Z94DfPgFuAGBWkW0VefXl8gQAAMjXDpHsJAdbL5VAAAAAAElFTkSuQmCC","flying-fly.png":"iVBORw0KGgoAAAANSUhEUgAAAIAAAAAgCAYAAADaInAlAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAC6SURBVHic7dehFoIwFAZg9Jh4NB/BZCaZDCaTwUQim3wEH42qzXMoMIW5M/d9lXHufhjjrqoAAAAAAGDcdtc8U88hpdzzr6YGNKfrIOCtPY+O3x+G17vLcbJGqLqugx523/eL1fz3/OtZMyJ7H63OFF+g+nHr2wEKF2UB5N4YzZVT/igL4HHvomyBoVK/gJzy6wEKr7+ZNaMf+PIY9r5nyWNYCrHzawIL5xegft5SN3yplZ4fAAAAgEAvglpqX7Yblp0AAAAASUVORK5CYII=","item-ammo.png":"iVBORw0KGgoAAAANSUhEUgAAACAAAAAQCAYAAAB3AH1ZAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAABkSURBVEiJY2AYBSMdMOKS4OLi+o/M//btG061hPTiMwOroVxcXP8fLDBAEVNIuECUI7DpxWcGCz7DFmz4wMDAwMCQECBAyF6cemEAlxlMJJtMZTDqALxpgJy4J1XvgGfDUTAKADMpJZLeM/ulAAAAAElFTkSuQmCC","item-checkpoint.png":"iVBORw0KGgoAAAANSUhEUgAAACAAAAAQCAYAAAB3AH1ZAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAB2SURBVEiJY2AY6YARlwQXF9d/AwMDhgsXLjB8+/YNpzpi9AcsCECRWxa2DG4eCzGGRa2K+o/LAGLA5QWX4WzdBF0UOaIcgM8ASgETVU0jAxAVApT6miz9XFxc/62srP5zcXH9J0I52foHPApGHTDqgAF3wCgAAI4rIV42jcnOAAAAAElFTkSuQmCC","item-health.png":"iVBORw0KGgoAAAANSUhEUgAAACAAAAAQCAYAAAB3AH1ZAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAB+SURBVEiJY2AYBSMdMGIT5OLi+n/BwQFFzODAAYZv375hVU8JYMFmOYwtkPCBgYGBgeHDAgG4HDGOIMUDTGQ7HY/lpMhhhAAygPmcXIAegtgA1UOAVIA3BCgFxITggIcAhgPwpXK6ZEOYRWrbtpFl4Ldv3xhx5QRaeGAUUAwAW+kvz+VA/fcAAAAASUVORK5CYII=","item-powerup.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAQCAYAAACm53kpAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAACPSURBVFiF7ZU7DsAgDENp75adiYEDdsjEnsPRCSkqnwJqM0DeiLCNolgYoyiK0sAjxpX1x4jwcq56v6a3ACYQTev/zi8a8nBu0PsIjxgtQHYeiLr1UvlnyyiZlMwkkMjPpslX50nPKtemzz3e9JL5zQpwo5Eef1UBifxmBVIo76AkEvnb/wJTD9lJryiLcwPTE6FyqMkJ6QAAAABJRU5ErkJggg==","turret-destroyed.png":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAADeSURBVGiB7dc9EoMgEAVgzKTiFNRUHoWag+QQOUUq6j3KVtaewtZUZhKjcVl1ZOL7GmfkR3ggo8YAAAAAAADA+VS5Day1/a/yruuy+zySerAxxq8gUkrVXEClBqMa1NTkl6SUigzgevQAtO7Rvxbhlhp1uNkBaFZ/C9772edOlTWNLBRxAMO7TUQmhDBbj4ikXRZBFIC1tq/rWtThUI+Zdz34HrxNPxdNo7Zts+7vjZwz5JyqbfYZwMwf1zHpTilFdgAlTjCs2HmqV+CfnD4A8Sm99A8wVuqnLwAAvHkCtkQ+Cuk8HWYAAAAASUVORK5CYII=","turret-firing.png":"iVBORw0KGgoAAAANSUhEUgAAAGAAAAAgCAYAAADtwH1UAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAEjSURBVGiB7dg7EoIwEAZgcKxyAGuOwFGoLDidVWpOYb1HyCnSYuEwAhLIhg2R+H+No/LY3WxChqIAAAAAAAAAAAAA+Acl9wSlVL/2v7WWfc0zkc4/uFht234ForUuXQFKDcyvNIBU/kHBLt18i9ZatDDcAphHPfl+uz9Fm2+LK/9raBApuQqwXhgTMaJwF+4JIaOfE+n8vafheGo3TeM8ruu6xd+l1ubQAuxdAmPl7xWUUqqv688aWlWV81hj3lOdiEQfiCkbIGb+Qc8AY8xiEMPNpc0LsGY4TroBxiTzZw8AEU0+53wLtcfRDTAmnT97AI4o8JrUDSB9/dNtQ1M3gDT2NhRkec0Aa21JRKztX07vhGLmf5oibb0DmsupAQAAIE8vMnSjEVQkQOwAAAAASUVORK5CYII=","turret-idle.png":"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAACfSURBVFiF7dU7DoAgDAZgNE6chqMwc8DOHKVH4BSsOpH44NE2JMbYbzFBtL9AozFKKaXU3y3cB6y1e+9+zpn1TnaAIoTwCAIASytgK5goQK34CABUa62SADOxA0i+voe8Bee99d4358UYq+OtM7BRizvnKFNNmYeIpI4QnYGUEmu8h7QCZ4h4ud5RV0ocgFtg5HttOJuoDSm4/wSlXnMAEzkv+Sz546IAAAAASUVORK5CYII="};
+
+    const SCALE = 4; // Scale up for better visibility
+    const animations = new Map();
+    
+    async function loadManifest() {
+      const response = await fetch('../../manifest.json');
+      return await response.json();
+    }
+    
+    function drawSprite(canvas, imagePath, frameCount, currentFrame = 0) {
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = () => {
+        const frameWidth = img.width / frameCount;
+        const frameHeight = img.height;
+        
+        canvas.width = frameWidth * SCALE;
+        canvas.height = frameHeight * SCALE;
+        
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(
+          img,
+          currentFrame * frameWidth, 0,
+          frameWidth, frameHeight,
+          0, 0,
+          frameWidth * SCALE, frameHeight * SCALE
+        );
+      };
+      
+      const fname = imagePath.split('/').pop(); img.src = 'data:image/png;base64,' + (SPRITE_DATA[fname] || '');
+    }
+    
+    function createSpriteCard(sprite, animation) {
+      const card = document.createElement('div');
+      card.className = 'sprite-card';
+      
+      const name = document.createElement('div');
+      name.className = 'sprite-name';
+      name.textContent = animation.name;
+      card.appendChild(name);
+      
+      const canvas = document.createElement('canvas');
+      canvas.className = 'sprite-canvas';
+      card.appendChild(canvas);
+      
+      const info = document.createElement('div');
+      info.className = 'sprite-info';
+      info.innerHTML = `
+        <div>Frames: ${animation.frameCount}</div>
+        <div>FPS: ${animation.fps}</div>
+        <div>Duration: ${animation.duration.toFixed(2)}s</div>
+        <div>Loop: ${animation.loop ? 'Yes' : 'No'}</div>
+      `;
+      card.appendChild(info);
+      
+      const playBtn = document.createElement('button');
+      playBtn.className = 'play-btn';
+      playBtn.textContent = 'Play Animation';
+      card.appendChild(playBtn);
+      
+      let animInterval = null;
+      let currentFrame = 0;
+      
+      playBtn.onclick = () => {
+        if (animInterval) {
+          clearInterval(animInterval);
+          animInterval = null;
+          playBtn.textContent = 'Play Animation';
+          playBtn.classList.remove('playing');
+          currentFrame = 0;
+          drawSprite(canvas, animation.file, animation.frameCount, 0);
+        } else {
+          playBtn.textContent = 'Stop';
+          playBtn.classList.add('playing');
+          animInterval = setInterval(() => {
+            drawSprite(canvas, animation.file, animation.frameCount, currentFrame);
+            currentFrame = (currentFrame + 1) % animation.frameCount;
+            if (!animation.loop && currentFrame === 0) {
+              clearInterval(animInterval);
+              animInterval = null;
+              playBtn.textContent = 'Play Animation';
+              playBtn.classList.remove('playing');
+            }
+          }, 1000 / animation.fps);
+        }
+      };
+      
+      drawSprite(canvas, animation.file, animation.frameCount, 0);
+      
+      return card;
+    }
+    
+    async function init() {
+      const manifest = await loadManifest();
+      
+      // Render palette
+      const paletteEl = document.getElementById('palette');
+      manifest.palette.colors.forEach(({ name, color }) => {
+        const swatch = document.createElement('div');
+        swatch.className = 'color-swatch';
+        swatch.style.backgroundColor = color;
+        swatch.dataset.name = name;
+        paletteEl.appendChild(swatch);
+      });
+      
+      // Render sprites
+      const spritesEl = document.getElementById('sprites');
+      
+      const sections = {
+        character: { title: '👤 Characters', sprites: [] },
+        enemy: { title: '🤖 Enemies', sprites: [] },
+        boss: { title: '💀 Bosses', sprites: [] },
+        items: { title: '✨ Items & Pickups', sprites: [] },
+        environment: { title: '🏗️ Environment', sprites: [] }
+      };
+      
+      manifest.sprites.forEach(sprite => {
+        if (sprite.animations) {
+          sprite.animations.forEach(anim => {
+            sections[sprite.type].sprites.push({ sprite, animation: anim });
+          });
+        } else if (sprite.items) {
+          sprite.items.forEach(item => {
+            sections[sprite.type].sprites.push({ sprite, animation: item });
+          });
+        } else if (sprite.tiles) {
+          sprite.tiles.forEach(tile => {
+            sections[sprite.type].sprites.push({ 
+              sprite, 
+              animation: { 
+                name: tile.name, 
+                file: tile.file, 
+                frameCount: tile.variants,
+                fps: 4,
+                duration: tile.variants / 4,
+                loop: true
+              } 
+            });
+          });
+        }
+      });
+      
+      Object.values(sections).forEach(section => {
+        if (section.sprites.length > 0) {
+          const sectionEl = document.createElement('div');
+          sectionEl.className = 'section';
+          
+          const title = document.createElement('h2');
+          title.textContent = section.title;
+          sectionEl.appendChild(title);
+          
+          const grid = document.createElement('div');
+          grid.className = 'sprite-grid';
+          
+          section.sprites.forEach(({ sprite, animation }) => {
+            grid.appendChild(createSpriteCard(sprite, animation));
+          });
+          
+          sectionEl.appendChild(grid);
+          spritesEl.appendChild(sectionEl);
+        }
+      });
+    }
+    
+    init();
+  </script>
+</body>
+</html>
