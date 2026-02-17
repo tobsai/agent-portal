@@ -2115,6 +2115,50 @@ async function start() {
 
 start().catch(console.error);
 
+// ============ PROCESS-LEVEL CRASH HANDLERS ============
+// Catch uncaught exceptions and unhandled rejections so the process
+// exits cleanly (code 0) instead of crashing. Railway sees a clean exit
+// and doesn't burn restart retries — the service restarts normally.
+let isShuttingDown = false;
+
+async function gracefulCrashExit(reason, error) {
+  if (isShuttingDown) return; // prevent re-entry
+  isShuttingDown = true;
+
+  console.error(`\n💀 [CRASH HANDLER] ${reason}:`);
+  console.error(error);
+
+  // Report to Sentry if available
+  if (process.env.SENTRY_DSN) {
+    try {
+      Sentry.captureException(error);
+      await Sentry.flush(2000);
+    } catch (e) { /* best effort */ }
+  }
+
+  // Flush PostHog
+  try { await shutdownPostHog(); } catch (e) { /* best effort */ }
+
+  // Close HTTP server to stop accepting new connections
+  try {
+    server.close();
+  } catch (e) { /* best effort */ }
+
+  // Brief delay to let logs flush
+  setTimeout(() => {
+    console.log('[CRASH HANDLER] Exiting cleanly for auto-restart...');
+    process.exit(0); // Clean exit → Railway restarts without penalty
+  }, 1000);
+}
+
+process.on('uncaughtException', (error) => {
+  gracefulCrashExit('Uncaught Exception', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  gracefulCrashExit('Unhandled Rejection', reason);
+});
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
