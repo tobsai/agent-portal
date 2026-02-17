@@ -51,11 +51,19 @@ gwProxy.on('connection', (clientWs, req) => {
   const gwWs = new WebSocket(gwUrl, { headers: { Origin: 'https://talos.mtree.io' } });
   gwWs.on('open', () => console.log('[gw-proxy] upstream connected'));
   gwWs.on('message', (data, isBinary) => { if (clientWs.readyState === WebSocket.OPEN) clientWs.send(isBinary ? data : data.toString()); });
-  gwWs.on('close', (code, reason) => { console.log('[gw-proxy] upstream closed:', code); clientWs.close(code, reason); });
+  gwWs.on('close', (code, reason) => {
+    console.log('[gw-proxy] upstream closed:', code);
+    // Codes 1005/1006 are reserved and cannot be used in initiated close frames
+    // Passing them to clientWs.close() throws TypeError and crashes the process
+    const safeCode = (code === 1005 || code === 1006 || !code) ? 1000 : code;
+    if (clientWs.readyState === WebSocket.OPEN || clientWs.readyState === WebSocket.CONNECTING) {
+      clientWs.close(safeCode, reason);
+    }
+  });
   gwWs.on('error', (err) => { console.error('[gw-proxy] upstream error:', err.message); clientWs.close(1011, 'Gateway error'); });
   clientWs.on('message', (data, isBinary) => { if (gwWs.readyState === WebSocket.OPEN) gwWs.send(isBinary ? data : data.toString()); });
-  clientWs.on('close', () => { gwWs.close(); });
-  clientWs.on('error', () => { gwWs.close(); });
+  clientWs.on('close', () => { if (gwWs.readyState === WebSocket.OPEN || gwWs.readyState === WebSocket.CONNECTING) gwWs.close(); });
+  clientWs.on('error', () => { if (gwWs.readyState === WebSocket.OPEN || gwWs.readyState === WebSocket.CONNECTING) gwWs.close(); });
 });
 
 const PORT = process.env.PORT || 3847;
