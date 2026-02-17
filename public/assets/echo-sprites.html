@@ -326,7 +326,7 @@ const SPRITE_DATA = {
         );
       };
       
-      const fname = imagePath.split('/').pop(); img.src = 'data:image/png;base64,' + (SPRITE_DATA[fname] || '');
+      const fname = imagePath.split('/').pop().replace(/\.png$/i, ''); img.src = 'data:image/png;base64,' + (SPRITE_DATA[fname] || '');
     }
     
     function createSpriteCard(sprite, animation) {
