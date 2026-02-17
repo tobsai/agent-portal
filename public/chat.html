@@ -480,6 +480,91 @@
       opacity: 1;
     }
 
+    /* Attachment button */
+    .attach-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .attach-btn:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    /* Image preview area */
+    #image-preview-area {
+      max-width: 900px;
+      margin: 0 auto 0.5rem;
+      padding: 0 1.5rem;
+      display: none;
+    }
+
+    .preview-thumb {
+      position: relative;
+      display: inline-block;
+    }
+
+    .preview-thumb img {
+      max-width: 150px;
+      max-height: 100px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display: block;
+    }
+
+    .preview-thumb .remove-btn {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: none;
+      background: var(--red);
+      color: #fff;
+      cursor: pointer;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      font-weight: 700;
+    }
+
+    /* Chat images in bubbles */
+    .chat-image {
+      max-width: 300px;
+      border-radius: 10px;
+      display: block;
+      margin: 4px 0;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .chat-image:hover {
+      opacity: 0.88;
+    }
+
+    .message.user .chat-image {
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+
+    .message.assistant .chat-image {
+      border: 1px solid var(--border);
+    }
+
     /* Mobile Responsive */
     @media (max-width: 768px) {
       .messages {
@@ -492,6 +577,10 @@
 
       .input-area {
         padding: 0.75rem 1rem;
+      }
+
+      #image-preview-area {
+        padding: 0 1rem;
       }
 
       .user span {
@@ -556,7 +645,12 @@
     </div>
 
     <div class="input-area">
+      <!-- Hidden file input for image selection -->
+      <input type="file" id="file-input" accept="image/*" style="display:none;" onchange="handleFileSelect(event)">
+      <!-- Image preview above input box -->
+      <div id="image-preview-area"></div>
       <div class="input-wrapper">
+        <button class="attach-btn" onclick="openFilePicker()" title="Attach image">📎</button>
         <textarea 
           class="input-box" 
           id="message-input" 
@@ -589,6 +683,7 @@
     let gatewayConfig = null;
     let currentRunId = null;
     let messageQueue = []; // queued messages to send after current response
+    let pendingImage = null; // { dataUrl, mimeType } — selected but not yet sent
 
     const messagesContainer = document.getElementById('messages');
     const messageInput = document.getElementById('message-input');
@@ -946,7 +1041,7 @@
 
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
-      bubble.textContent = content;
+      renderMessageContent(bubble, content, role);
 
       const time = document.createElement('div');
       time.className = 'message-timestamp';
@@ -983,7 +1078,9 @@
         el.innerHTML = '<div class="message-avatar">🦞</div><div class="message-content"><div class="message-bubble"></div></div>';
         messagesContainer.appendChild(el);
       }
-      el.querySelector('.message-bubble').textContent = content;
+      const bubble = el.querySelector('.message-bubble');
+      bubble.innerHTML = '';
+      renderMessageContent(bubble, content, 'assistant');
       scrollToBottom();
     }
 
@@ -991,7 +1088,9 @@
       const el = document.getElementById('streaming-message');
       if (el) {
         el.removeAttribute('id');
-        el.querySelector('.message-bubble').textContent = content;
+        const bubble = el.querySelector('.message-bubble');
+        bubble.innerHTML = '';
+        renderMessageContent(bubble, content, 'assistant');
         // Add timestamp
         const time = document.createElement('div');
         time.className = 'message-timestamp';
@@ -1047,30 +1146,152 @@
       });
     }
 
+    // ─── Image handling ───────────────────────────────────────────────────────
+
+    function openFilePicker() {
+      document.getElementById('file-input').click();
+    }
+
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        pendingImage = { dataUrl: ev.target.result, mimeType: file.type };
+        showImagePreview(ev.target.result);
+      };
+      reader.readAsDataURL(file);
+      e.target.value = ''; // reset so same file can be re-selected
+    }
+
+    function showImagePreview(dataUrl) {
+      const area = document.getElementById('image-preview-area');
+      area.style.display = 'block';
+      area.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.className = 'preview-thumb';
+      const img = document.createElement('img');
+      img.src = dataUrl;
+      const btn = document.createElement('button');
+      btn.className = 'remove-btn';
+      btn.textContent = '✕';
+      btn.onclick = clearImagePreview;
+      wrap.appendChild(img);
+      wrap.appendChild(btn);
+      area.appendChild(wrap);
+    }
+
+    function clearImagePreview() {
+      pendingImage = null;
+      const area = document.getElementById('image-preview-area');
+      area.style.display = 'none';
+      area.innerHTML = '';
+    }
+
+    /**
+     * Render message content into a bubble element.
+     * Detects:
+     *   [image:data:image/...;base64,...] — inline base64 image (user or assistant)
+     *   MEDIA: <url>                      — media URL in assistant messages
+     */
+    function renderMessageContent(bubble, content, role) {
+      // Patterns
+      const imgTagRe = /\[image:(data:[^\]]+)\]/g;
+      const mediaRe = /MEDIA:\s*(\S+)/g;
+
+      const matches = [];
+      let m;
+
+      imgTagRe.lastIndex = 0;
+      while ((m = imgTagRe.exec(content)) !== null) {
+        matches.push({ start: m.index, end: m.index + m[0].length, src: m[1] });
+      }
+
+      if (role === 'assistant') {
+        mediaRe.lastIndex = 0;
+        while ((m = mediaRe.exec(content)) !== null) {
+          matches.push({ start: m.index, end: m.index + m[0].length, src: m[1] });
+        }
+      }
+
+      if (matches.length === 0) {
+        bubble.textContent = content;
+        return;
+      }
+
+      bubble.innerHTML = '';
+      matches.sort((a, b) => a.start - b.start);
+
+      let pos = 0;
+      for (const match of matches) {
+        // Text before image
+        if (match.start > pos) {
+          const textSpan = document.createElement('span');
+          textSpan.style.whiteSpace = 'pre-wrap';
+          textSpan.textContent = content.slice(pos, match.start);
+          bubble.appendChild(textSpan);
+        }
+        // Image element
+        const img = document.createElement('img');
+        img.className = 'chat-image';
+        img.src = match.src;
+        img.alt = 'Image';
+        img.title = 'Click to view full size';
+        img.onclick = () => window.open(match.src, '_blank');
+        img.onerror = () => {
+          const err = document.createElement('span');
+          err.textContent = '[Image failed to load]';
+          err.style.color = 'var(--red)';
+          img.replaceWith(err);
+        };
+        bubble.appendChild(img);
+        pos = match.end;
+      }
+
+      // Remaining text
+      if (pos < content.length) {
+        const textSpan = document.createElement('span');
+        textSpan.style.whiteSpace = 'pre-wrap';
+        textSpan.textContent = content.slice(pos);
+        bubble.appendChild(textSpan);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     let activeUserMsg = null; // track the message being processed
     let queuedUserMsgs = []; // track queued message elements
 
     function sendMessage() {
       const text = messageInput.value.trim();
-      if (!text) return;
+      const image = pendingImage;
+      if (!text && !image) return;
       if (!ws || ws.readyState !== WebSocket.OPEN) { showError('Not connected'); return; }
 
       messageInput.value = '';
       messageInput.style.height = 'auto';
 
+      // Build full message content (text + optional inline image)
+      let fullContent = text;
+      if (image) {
+        const imageTag = `[image:${image.dataUrl}]`;
+        fullContent = text ? text + '\n' + imageTag : imageTag;
+        clearImagePreview();
+      }
+
       if (isWaitingForResponse) {
         // Show as queued
-        const msgEl = addMessage('user', text, null, 'queued');
-        messageQueue.push({ text, el: msgEl });
+        const msgEl = addMessage('user', fullContent, null, 'queued');
+        messageQueue.push({ text: fullContent, el: msgEl });
         queuedUserMsgs.push(msgEl);
         updateQueueIndicator();
         return;
       }
 
       // Show as sending
-      const msgEl = addMessage('user', text, null, 'sending');
+      const msgEl = addMessage('user', fullContent, null, 'sending');
       activeUserMsg = msgEl;
-      dispatchMessage(text);
+      dispatchMessage(fullContent);
     }
 
     function dispatchMessage(text) {
