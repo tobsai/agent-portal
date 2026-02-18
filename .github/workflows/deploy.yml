@@ -5,19 +5,14 @@ on:
     branches:
       - main
 
+# Railway auto-deploys from GitHub integration on push to main.
+# This workflow is intentionally a no-op to avoid conflicting with
+# Railway's native GitHub integration (railway up breaks routing
+# on GitHub-connected services).
 jobs:
   deploy:
-    name: Deploy to Railway
+    name: Deploy to Railway (via GitHub integration)
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service 55dd45a8-0142-4825-a4d8-860c3d559be9
+      - name: Deploy triggered via Railway GitHub integration
+        run: echo "Railway deploys automatically from GitHub. No manual upload needed."
