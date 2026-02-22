@@ -622,6 +622,260 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
+app.get('/game', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'game.html'));
+});
+
+// ============ GAME ASSET BROWSER API ============
+
+function slugToDisplayName(slug) {
+  return slug
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function scanPNGsRecursive(dir, baseDir) {
+  const results = [];
+  if (!fs.existsSync(dir)) return results;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...scanPNGsRecursive(full, baseDir));
+    } else if (/\.png$/i.test(entry.name)) {
+      results.push(path.relative(baseDir, full).replace(/\\/g, '/'));
+    }
+  }
+  return results.sort();
+}
+
+// Normalize a "frames" object (from metadata.json or auto-scan) into tabs
+function normalizeTabs(framesObj) {
+  const tabs = [];
+  for (const [key, value] of Object.entries(framesObj)) {
+    if (!value || typeof value !== 'object') continue;
+    const vals = Object.values(value);
+    if (vals.length === 0) continue;
+
+    if (vals.every(v => typeof v === 'string')) {
+      // { "south": "path.png", ... } → stills tab
+      tabs.push({
+        id: key,
+        label: slugToDisplayName(key),
+        kind: 'stills',
+        count: vals.length,
+        directions: value,
+      });
+    } else if (vals.every(v => Array.isArray(v))) {
+      // { "west": ["frame_000.png", ...], ... } → animation group tab
+      tabs.push({
+        id: key,
+        label: slugToDisplayName(key),
+        kind: 'animation-group',
+        count: Object.values(value).reduce((s, arr) => s + arr.length, 0),
+        directions: value,
+      });
+    } else if (vals.every(v => v && typeof v === 'object' && !Array.isArray(v))) {
+      // nested: { "walking-8-frames": { "west": [...] }, ... } → one tab per child
+      for (const [subKey, subVal] of Object.entries(value)) {
+        if (!subVal || typeof subVal !== 'object') continue;
+        const subVals = Object.values(subVal);
+        if (subVals.every(v => Array.isArray(v))) {
+          tabs.push({
+            id: `${key}--${subKey}`,
+            label: slugToDisplayName(subKey),
+            kind: 'animation-group',
+            count: subVals.reduce((s, arr) => s + arr.length, 0),
+            directions: subVal,
+          });
+        }
+      }
+    }
+  }
+  return tabs;
+}
+
+// Build tabs from raw PNGs (no metadata.json)
+function autoNormalizePNGs(pngs) {
+  // Group by top-level dir → sub-dir
+  const tree = {};
+  for (const png of pngs) {
+    const parts = png.split('/');
+    const top = parts.length > 1 ? parts[0] : '_root';
+    if (!tree[top]) tree[top] = {};
+    if (parts.length <= 2) {
+      const file = parts[parts.length - 1];
+      const sub = '_files';
+      if (!tree[top][sub]) tree[top][sub] = [];
+      tree[top][sub].push(png);
+    } else {
+      const sub = parts[1];
+      if (!tree[top][sub]) tree[top][sub] = [];
+      tree[top][sub].push(png);
+    }
+  }
+
+  const tabs = [];
+  for (const [top, subMap] of Object.entries(tree)) {
+    const displayKey = top === '_root' ? 'frames' : top;
+    const subEntries = Object.entries(subMap).filter(([k]) => k !== '_files');
+    const rootFiles = subMap['_files'] || [];
+
+    if (subEntries.length > 0) {
+      const directions = {};
+      for (const [sub, frames] of subEntries) {
+        directions[sub] = frames;
+      }
+      const isAnim = Object.values(directions).every(arr =>
+        arr.every(f => /frame_\d+/i.test(f))
+      );
+      tabs.push({
+        id: displayKey,
+        label: slugToDisplayName(displayKey),
+        kind: isAnim ? 'animation-group' : 'stills',
+        count: Object.values(directions).reduce((s, arr) => s + arr.length, 0),
+        directions,
+      });
+    } else if (rootFiles.length > 0) {
+      const isAnim = rootFiles.every(f => /frame_\d+/i.test(path.basename(f)));
+      if (isAnim) {
+        tabs.push({
+          id: displayKey,
+          label: slugToDisplayName(displayKey),
+          kind: 'animation-group',
+          count: rootFiles.length,
+          directions: { [displayKey]: rootFiles },
+        });
+      } else {
+        const stills = {};
+        rootFiles.forEach(f => { stills[path.basename(f, '.png')] = f; });
+        tabs.push({
+          id: displayKey,
+          label: slugToDisplayName(displayKey),
+          kind: 'stills',
+          count: rootFiles.length,
+          directions: stills,
+        });
+      }
+    }
+  }
+  return tabs;
+}
+
+app.get('/api/game-assets', requireAuth, (req, res) => {
+  try {
+    const gamesDir = path.join(__dirname, 'public', 'assets', 'game');
+    if (!fs.existsSync(gamesDir)) return res.json({ games: [] });
+
+    const gameSlugs = fs.readdirSync(gamesDir, { withFileTypes: true })
+      .filter(e => e.isDirectory())
+      .map(e => e.name)
+      .sort();
+
+    const games = [];
+    for (const gameSlug of gameSlugs) {
+      const gameDir = path.join(gamesDir, gameSlug);
+      const urlBase = `/assets/game/${gameSlug}`;
+      const assets = [];
+
+      // Helper to push a sprite-folder asset
+      function pushSpriteFolder(assetSlug, assetDir, version) {
+        const pngs = scanPNGsRecursive(assetDir, assetDir);
+        if (pngs.length === 0) return;
+        const metaPath = path.join(assetDir, 'metadata.json');
+        let tabs, characterName = null;
+        if (fs.existsSync(metaPath)) {
+          try {
+            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+            tabs = normalizeTabs(meta.frames || {});
+            characterName = meta.character?.name || null;
+          } catch (_) { tabs = autoNormalizePNGs(pngs); }
+        } else {
+          tabs = autoNormalizePNGs(pngs);
+        }
+        const vPrefix = version ? `${version}/` : '';
+        assets.push({
+          slug: assetSlug,
+          displayName: characterName || slugToDisplayName(assetSlug),
+          type: 'sprite-folder',
+          version: version || null,
+          urlBase: `${urlBase}/${vPrefix}${assetSlug}`,
+          frameCount: pngs.length,
+          tabs,
+        });
+      }
+
+      const entries = fs.readdirSync(gameDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const entryPath = path.join(gameDir, entry.name);
+
+        if (entry.isDirectory() && /^v\d+/.test(entry.name)) {
+          // Versioned directory (e.g. v1, v2) — scan inside for assets
+          const version = entry.name;
+          const versionEntries = fs.readdirSync(entryPath, { withFileTypes: true });
+          for (const ve of versionEntries) {
+            const vePath = path.join(entryPath, ve.name);
+            if (ve.isDirectory()) {
+              pushSpriteFolder(ve.name, vePath, version);
+            } else if (/\.png$/i.test(ve.name)) {
+              assets.push({
+                slug: ve.name.replace(/\.png$/i, ''),
+                displayName: slugToDisplayName(ve.name.replace(/\.png$/i, '')),
+                type: 'tileset',
+                version,
+                url: `${urlBase}/${version}/${ve.name}`,
+              });
+            } else if (/\.zip$/i.test(ve.name)) {
+              assets.push({
+                slug: ve.name.replace(/\.zip$/i, '') + '--zip',
+                displayName: slugToDisplayName(ve.name.replace(/\.zip$/i, '')) + ' (ZIP)',
+                type: 'zip',
+                version,
+                url: `${urlBase}/${version}/${ve.name}`,
+                filename: ve.name,
+              });
+            }
+          }
+        } else if (entry.isDirectory()) {
+          // Non-versioned asset folder
+          pushSpriteFolder(entry.name, entryPath, null);
+        } else if (/\.png$/i.test(entry.name)) {
+          assets.push({
+            slug: entry.name.replace(/\.png$/i, ''),
+            displayName: slugToDisplayName(entry.name.replace(/\.png$/i, '')),
+            type: 'tileset',
+            version: null,
+            url: `${urlBase}/${entry.name}`,
+          });
+        } else if (/\.zip$/i.test(entry.name)) {
+          assets.push({
+            slug: entry.name.replace(/\.zip$/i, '') + '--zip',
+            displayName: slugToDisplayName(entry.name.replace(/\.zip$/i, '')) + ' (ZIP)',
+            type: 'zip',
+            version: null,
+            url: `${urlBase}/${entry.name}`,
+            filename: entry.name,
+          });
+        }
+      }
+
+      if (assets.length > 0) {
+        games.push({
+          slug: gameSlug,
+          displayName: slugToDisplayName(gameSlug),
+          assetCount: assets.length,
+          assets,
+        });
+      }
+    }
+
+    res.json({ games });
+  } catch (err) {
+    console.error('game-assets scan:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/architecture', (req, res) => {
   if (!req.isAuthenticated()) return res.redirect('/');
   res.sendFile(path.join(__dirname, 'public', 'architecture.html'));

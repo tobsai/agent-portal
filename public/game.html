@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Assets — Agent Portal</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: rgba(255,255,255,0.04);
+      --surface-hover: rgba(255,255,255,0.07);
+      --border: rgba(255,255,255,0.08);
+      --text: #e4e4e7;
+      --text-muted: #71717a;
+      --text-dim: #52525b;
+      --accent: #818cf8;
+      --accent-dim: rgba(129,140,248,0.15);
+      --green: #34d399;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --blue: #60a5fa;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; flex-direction:column; }
+
+    /* ── Header ── */
+    header {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:0.75rem 1.5rem; border-bottom:1px solid var(--border);
+      position:sticky; top:0; z-index:50;
+      background:rgba(10,10,15,0.9); backdrop-filter:blur(12px);
+    }
+    .header-left { display:flex; align-items:center; gap:1.5rem; }
+    .logo { font-size:1.1rem; font-weight:600; }
+    .logo a { color:var(--text); text-decoration:none; }
+    .logo a:hover { color:var(--accent); }
+    .nav-links { display:flex; gap:0.25rem; }
+    .nav-link { font-size:0.85rem; padding:0.4rem 0.75rem; border-radius:6px; color:var(--text-muted); text-decoration:none; transition:all 0.15s; font-weight:500; }
+    .nav-link:hover { background:var(--surface-hover); color:var(--text); }
+    .nav-link.active { background:var(--accent-dim); color:var(--accent); }
+    .header-right { display:flex; align-items:center; gap:0.75rem; }
+    .btn-s { font-size:0.75rem; padding:0.3rem 0.6rem; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; text-decoration:none; }
+    .btn-s:hover { background:var(--surface-hover); color:var(--text); }
+
+    /* ── Layout ── */
+    .page-body { display:flex; flex:1; overflow:hidden; height:calc(100vh - 53px); }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width:230px; border-right:1px solid var(--border);
+      padding:1rem 0; flex-shrink:0;
+      overflow-y:auto;
+    }
+    .sidebar-section { padding:0 0.75rem 0.75rem; }
+    .sidebar-label {
+      font-size:0.65rem; font-weight:600; text-transform:uppercase;
+      letter-spacing:0.08em; color:var(--text-dim);
+      padding:0 0.5rem; margin-bottom:0.35rem;
+    }
+    .sidebar-item {
+      display:flex; align-items:center; gap:0.5rem;
+      padding:0.4rem 0.6rem; border-radius:6px;
+      cursor:pointer; font-size:0.83rem; color:var(--text-muted);
+      font-weight:500; transition:all 0.15s;
+      border:none; background:none; width:100%; text-align:left;
+    }
+    .sidebar-item:hover { background:var(--surface-hover); color:var(--text); }
+    .sidebar-item.active { background:var(--accent-dim); color:var(--accent); }
+    .sidebar-item:disabled { opacity:0.35; cursor:not-allowed; }
+    .sidebar-badge {
+      margin-left:auto; font-size:0.65rem; padding:0.1rem 0.4rem;
+      border-radius:3px; background:var(--surface); color:var(--text-dim);
+      font-family:'JetBrains Mono',monospace;
+    }
+    .sidebar-divider { border:none; border-top:1px solid var(--border); margin:0.5rem 0.75rem; }
+
+    /* ── Main ── */
+    .main { flex:1; overflow-y:auto; padding:1.5rem 2rem; }
+
+    /* ── Breadcrumb ── */
+    .breadcrumb {
+      display:flex; align-items:center; gap:0.4rem;
+      font-size:0.8rem; color:var(--text-dim); margin-bottom:1.25rem;
+    }
+    .breadcrumb a { color:var(--text-muted); text-decoration:none; }
+    .breadcrumb a:hover { color:var(--accent); }
+    .breadcrumb .sep { color:var(--text-dim); }
+    .breadcrumb .current { color:var(--text); }
+
+    /* ── Loading / Empty ── */
+    .loading, .empty-state {
+      display:flex; flex-direction:column; align-items:center;
+      justify-content:center; gap:0.75rem; padding:4rem;
+      color:var(--text-muted); font-size:0.9rem; text-align:center;
+    }
+    .loading-icon { font-size:2rem; animation:spin 1.2s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .empty-icon { font-size:2.5rem; margin-bottom:0.25rem; }
+
+    /* ── Game Picker (initial screen) ── */
+    .game-grid {
+      display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+      gap:1rem; margin-top:0.5rem;
+    }
+    .game-card {
+      background:var(--surface); border:1px solid var(--border); border-radius:10px;
+      padding:1.25rem; cursor:pointer; transition:all 0.15s;
+    }
+    .game-card:hover { background:var(--surface-hover); border-color:var(--accent); }
+    .game-card-icon { font-size:2rem; margin-bottom:0.6rem; }
+    .game-card-name { font-size:0.95rem; font-weight:600; margin-bottom:0.25rem; }
+    .game-card-meta { font-size:0.75rem; color:var(--text-muted); }
+
+    /* ── Asset view ── */
+    .asset-header { margin-bottom:1.25rem; }
+    .asset-title { font-size:1.2rem; font-weight:600; margin-bottom:0.25rem; }
+    .asset-subtitle { font-size:0.83rem; color:var(--text-muted); }
+
+    /* ── Tabs ── */
+    .tabs {
+      display:flex; gap:0.25rem; flex-wrap:wrap;
+      border-bottom:1px solid var(--border); padding-bottom:0.75rem;
+      margin-bottom:1.5rem;
+    }
+    .tab-btn {
+      font-size:0.82rem; padding:0.35rem 0.75rem; border-radius:6px;
+      cursor:pointer; color:var(--text-muted); font-weight:500;
+      transition:all 0.15s; border:none; background:none;
+    }
+    .tab-btn:hover { background:var(--surface-hover); color:var(--text); }
+    .tab-btn.active { background:var(--accent-dim); color:var(--accent); }
+
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+
+    /* ── Stills Grid ── */
+    .stills-grid { display:flex; flex-wrap:wrap; gap:0.75rem; }
+    .sprite-frame { display:flex; flex-direction:column; align-items:center; gap:0.35rem; }
+    .sprite-box {
+      width:128px; height:128px;
+      background:rgba(255,255,255,0.03); border:1px solid var(--border);
+      border-radius:8px; display:flex; align-items:center; justify-content:center;
+      overflow:hidden; cursor:pointer; transition:all 0.15s;
+    }
+    .sprite-box:hover { border-color:var(--accent); background:rgba(129,140,248,0.05); }
+    .sprite-box img {
+      width:128px; height:128px; object-fit:contain;
+      image-rendering:pixelated; image-rendering:crisp-edges;
+    }
+    .sprite-lbl { font-size:0.68rem; color:var(--text-dim); font-family:'JetBrains Mono',monospace; }
+
+    /* ── Animation Group ── */
+    .anim-group { margin-bottom:2rem; }
+    .anim-group-label {
+      font-size:0.75rem; font-weight:600; text-transform:capitalize;
+      color:var(--text-muted); margin-bottom:0.5rem;
+      display:flex; align-items:center; gap:0.5rem;
+    }
+    .anim-group-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    /* Live preview box */
+    .preview-strip {
+      display:flex; gap:1rem; flex-wrap:wrap;
+      padding:1rem; background:var(--surface);
+      border:1px solid var(--border); border-radius:10px;
+      margin-bottom:1.5rem; width:fit-content;
+    }
+    .preview-anim { display:flex; flex-direction:column; align-items:center; gap:0.4rem; }
+    .preview-label { font-size:0.7rem; color:var(--text-dim); font-weight:600; }
+    .preview-box {
+      width:128px; height:128px;
+      border:1px solid var(--accent); border-radius:8px; overflow:hidden;
+      background:rgba(255,255,255,0.03); position:relative;
+    }
+    .preview-box img {
+      position:absolute; top:0; left:0; width:128px; height:128px;
+      object-fit:contain; image-rendering:pixelated; image-rendering:crisp-edges;
+    }
+    .preview-controls { display:flex; align-items:center; gap:0.4rem; }
+    .play-btn {
+      font-size:0.72rem; padding:0.2rem 0.5rem; border-radius:5px;
+      border:1px solid var(--border); background:var(--surface);
+      color:var(--text-muted); cursor:pointer; transition:all 0.15s;
+    }
+    .play-btn:hover { background:var(--surface-hover); color:var(--text); }
+    .play-btn.playing { border-color:var(--accent); color:var(--accent); }
+    .frame-counter { font-size:0.68rem; color:var(--text-dim); font-family:'JetBrains Mono',monospace; min-width:3rem; }
+    .preview-fps { font-size:0.68rem; color:var(--text-dim); font-style:italic; }
+
+    /* frame strip */
+    .frame-strip { display:flex; flex-wrap:wrap; gap:0.6rem; }
+
+    /* ── Tileset view ── */
+    .tileset-view { display:flex; flex-direction:column; gap:1.5rem; }
+    .tileset-scale-label { font-size:0.78rem; color:var(--text-muted); font-weight:600; margin-bottom:0.5rem; }
+    .tileset-wrap {
+      background:rgba(255,255,255,0.03); border:1px solid var(--border);
+      border-radius:10px; padding:1.25rem; display:inline-block; max-width:100%; overflow:auto;
+    }
+    .tileset-wrap img { display:block; image-rendering:pixelated; image-rendering:crisp-edges; }
+    .tileset-meta { display:flex; gap:0.5rem; flex-wrap:wrap; }
+    .meta-chip {
+      font-size:0.72rem; padding:0.2rem 0.5rem; border-radius:4px;
+      background:var(--surface); border:1px solid var(--border);
+      color:var(--text-muted); font-family:'JetBrains Mono',monospace;
+    }
+
+    /* ── ZIP view ── */
+    .zip-view {
+      padding:2rem; background:var(--surface); border:1px solid var(--border);
+      border-radius:10px; max-width:400px;
+    }
+    .zip-icon { font-size:2.5rem; margin-bottom:0.75rem; }
+    .zip-name { font-size:1rem; font-weight:600; margin-bottom:0.4rem; }
+    .zip-desc { font-size:0.83rem; color:var(--text-muted); margin-bottom:1.25rem; }
+    .btn-download {
+      display:inline-flex; align-items:center; gap:0.4rem;
+      font-size:0.85rem; font-weight:500; padding:0.5rem 1rem;
+      border-radius:7px; border:1px solid var(--accent);
+      background:var(--accent-dim); color:var(--accent);
+      text-decoration:none; cursor:pointer; transition:all 0.15s;
+    }
+    .btn-download:hover { background:rgba(129,140,248,0.25); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo"><a href="/">🦞 Talos</a></div>
+    <nav class="nav-links">
+      <a href="/dashboard" class="nav-link">Dashboard</a>
+      <a href="/architecture" class="nav-link">Architecture</a>
+      <a href="/docs" class="nav-link">Docs</a>
+      <a href="/c" class="nav-link">Chat</a>
+      <a href="/game" class="nav-link active">🎮 Game Assets</a>
+    </nav>
+  </div>
+  <div class="header-right">
+    <a href="/auth/logout" class="btn-s">Logout</a>
+  </div>
+</header>
+
+<div class="page-body">
+  <!-- Sidebar (dynamic) -->
+  <nav class="sidebar" id="sidebar">
+    <div class="loading" style="padding:2rem 1rem; font-size:0.8rem;">
+      <span class="loading-icon">⟳</span> Loading…
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main" id="main-area">
+    <div id="content-area">
+      <div class="loading">
+        <span class="loading-icon">⟳</span>
+        Loading game assets…
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+let state = {
+  games: [],
+  activeGame: null,    // game slug
+  activeVersion: null, // version string (e.g. 'v1') or null for non-versioned
+  activeAsset: null,   // asset slug
+  activeTab: null,     // tab id within sprite-folder
+};
+
+const animTimers = {};
+
+// ─────────────────────────────────────────────
+// Bootstrap
+// ─────────────────────────────────────────────
+(async function init() {
+  try {
+    const res = await fetch('/api/game-assets');
+    if (!res.ok) throw new Error(res.statusText);
+    const data = await res.json();
+    state.games = data.games || [];
+
+    // Parse URL hash: #game-slug/version/asset-slug/tab-id  (versioned)
+    //             or: #game-slug/asset-slug/tab-id           (non-versioned)
+    const hash = location.hash.slice(1);
+    if (hash) {
+      const parts = hash.split('/');
+      if (parts[0]) {
+        state.activeGame = parts[0];
+        if (parts.length >= 3 && /^v\d+/.test(parts[1])) {
+          // versioned: game / version / asset [/ tab]
+          state.activeVersion = parts[1];
+          state.activeAsset = parts[2];
+          if (parts[3]) state.activeTab = parts[3];
+        } else {
+          // non-versioned: game / asset [/ tab]
+          state.activeVersion = null;
+          if (parts[1]) state.activeAsset = parts[1];
+          if (parts[2]) state.activeTab = parts[2];
+        }
+      }
+    }
+
+    // Default: pick first game + first asset
+    if (!state.activeGame && state.games.length > 0) {
+      state.activeGame = state.games[0].slug;
+    }
+    if (!state.activeAsset && state.activeGame) {
+      const g = state.games.find(g => g.slug === state.activeGame);
+      if (g && g.assets.length > 0) {
+        const first = g.assets[0];
+        state.activeAsset = first.slug;
+        state.activeVersion = first.version || null;
+      }
+    }
+
+    renderSidebar();
+    renderContent();
+  } catch (err) {
+    document.getElementById('sidebar').innerHTML =
+      `<div class="empty-state" style="padding:1rem;font-size:0.78rem;">Error loading assets</div>`;
+    document.getElementById('content-area').innerHTML =
+      `<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load game assets.<br><small>${err.message}</small></p></div>`;
+  }
+})();
+
+// ─────────────────────────────────────────────
+// Sidebar
+// ─────────────────────────────────────────────
+function renderSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (state.games.length === 0) {
+    sidebar.innerHTML = `<div class="empty-state" style="padding:1rem;font-size:0.78rem;text-align:center;">No games found.<br>Drop files into<br><code>public/assets/game/</code></div>`;
+    return;
+  }
+
+  let html = '';
+  for (const game of state.games) {
+    const isActiveGame = game.slug === state.activeGame;
+    html += `<div class="sidebar-section">
+      <div class="sidebar-label">${esc(game.displayName)}</div>`;
+
+    // Group assets: versioned ones by version, then unversioned
+    const versionMap = new Map(); // version → assets[]
+    const unversioned = [];
+    for (const asset of game.assets) {
+      if (asset.version) {
+        if (!versionMap.has(asset.version)) versionMap.set(asset.version, []);
+        versionMap.get(asset.version).push(asset);
+      } else {
+        unversioned.push(asset);
+      }
+    }
+
+    // Render versioned groups
+    for (const [version, vAssets] of [...versionMap.entries()].sort()) {
+      html += `<div style="font-size:0.68rem;color:var(--text-dim);padding:0.25rem 0.5rem 0.1rem;font-weight:600;letter-spacing:0.04em;">${esc(version)}</div>`;
+      for (const asset of vAssets) {
+        const isActive = isActiveGame && asset.slug === state.activeAsset && state.activeVersion === version;
+        const icon = asset.type === 'sprite-folder' ? '🧍' : asset.type === 'tileset' ? '🗺️' : '📦';
+        html += `<button class="sidebar-item${isActive ? ' active' : ''}"
+          onclick="selectAsset('${esc(game.slug)}','${esc(asset.slug)}','${esc(version)}')" title="${esc(asset.displayName)}">
+          ${icon} ${esc(asset.displayName)}
+          <span class="sidebar-badge">${assetBadge(asset)}</span>
+        </button>`;
+      }
+    }
+
+    // Render unversioned assets
+    for (const asset of unversioned) {
+      const isActive = isActiveGame && asset.slug === state.activeAsset && !state.activeVersion;
+      const icon = asset.type === 'sprite-folder' ? '🧍' : asset.type === 'tileset' ? '🗺️' : '📦';
+      html += `<button class="sidebar-item${isActive ? ' active' : ''}"
+        onclick="selectAsset('${esc(game.slug)}','${esc(asset.slug)}')" title="${esc(asset.displayName)}">
+        ${icon} ${esc(asset.displayName)}
+        <span class="sidebar-badge">${assetBadge(asset)}</span>
+      </button>`;
+    }
+
+    html += `</div>`;
+
+    if (game !== state.games[state.games.length - 1]) {
+      html += `<hr class="sidebar-divider">`;
+    }
+  }
+
+  // Future placeholder section if only 1 game
+  if (state.games.length === 1) {
+    html += `<hr class="sidebar-divider">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Add New Game</div>
+        <div style="font-size:0.72rem; color:var(--text-dim); padding:0 0.5rem; line-height:1.5;">
+          Drop a folder into<br><code style="font-size:0.68rem; color:var(--text-muted);">public/assets/game/&lt;slug&gt;/</code>
+        </div>
+      </div>`;
+  }
+
+  sidebar.innerHTML = html;
+}
+
+function assetBadge(asset) {
+  if (asset.type === 'sprite-folder') return asset.frameCount + ' fr';
+  if (asset.type === 'tileset') return '1×';
+  if (asset.type === 'zip') return 'zip';
+  return '';
+}
+
+// ─────────────────────────────────────────────
+// Navigation
+// ─────────────────────────────────────────────
+function selectAsset(gameSlug, assetSlug, version) {
+  stopAllAnimations();
+  state.activeGame = gameSlug;
+  state.activeVersion = version || null;
+  state.activeAsset = assetSlug;
+  state.activeTab = null;
+  updateHash();
+  renderSidebar();
+  renderContent();
+}
+
+function selectTab(tabId) {
+  stopAllAnimations();
+  state.activeTab = tabId;
+  updateHash();
+
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const activeBtn = document.querySelector(`[data-tab="${CSS.escape(tabId)}"]`);
+  const activePanel = document.getElementById('panel-' + tabId);
+  if (activeBtn) activeBtn.classList.add('active');
+  if (activePanel) {
+    activePanel.classList.add('active');
+    startAnimationsInPanel(activePanel, findCurrentAsset());
+  }
+}
+
+function updateHash() {
+  // versioned: #game/version/asset[/tab]  |  non-versioned: #game/asset[/tab]
+  const parts = state.activeVersion
+    ? [state.activeGame, state.activeVersion, state.activeAsset, state.activeTab].filter(Boolean)
+    : [state.activeGame, state.activeAsset, state.activeTab].filter(Boolean);
+  location.hash = parts.join('/');
+}
+
+function findCurrentAsset() {
+  if (!state.activeGame || !state.activeAsset) return null;
+  const game = state.games.find(g => g.slug === state.activeGame);
+  if (!game) return null;
+  return game.assets.find(a =>
+    a.slug === state.activeAsset &&
+    (a.version || null) === (state.activeVersion || null)
+  );
+}
+
+function findCurrentGame() {
+  return state.activeGame ? state.games.find(g => g.slug === state.activeGame) : null;
+}
+
+// ─────────────────────────────────────────────
+// Content Rendering
+// ─────────────────────────────────────────────
+function renderContent() {
+  const area = document.getElementById('content-area');
+  const asset = findCurrentAsset();
+  const game = findCurrentGame();
+
+  if (!asset || !game) {
+    renderGamePicker(area);
+    return;
+  }
+
+  // Breadcrumb
+  let html = `<div class="breadcrumb">
+    <a href="/dashboard">Portal</a>
+    <span class="sep">/</span>
+    <a href="/game">Game Assets</a>
+    <span class="sep">/</span>
+    <span style="cursor:pointer;color:var(--text-muted);" onclick="selectAsset('${esc(game.slug)}','${esc(asset.slug)}',${asset.version ? `'${esc(asset.version)}'` : 'null'})">${esc(game.displayName)}</span>
+    <span class="sep">/</span>
+    <span class="current">${esc(asset.displayName)}</span>
+  </div>
+  <div class="asset-header">
+    <div class="asset-title">${assetIcon(asset)} ${esc(asset.displayName)}</div>
+    <div class="asset-subtitle">${assetSubtitle(asset)}</div>
+  </div>`;
+
+  if (asset.type === 'sprite-folder') {
+    html += renderSpriteFolder(asset);
+  } else if (asset.type === 'tileset') {
+    html += renderTileset(asset);
+  } else if (asset.type === 'zip') {
+    html += renderZip(asset);
+  }
+
+  area.innerHTML = html;
+
+  // Activate correct tab + start animations
+  const firstTabId = asset.tabs && asset.tabs.length > 0 ? asset.tabs[0].id : null;
+  const tabId = state.activeTab || firstTabId;
+  if (tabId) {
+    const panel = document.getElementById('panel-' + tabId);
+    const btn = document.querySelector(`[data-tab="${CSS.escape(tabId)}"]`);
+    if (panel) panel.classList.add('active');
+    if (btn) btn.classList.add('active');
+    if (panel) startAnimationsInPanel(panel, asset);
+  }
+
+  // Set up tileset 2× scaling
+  if (asset.type === 'tileset') {
+    const img2x = document.getElementById('tileset-2x');
+    if (img2x) {
+      const scaleUp = () => {
+        if (img2x.naturalWidth > 0) img2x.style.width = (img2x.naturalWidth * 2) + 'px';
+      };
+      img2x.addEventListener('load', scaleUp);
+      if (img2x.complete) scaleUp();
+    }
+  }
+}
+
+function renderGamePicker(area) {
+  const game = findCurrentGame();
+  let html = `<div class="breadcrumb">
+    <a href="/dashboard">Portal</a>
+    <span class="sep">/</span>
+    <span class="current">Game Assets</span>
+  </div>
+  <div class="asset-header">
+    <div class="asset-title">🎮 Game Assets</div>
+    <div class="asset-subtitle">Select a game to browse its sprites and tilesets</div>
+  </div>
+  <div class="game-grid">`;
+
+  for (const g of state.games) {
+    const firstAsset = g.assets[0];
+    html += `<div class="game-card" onclick="selectAsset('${esc(g.slug)}','${esc(firstAsset?.slug || '')}',${firstAsset?.version ? `'${esc(firstAsset.version)}'` : 'null'})">
+      <div class="game-card-icon">🎮</div>
+      <div class="game-card-name">${esc(g.displayName)}</div>
+      <div class="game-card-meta">${g.assetCount} asset${g.assetCount !== 1 ? 's' : ''}</div>
+    </div>`;
+  }
+
+  if (state.games.length === 0) {
+    html += `<div class="empty-state"><div class="empty-icon">📂</div>
+      <p>No games found.<br>Add a folder to <code>public/assets/game/</code></p></div>`;
+  }
+
+  html += `</div>`;
+  area.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────
+// Sprite Folder
+// ─────────────────────────────────────────────
+function renderSpriteFolder(asset) {
+  const tabs = asset.tabs || [];
+  if (tabs.length === 0) return `<div class="empty-state"><div class="empty-icon">🖼️</div><p>No frames found in this folder.</p></div>`;
+
+  let html = `<div class="tabs">`;
+  for (const tab of tabs) {
+    const count = tab.count;
+    html += `<button class="tab-btn" data-tab="${esc(tab.id)}" onclick="selectTab('${esc(tab.id)}')">${esc(tab.label)} <span style="color:var(--text-dim);font-size:0.75em;">(${count})</span></button>`;
+  }
+  html += `</div>`;
+
+  for (const tab of tabs) {
+    html += `<div class="tab-panel" id="panel-${esc(tab.id)}">`;
+    if (tab.kind === 'stills') {
+      html += renderStillsTab(asset, tab);
+    } else if (tab.kind === 'animation-group') {
+      html += renderAnimGroupTab(asset, tab);
+    }
+    html += `</div>`;
+  }
+
+  return html;
+}
+
+function renderStillsTab(asset, tab) {
+  // tab.directions = { "south": "rotations/south.png", ... }
+  // Display in a compass-like grid when 8 directions, else just a flex row
+  const dirs = Object.entries(tab.directions);
+  const compassOrder = ['north-west','north','north-east','west','','east','south-west','south','south-east'];
+  const isCompass = dirs.length === 8 && dirs.every(([k]) => compassOrder.includes(k));
+
+  let html = '';
+  if (isCompass) {
+    html += `<div style="display:grid;grid-template-columns:repeat(3,128px);gap:0.75rem;">`;
+    for (const slot of compassOrder) {
+      if (!slot) { html += `<div></div>`; continue; }
+      const filePath = tab.directions[slot];
+      if (filePath) {
+        html += `<div class="sprite-frame">
+          <div class="sprite-box" onclick="lightbox('${asset.urlBase}/${filePath}')">
+            <img src="${asset.urlBase}/${filePath}" alt="${esc(slot)}" loading="lazy">
+          </div>
+          <span class="sprite-lbl">${esc(slot)}</span>
+        </div>`;
+      } else {
+        html += `<div></div>`;
+      }
+    }
+    html += `</div>`;
+  } else {
+    html += `<div class="stills-grid">`;
+    for (const [dir, filePath] of dirs) {
+      html += `<div class="sprite-frame">
+        <div class="sprite-box" onclick="lightbox('${asset.urlBase}/${filePath}')">
+          <img src="${asset.urlBase}/${filePath}" alt="${esc(dir)}" loading="lazy">
+        </div>
+        <span class="sprite-lbl">${esc(dir)}</span>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  return html;
+}
+
+function renderAnimGroupTab(asset, tab) {
+  // tab.directions = { "west": ["frame_000.png", ...], "south-west": [...], ... }
+  const dirs = Object.entries(tab.directions);
+  const fps = guessFPS(tab.id);
+
+  // Live preview strip
+  let html = `<div class="preview-strip">`;
+  for (const [dir, frames] of dirs) {
+    const animKey = `${asset.slug}--${tab.id}--${dir}`;
+    html += `<div class="preview-anim">
+      <div class="preview-label">${esc(dir)}</div>
+      <div class="preview-box" id="box-${esc(animKey)}">
+        <img id="img-${esc(animKey)}" src="${asset.urlBase}/${frames[0]}" alt="">
+      </div>
+      <div class="preview-controls">
+        <button class="play-btn playing" id="btn-${esc(animKey)}" onclick="toggleAnim('${esc(animKey)}')">⏸</button>
+        <span class="frame-counter" id="ctr-${esc(animKey)}">0/${frames.length-1}</span>
+      </div>
+    </div>`;
+  }
+  html += `<div class="preview-fps" style="align-self:flex-end;padding-bottom:0.25rem;">${fps} fps · loop</div>`;
+  html += `</div>`;
+
+  // Frame strips by direction
+  for (const [dir, frames] of dirs) {
+    html += `<div class="anim-group">
+      <div class="anim-group-label">${esc(dir)}</div>
+      <div class="frame-strip">`;
+    frames.forEach((f, i) => {
+      html += `<div class="sprite-frame">
+        <div class="sprite-box" onclick="lightbox('${asset.urlBase}/${f}')">
+          <img src="${asset.urlBase}/${f}" alt="frame ${i}" loading="lazy">
+        </div>
+        <span class="sprite-lbl">f${String(i).padStart(2,'0')}</span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  return html;
+}
+
+// ─────────────────────────────────────────────
+// Tileset
+// ─────────────────────────────────────────────
+function renderTileset(asset) {
+  return `<div class="tileset-view">
+    <div class="tileset-meta">
+      <span class="meta-chip">${esc(asset.url.split('/').pop())}</span>
+      <span class="meta-chip">image-rendering: pixelated</span>
+    </div>
+    <div>
+      <div class="tileset-scale-label">1× — Original size</div>
+      <div class="tileset-wrap">
+        <img src="${asset.url}" alt="${esc(asset.displayName)}" style="max-width:100%;">
+      </div>
+    </div>
+    <div>
+      <div class="tileset-scale-label">2× — Scaled up</div>
+      <div class="tileset-wrap">
+        <img id="tileset-2x" src="${asset.url}" alt="${esc(asset.displayName)} 2x">
+      </div>
+    </div>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────
+// ZIP
+// ─────────────────────────────────────────────
+function renderZip(asset) {
+  return `<div class="zip-view">
+    <div class="zip-icon">📦</div>
+    <div class="zip-name">${esc(asset.filename || asset.displayName)}</div>
+    <div class="zip-desc">Extract this ZIP to browse individual sprite frames inline.</div>
+    <a class="btn-download" href="${asset.url}" download="${esc(asset.filename || '')}">⬇ Download ZIP</a>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────
+// Animations
+// ─────────────────────────────────────────────
+const animState = {};
+
+function startAnimationsInPanel(panel, asset) {
+  if (!asset || asset.type !== 'sprite-folder') return;
+  const activeTab = asset.tabs?.find(t => t.id === state.activeTab || t === asset.tabs[0]);
+  if (!activeTab || activeTab.kind !== 'animation-group') return;
+  const fps = guessFPS(activeTab.id);
+
+  for (const [dir, frames] of Object.entries(activeTab.directions)) {
+    const key = `${asset.slug}--${activeTab.id}--${dir}`;
+    startAnim(key, frames, fps, asset.urlBase);
+  }
+}
+
+function startAnim(key, frames, fps, urlBase) {
+  if (animTimers[key]) clearInterval(animTimers[key]);
+  animState[key] = { frame: 0, playing: true, frames, urlBase };
+  animTimers[key] = setInterval(() => {
+    const s = animState[key];
+    if (!s || !s.playing) return;
+    s.frame = (s.frame + 1) % s.frames.length;
+    const img = document.getElementById('img-' + key);
+    const ctr = document.getElementById('ctr-' + key);
+    if (img) img.src = `${s.urlBase}/${s.frames[s.frame]}`;
+    if (ctr) ctr.textContent = `${s.frame}/${s.frames.length - 1}`;
+  }, 1000 / fps);
+}
+
+function toggleAnim(key) {
+  const s = animState[key];
+  const btn = document.getElementById('btn-' + key);
+  if (!s || !btn) return;
+  s.playing = !s.playing;
+  btn.textContent = s.playing ? '⏸' : '▶';
+  btn.classList.toggle('playing', s.playing);
+}
+
+function stopAllAnimations() {
+  for (const key of Object.keys(animTimers)) {
+    clearInterval(animTimers[key]);
+    delete animTimers[key];
+  }
+}
+
+function guessFPS(tabId) {
+  if (/fight|idle/i.test(tabId)) return 8;
+  if (/walk|run/i.test(tabId)) return 12;
+  return 10;
+}
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+function assetIcon(asset) {
+  if (asset.type === 'sprite-folder') return '🧍';
+  if (asset.type === 'tileset') return '🗺️';
+  if (asset.type === 'zip') return '📦';
+  return '🖼️';
+}
+
+function assetSubtitle(asset) {
+  if (asset.type === 'sprite-folder') return `${asset.frameCount} frames · pixel art sprites · 128×128px`;
+  if (asset.type === 'tileset') return `Tileset sprite sheet · rendered with pixelated scaling`;
+  if (asset.type === 'zip') return `Compressed sprite archive`;
+  return '';
+}
+
+function esc(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');
+}
+
+function lightbox(url) {
+  // Simple zoom: open in new tab for now
+  window.open(url, '_blank');
+}
+</script>
+</body>
+</html>

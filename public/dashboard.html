@@ -256,6 +256,32 @@
       .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
       .user span { display: none; }
     }
+    /* ── Recent Completions Feed ── */
+    .completions-section {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+    .completions-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+    .completions-title { font-size: 0.95rem; font-weight: 600; }
+    .completions-feed { display: flex; flex-direction: column; gap: 0.4rem; }
+    .feed-item {
+      display: flex; align-items: flex-start; gap: 0.6rem;
+      padding: 0.5rem 0.6rem; border-radius: 7px;
+      background: var(--surface); border: 1px solid var(--border);
+      font-size: 0.8rem; transition: background 0.12s;
+    }
+    .feed-item:hover { background: var(--surface-hover); }
+    .feed-icon { font-size: 0.95rem; flex-shrink: 0; line-height: 1.4; }
+    .feed-body { flex: 1; min-width: 0; }
+    .feed-msg { color: var(--text); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .feed-meta { font-size: 0.7rem; color: var(--text-dim); margin-top: 0.15rem; display: flex; gap: 0.5rem; }
+    .feed-agent { color: var(--accent); }
+    .feed-empty { font-size: 0.8rem; color: var(--text-dim); padding: 1rem 0; text-align: center; }
   </style>
   <script>
     !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageviewId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
@@ -271,7 +297,7 @@
         <a href="/architecture" class="nav-link">Architecture</a>
         <a href="/docs" class="nav-link">Docs</a>
         <a href="/c" class="nav-link">Chat</a>
-        <a href="/assets/" class="nav-link">Assets</a>
+        <a href="/game" class="nav-link">🎮 Game Assets</a>
       </nav>
     </div>
     <div class="header-right">
@@ -422,6 +448,17 @@
     </div>
   </div>
 
+  <!-- Recent Completions Feed -->
+  <div class="completions-section">
+    <div class="completions-header">
+      <span class="completions-title">📋 Recent Activity</span>
+      <span style="font-size:0.72rem; color:var(--text-dim);" id="completions-updated"></span>
+    </div>
+    <div class="completions-feed" id="completions-feed">
+      <div class="feed-empty">Loading…</div>
+    </div>
+  </div>
+
   <script>
     let scheduledTasks = [];
     let activityChart = null;
@@ -433,11 +470,13 @@
       await loadUsage();
       await loadScheduledTasks();
       await loadActivityTimeline();
+      await loadRecentActivity();
       setInterval(loadAgentHealth, 30000); // Check health every 30 seconds
       setInterval(loadLiveSessions, 15000);
       setInterval(loadUsage, 60000); // Refresh usage every minute
       setInterval(loadScheduledTasks, 60000);
       setInterval(loadActivityTimeline, 300000);
+      setInterval(loadRecentActivity, 30000);
       setInterval(updateRelativeTimes, 10000);
     }
     
@@ -780,6 +819,79 @@
           }
         }
       });
+    }
+
+    // ── Recent Activity Feed ──
+    const ACTIVITY_ICONS = {
+      'task_complete': '✅', 'complete': '✅', 'done': '✅',
+      'task_start': '▶️', 'start': '▶️', 'started': '▶️',
+      'error': '❌', 'fail': '❌', 'failed': '❌',
+      'deploy': '🚀', 'deployed': '🚀',
+      'build': '🔨', 'built': '🔨',
+      'message': '💬', 'chat': '💬',
+      'heartbeat': '💓',
+      'subagent': '🤖', 'spawn': '🤖',
+      'update': '📝', 'note': '📝',
+      'cron': '⏰', 'scheduled': '⏰',
+      'info': 'ℹ️',
+    };
+
+    function activityIcon(eventType) {
+      if (!eventType) return '📋';
+      const lower = eventType.toLowerCase();
+      for (const [key, icon] of Object.entries(ACTIVITY_ICONS)) {
+        if (lower.includes(key)) return icon;
+      }
+      return '📋';
+    }
+
+    function timeAgo(iso) {
+      const diff = Date.now() - new Date(iso).getTime();
+      const m = Math.floor(diff / 60000);
+      if (m < 1) return 'just now';
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      return `${Math.floor(h / 24)}d ago`;
+    }
+
+    async function loadRecentActivity() {
+      try {
+        const res = await fetch('/api/activity?limit=20');
+        if (!res.ok) throw new Error(res.statusText);
+        const items = await res.json();
+        const feed = document.getElementById('completions-feed');
+        const updEl = document.getElementById('completions-updated');
+        if (updEl) updEl.textContent = 'Updated ' + timeAgo(new Date().toISOString());
+
+        if (!items || items.length === 0) {
+          feed.innerHTML = '<div class="feed-empty">No activity yet.</div>';
+          return;
+        }
+
+        feed.innerHTML = items.map(item => `
+          <div class="feed-item">
+            <span class="feed-icon">${activityIcon(item.event_type)}</span>
+            <div class="feed-body">
+              <div class="feed-msg" title="${escHtml(item.message || '')}">${escHtml(item.message || '(no message)')}</div>
+              <div class="feed-meta">
+                <span>${timeAgo(item.created_at)}</span>
+                ${item.agent_name ? `<span class="feed-agent">${escHtml(item.agent_name)}</span>` : ''}
+                ${item.event_type ? `<span>${escHtml(item.event_type)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        const feed = document.getElementById('completions-feed');
+        if (feed) feed.innerHTML = `<div class="feed-empty">Failed to load activity.</div>`;
+      }
+    }
+
+    function escHtml(str) {
+      return String(str || '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     init();

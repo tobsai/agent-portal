@@ -156,6 +156,26 @@
   </style>
 </head>
 <body>
+  <!-- Portal Nav -->
+  <nav style="
+    display:flex; align-items:center; gap:1rem;
+    padding:0.65rem 1.5rem; background:rgba(10,10,15,0.95);
+    border-bottom:1px solid rgba(255,255,255,0.08);
+    font-family:'Inter',system-ui,sans-serif;
+    position:sticky; top:0; z-index:100;
+    backdrop-filter:blur(12px);
+  ">
+    <a href="/" style="font-size:1rem;font-weight:600;color:#e4e4e7;text-decoration:none;">🦞 Talos</a>
+    <div style="display:flex;gap:0.2rem;margin-left:0.5rem;">
+      <a href="/dashboard" style="font-size:0.82rem;padding:0.35rem 0.65rem;border-radius:6px;color:#71717a;text-decoration:none;">Dashboard</a>
+      <a href="/architecture" style="font-size:0.82rem;padding:0.35rem 0.65rem;border-radius:6px;color:#71717a;text-decoration:none;">Architecture</a>
+      <a href="/docs" style="font-size:0.82rem;padding:0.35rem 0.65rem;border-radius:6px;color:#71717a;text-decoration:none;">Docs</a>
+      <a href="/c" style="font-size:0.82rem;padding:0.35rem 0.65rem;border-radius:6px;color:#71717a;text-decoration:none;">Chat</a>
+      <a href="/game" style="font-size:0.82rem;padding:0.35rem 0.65rem;border-radius:6px;color:#71717a;text-decoration:none;">🎮 Game Assets</a>
+    </div>
+    <a href="/auth/logout" style="margin-left:auto;font-size:0.72rem;padding:0.25rem 0.55rem;border-radius:5px;border:1px solid rgba(255,255,255,0.1);color:#71717a;text-decoration:none;">Logout</a>
+  </nav>
+
   <header>
     <h1>🎮 Echo Unchained</h1>
     <p class="subtitle">Sprite Preview - SNES Aesthetic Pixel Art</p>
