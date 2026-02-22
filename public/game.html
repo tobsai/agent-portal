@@ -313,7 +313,8 @@ const animTimers = {};
     if (!state.activeAsset && state.activeGame) {
       const g = state.games.find(g => g.slug === state.activeGame);
       if (g && g.assets.length > 0) {
-        const first = g.assets[0];
+        // Prefer the first versioned asset (rendered first in sidebar); fall back to g.assets[0]
+        const first = g.assets.find(a => a.version) || g.assets[0];
         state.activeAsset = first.slug;
         state.activeVersion = first.version || null;
       }

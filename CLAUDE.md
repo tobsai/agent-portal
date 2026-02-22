@@ -46,9 +46,10 @@ agent-portal/
 ├── lib/
 │   └── posthog.js      # Analytics helper
 ├── public/
-│   ├── index.html      # Kanban board UI (requires auth)
-│   ├── dashboard.html  # Activity dashboard
-│   ├── chat.html       # iMessage-style chat (connects to gateway WS)
+│   ├── dashboard.html  # MAIN PAGE — served at /. Two-panel layout: Live Sessions (left) + Chat (right, first-class). Activity timeline below, collapsed by default.
+│   ├── index.html      # Kanban board UI (requires auth) — NOT the main landing page
+│   ├── chat.html       # iMessage-style standalone chat (connects to gateway WS)
+│   ├── game.html       # Game asset viewer — sprite/tileset browser with version support
 │   ├── style.css
 │   └── app.js
 └── data/
@@ -62,3 +63,6 @@ agent-portal/
 - Sentry is initialized before everything else — keep it at the top of `server.js`.
 - API key format: `ak_` prefix + 32 hex chars. Stored in DB, validated on every write endpoint.
 - The README still mentions SSE — the implementation now uses WebSocket (`ws`) not SSE. The README is slightly outdated.
+- **dashboard.html is the root page (`/`)** — not index.html. index.html is the Kanban board, accessible via nav.
+- **Chat in dashboard is first-class**: the right panel (`.panel-right`) embeds the chat iframe at 50% width. `.split-container` has `min-height: 55vh` to ensure chat is never cramped. The activity timeline below is collapsed by default.
+- **game.html default asset**: `init()` prefers the first versioned asset (`a.version` truthy) over unversioned ones, since versioned assets (e.g. Hero sprite) render first in the sidebar. Falls back to `g.assets[0]` if no versioned asset exists.
