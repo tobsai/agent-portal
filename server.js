@@ -66,9 +66,8 @@ gwProxy.on('connection', (clientWs, req) => {
           console.log('[gw-proxy] intercepted challenge, signing server-side');
 
           const token = process.env.GATEWAY_TOKEN || '';
-          const deviceId = process.env.WEBCHAT_DEVICE_ID || '';
-          const publicKeyRaw = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
           const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
+          const publicKeyB64 = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
 
           const connectParams = {
             minProtocol: 3, maxProtocol: 3,
@@ -80,8 +79,6 @@ gwProxy.on('connection', (clientWs, req) => {
           };
 
           // Device auth for write scopes (token-only is read-only)
-          const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
-          const publicKeyB64 = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
           if (privateKeyPem && publicKeyB64) {
             try {
               const crypto = require('crypto');
