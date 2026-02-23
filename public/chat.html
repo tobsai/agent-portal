@@ -832,6 +832,13 @@
             }
             if (msg.role === 'assistant') {
               removeLoadingIndicator();
+              // Suppress internal control tokens — never show these to the user
+              if (content === 'NO_REPLY' || content === 'HEARTBEAT_OK' ||
+                  content.startsWith('NO_REPLY\n') || content.startsWith('HEARTBEAT_OK\n')) {
+                isWaitingForResponse = false;
+                processQueue();
+                return;
+              }
               addMessage('assistant', content, msg.timestamp);
               isWaitingForResponse = false;
               processQueue();
@@ -897,6 +904,12 @@
     function clearMessages() { messagesContainer.innerHTML = ''; }
 
     function addMessage(role, content, timestamp, statusType) {
+      // Suppress internal control tokens — never render these as visible messages
+      if (role === 'assistant' && content && (
+          content === 'NO_REPLY' || content === 'HEARTBEAT_OK' ||
+          content.trimStart().startsWith('NO_REPLY') || content.trimStart().startsWith('HEARTBEAT_OK')
+      )) return null;
+
       const emptyState = messagesContainer.querySelector('.empty-state');
       if (emptyState) emptyState.remove();
 
