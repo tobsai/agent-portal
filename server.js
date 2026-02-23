@@ -1967,6 +1967,53 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ============ AGENT THINKING STATUS ============
+// In-memory store for agent thinking status (no DB needed)
+let agentThinkingStatus = { status: 'idle', task: null, timestamp: null };
+let thinkingExpireTimer = null;
+
+// POST /api/status - Agent pushes thinking/idle status
+app.post('/api/status', requireAgentKey, (req, res) => {
+  try {
+    const { status, task } = req.body;
+    if (!status || !['thinking', 'idle'].includes(status)) {
+      return res.status(400).json({ error: 'status must be "thinking" or "idle"' });
+    }
+
+    // Clear any existing expire timer
+    if (thinkingExpireTimer) {
+      clearTimeout(thinkingExpireTimer);
+      thinkingExpireTimer = null;
+    }
+
+    const timestamp = new Date().toISOString();
+    agentThinkingStatus = { status, task: task || null, timestamp };
+
+    // Broadcast to all WebSocket clients
+    broadcast('agent:status', agentThinkingStatus);
+
+    // Auto-expire to idle after 5 minutes if thinking
+    if (status === 'thinking') {
+      thinkingExpireTimer = setTimeout(() => {
+        agentThinkingStatus = { status: 'idle', task: null, timestamp: new Date().toISOString() };
+        broadcast('agent:status', agentThinkingStatus);
+        thinkingExpireTimer = null;
+        console.log('[status] Auto-expired thinking status to idle');
+      }, 5 * 60 * 1000);
+    }
+
+    res.json({ success: true, status: agentThinkingStatus });
+  } catch (err) {
+    console.error('Error updating agent thinking status:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/status - Retrieve current thinking status
+app.get('/api/status', requireAuth, (req, res) => {
+  res.json(agentThinkingStatus);
+});
+
 // ============ AGENT HEALTH MONITORING ============
 // In-memory store for agent health status (no DB needed)
 let agentHealthStatus = {};

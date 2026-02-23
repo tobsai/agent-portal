@@ -249,6 +249,34 @@
     .timeline-body { transition: max-height 0.3s ease-out; max-height: 500px; overflow: hidden; }
     .timeline-body.collapsed { max-height: 0; padding: 0; }
 
+    /* ── Agent Thinking Status ── */
+    #agent-status-indicator {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.35rem 0.7rem; border-radius: 6px;
+      background: var(--surface); border: 1px solid var(--border);
+      font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;
+      transition: all 0.3s ease;
+    }
+    #agent-status-indicator.thinking {
+      border-color: rgba(52,211,153,0.4);
+      background: rgba(52,211,153,0.07);
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      background: var(--text-dim); transition: background 0.3s;
+    }
+    .status-dot.thinking {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .status-dot.idle { background: var(--text-dim); }
+    .status-text-label {
+      color: var(--text-muted); transition: color 0.3s; white-space: nowrap; overflow: hidden;
+      max-width: 180px; text-overflow: ellipsis;
+    }
+    .status-text-label.thinking { color: var(--green); }
+
     /* Responsive */
     @media (max-width: 900px) {
       .split-container { flex-direction: column; }
@@ -301,6 +329,11 @@
       </nav>
     </div>
     <div class="header-right">
+      <!-- Agent Thinking Status Indicator -->
+      <div id="agent-status-indicator">
+        <div class="status-dot idle" id="agent-status-dot"></div>
+        <span class="status-text-label idle" id="agent-status-text">Idle</span>
+      </div>
       <!-- Health Status Indicator -->
       <div id="health-indicator" class="health-status" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.75rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border);">
         <div class="health-dot" style="width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim);"></div>
@@ -894,6 +927,63 @@
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // ── Agent Thinking Status via WebSocket ──
+    let statusWs = null;
+    let statusWsRetryTimeout = null;
+
+    function connectStatusWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${proto}//${location.host}/ws`;
+      try {
+        statusWs = new WebSocket(url);
+      } catch (e) { scheduleStatusWsRetry(); return; }
+
+      statusWs.onopen = () => {
+        if (statusWsRetryTimeout) { clearTimeout(statusWsRetryTimeout); statusWsRetryTimeout = null; }
+        // Fetch initial status on connect
+        fetch('/api/status').then(r => r.json()).then(applyAgentStatus).catch(() => {});
+      };
+
+      statusWs.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.event === 'agent:status') applyAgentStatus(msg.data);
+        } catch {}
+      };
+
+      statusWs.onclose = () => scheduleStatusWsRetry();
+      statusWs.onerror = () => {};
+    }
+
+    function scheduleStatusWsRetry() {
+      if (statusWsRetryTimeout) return;
+      statusWsRetryTimeout = setTimeout(() => {
+        statusWsRetryTimeout = null;
+        connectStatusWs();
+      }, 5000);
+    }
+
+    function applyAgentStatus(data) {
+      if (!data) return;
+      const dot = document.getElementById('agent-status-dot');
+      const textEl = document.getElementById('agent-status-text');
+      const indicator = document.getElementById('agent-status-indicator');
+      if (!dot || !textEl || !indicator) return;
+
+      const isThinking = data.status === 'thinking';
+      dot.className = `status-dot ${isThinking ? 'thinking' : 'idle'}`;
+      textEl.className = `status-text-label ${isThinking ? 'thinking' : 'idle'}`;
+      indicator.className = isThinking ? 'thinking' : '';
+
+      if (isThinking) {
+        const taskLabel = data.task ? `🤔 ${data.task}` : '🤔 Working…';
+        textEl.textContent = taskLabel;
+      } else {
+        textEl.textContent = 'Idle';
+      }
+    }
+
+    connectStatusWs();
     init();
   </script>
 </body>
