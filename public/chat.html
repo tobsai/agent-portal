@@ -868,6 +868,13 @@
               updateConnectionStatus('error', 'Pairing required');
               // Auto-retry after 5s in case pairing gets approved
               setTimeout(() => { if (ws) { ws.close(); connectWebSocket(); } }, 5000);
+            } else if (err.includes('device') || err.includes('signature') || err.includes('identity')) {
+              // Device auth failed — retry without device identity (token-only fallback)
+              console.log('[chat] device auth failed, retrying token-only:', err);
+              dbg('device-auth-fallback', err);
+              gatewayConfig.hasDeviceIdentity = false; // disable for this session
+              if (ws) { ws.close(); }
+              setTimeout(() => connectWebSocket(), 500);
             } else {
               showError(err);
               updateConnectionStatus('error', 'Auth failed');

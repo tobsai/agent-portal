@@ -935,7 +935,7 @@ app.post('/api/chat-sign', requireAuth, (req, res) => {
   try {
     const crypto = require('crypto');
     const signedAt = Date.now();
-    const scopes = 'operator.read,operator.write';
+    const scopes = 'operator.read,operator.write,operator.admin';
     const version = nonce ? 'v2' : 'v1';
     const parts = [version, deviceId, 'webchat-ui', 'webchat', 'operator', scopes, String(signedAt), token];
     if (nonce) parts.push(nonce);
