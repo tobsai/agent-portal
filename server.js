@@ -43,25 +43,124 @@ server.on('upgrade', (req, socket, head) => {
   }
 });
 
-// Gateway WebSocket proxy - browser connects here, we proxy to the gateway
+// Gateway WebSocket proxy - handles auth server-side so clients don't need device identity
 gwProxy.on('connection', (clientWs, req) => {
   const gwUrl = (process.env.GATEWAY_WS_URL || '').replace(/^https?/, 'ws').replace(/^(?!wss?:\/\/)/, 'wss://');
   if (!gwUrl) { clientWs.close(1008, 'Gateway not configured'); return; }
   console.log('[gw-proxy] new client, connecting to:', gwUrl);
   const gwWs = new WebSocket(gwUrl, { headers: { Origin: 'https://talos.mtree.io' } });
+  let authenticated = false;
+  let clientQueue = []; // Queue client messages until auth completes
+
   gwWs.on('open', () => console.log('[gw-proxy] upstream connected'));
-  gwWs.on('message', (data, isBinary) => { if (clientWs.readyState === WebSocket.OPEN) clientWs.send(isBinary ? data : data.toString()); });
+
+  gwWs.on('message', (data, isBinary) => {
+    const text = isBinary ? data : data.toString();
+
+    // Intercept connect.challenge — handle auth server-side
+    if (!authenticated) {
+      try {
+        const msg = JSON.parse(text);
+        if (msg.event === 'connect.challenge') {
+          const nonce = msg.payload?.nonce || '';
+          console.log('[gw-proxy] intercepted challenge, signing server-side');
+
+          const token = process.env.GATEWAY_TOKEN || '';
+          const deviceId = process.env.WEBCHAT_DEVICE_ID || '';
+          const publicKeyRaw = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
+          const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
+
+          const connectParams = {
+            minProtocol: 3, maxProtocol: 3,
+            client: { id: 'webchat-proxy', version: '1.0.0', platform: 'web', mode: 'webchat' },
+            role: 'operator',
+            scopes: ['operator.read', 'operator.write', 'operator.admin'],
+            auth: { token },
+            userAgent: 'agent-portal-proxy/1.0'
+          };
+
+          // Add device identity if configured
+          if (deviceId && publicKeyRaw && privateKeyPem) {
+            try {
+              const crypto = require('crypto');
+              const signedAt = Date.now();
+              const scopes = 'operator.read,operator.write,operator.admin';
+              const parts = ['v2', deviceId, 'webchat-proxy', 'web', 'operator', scopes, String(signedAt), token, nonce];
+              const payload = parts.join('.');
+              const privKey = crypto.createPrivateKey({ key: privateKeyPem, format: 'pem', type: 'pkcs8' });
+              const sig = crypto.sign(null, Buffer.from(payload), privKey);
+              const sigB64 = sig.toString('base64url');
+
+              connectParams.device = {
+                id: deviceId,
+                publicKey: publicKeyRaw,
+                signature: sigB64,
+                signedAt,
+                nonce
+              };
+              console.log('[gw-proxy] device identity attached');
+            } catch (e) {
+              console.error('[gw-proxy] device sign failed, trying token-only:', e.message);
+            }
+          } else {
+            console.log('[gw-proxy] no device identity configured, using token-only');
+          }
+
+          gwWs.send(JSON.stringify({ type: 'req', id: 'proxy-connect', method: 'connect', params: connectParams }));
+          return; // Don't forward challenge to client
+        }
+
+        // Intercept connect response
+        if (msg.type === 'res' && msg.id === 'proxy-connect') {
+          if (msg.ok) {
+            authenticated = true;
+            console.log('[gw-proxy] auth succeeded, piping');
+            // Send synthetic challenge+response to client so it knows we're connected
+            clientWs.send(JSON.stringify({ event: 'proxy.connected', payload: { status: 'ok' } }));
+            // Flush queued client messages
+            for (const queued of clientQueue) {
+              if (gwWs.readyState === WebSocket.OPEN) gwWs.send(queued);
+            }
+            clientQueue = [];
+          } else {
+            console.error('[gw-proxy] auth failed:', msg.error);
+            clientWs.send(JSON.stringify({ event: 'proxy.error', payload: { error: msg.error?.message || 'Auth failed' } }));
+            clientWs.close(1008, msg.error?.message || 'Auth failed');
+          }
+          return; // Don't forward connect response to client
+        }
+      } catch (e) { /* not JSON, pass through */ }
+    }
+
+    // Forward all other messages to client
+    if (clientWs.readyState === WebSocket.OPEN) clientWs.send(text);
+  });
+
   gwWs.on('close', (code, reason) => {
     console.log('[gw-proxy] upstream closed:', code);
-    // Codes 1005/1006 are reserved and cannot be used in initiated close frames
-    // Passing them to clientWs.close() throws TypeError and crashes the process
     const safeCode = (code === 1005 || code === 1006 || !code) ? 1000 : code;
     if (clientWs.readyState === WebSocket.OPEN || clientWs.readyState === WebSocket.CONNECTING) {
       clientWs.close(safeCode, reason);
     }
   });
   gwWs.on('error', (err) => { console.error('[gw-proxy] upstream error:', err.message); clientWs.close(1011, 'Gateway error'); });
-  clientWs.on('message', (data, isBinary) => { if (gwWs.readyState === WebSocket.OPEN) gwWs.send(isBinary ? data : data.toString()); });
+
+  clientWs.on('message', (data, isBinary) => {
+    const text = isBinary ? data : data.toString();
+    if (!authenticated) {
+      // Queue messages until proxy auth completes (skip client connect attempts)
+      try {
+        const msg = JSON.parse(text);
+        if (msg.method === 'connect') {
+          console.log('[gw-proxy] skipping client connect (proxy handles auth)');
+          return;
+        }
+      } catch (e) { /* not JSON */ }
+      clientQueue.push(text);
+      return;
+    }
+    if (gwWs.readyState === WebSocket.OPEN) gwWs.send(text);
+  });
   clientWs.on('close', () => { if (gwWs.readyState === WebSocket.OPEN || gwWs.readyState === WebSocket.CONNECTING) gwWs.close(); });
   clientWs.on('error', () => { if (gwWs.readyState === WebSocket.OPEN || gwWs.readyState === WebSocket.CONNECTING) gwWs.close(); });
 });
@@ -910,12 +1009,15 @@ app.get('/api/chat-debug', (req, res) => {
 app.get('/api/chat-config', requireAuth, (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.set('Pragma', 'no-cache');
+  // Return proxy URL — all clients connect through the portal proxy which handles auth server-side
+  const proxyWsUrl = (req.protocol === 'https' ? 'wss' : 'ws') + '://' + req.get('host') + '/ws/gateway';
   const config = {
-    gatewayWsUrl: process.env.GATEWAY_WS_URL || '',
-    gatewayToken: process.env.GATEWAY_TOKEN || '',
-    hasDeviceIdentity: !!(process.env.WEBCHAT_DEVICE_ID && process.env.WEBCHAT_DEVICE_PRIVATE_KEY)
+    gatewayWsUrl: proxyWsUrl,
+    gatewayToken: '', // Token is handled server-side by the proxy now
+    hasDeviceIdentity: false, // Device auth is handled server-side by the proxy
+    proxyMode: true // Signal to clients that auth is proxy-managed
   };
-  console.log('[chat-config] served:', { wsUrl: config.gatewayWsUrl, hasToken: !!config.gatewayToken, hasDevice: config.hasDeviceIdentity });
+  console.log('[chat-config] served:', { wsUrl: config.gatewayWsUrl, proxyMode: true });
   res.json(config);
 });
 
@@ -2316,11 +2418,14 @@ app.get('/api/activity-timeline', requireAuth, async (req, res) => {
   }
 });
 
-// Chat config (gateway WebSocket URL)
+// Chat config (gateway WebSocket URL) — returns proxy URL, auth handled server-side
 app.get('/api/chat/config', requireAuth, (req, res) => {
+  const proxyWsUrl = (req.protocol === 'https' ? 'wss' : 'ws') + '://' + req.get('host') + '/ws/gateway';
   res.json({
-    gatewayWsUrl: process.env.GATEWAY_WS_URL || '',
-    gatewayToken: process.env.GATEWAY_TOKEN || ''
+    gatewayWsUrl: proxyWsUrl,
+    gatewayToken: '',
+    hasDeviceIdentity: false,
+    proxyMode: true
   });
 });
 
