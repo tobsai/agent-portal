@@ -72,7 +72,7 @@ gwProxy.on('connection', (clientWs, req) => {
 
           const connectParams = {
             minProtocol: 3, maxProtocol: 3,
-            client: { id: 'webchat-proxy', version: '1.0.0', platform: 'web', mode: 'webchat' },
+            client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
             role: 'operator',
             scopes: ['operator.read', 'operator.write', 'operator.admin'],
             auth: { token },
