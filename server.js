@@ -70,6 +70,7 @@ gwProxy.on('connection', (clientWs, req) => {
           const publicKeyRaw = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
           const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
 
+          // Token-only auth — gateway accepts token without device identity
           const connectParams = {
             minProtocol: 3, maxProtocol: 3,
             client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
@@ -78,33 +79,7 @@ gwProxy.on('connection', (clientWs, req) => {
             auth: { token },
             userAgent: 'agent-portal-proxy/1.0'
           };
-
-          // Add device identity if configured
-          if (deviceId && publicKeyRaw && privateKeyPem) {
-            try {
-              const crypto = require('crypto');
-              const signedAt = Date.now();
-              const scopes = 'operator.read,operator.write,operator.admin';
-              const parts = ['v2', deviceId, 'webchat-proxy', 'web', 'operator', scopes, String(signedAt), token, nonce];
-              const payload = parts.join('.');
-              const privKey = crypto.createPrivateKey({ key: privateKeyPem, format: 'pem', type: 'pkcs8' });
-              const sig = crypto.sign(null, Buffer.from(payload), privKey);
-              const sigB64 = sig.toString('base64url');
-
-              connectParams.device = {
-                id: deviceId,
-                publicKey: publicKeyRaw,
-                signature: sigB64,
-                signedAt,
-                nonce
-              };
-              console.log('[gw-proxy] device identity attached');
-            } catch (e) {
-              console.error('[gw-proxy] device sign failed, trying token-only:', e.message);
-            }
-          } else {
-            console.log('[gw-proxy] no device identity configured, using token-only');
-          }
+          console.log('[gw-proxy] using token-only auth');
 
           gwWs.send(JSON.stringify({ type: 'req', id: 'proxy-connect', method: 'connect', params: connectParams }));
           return; // Don't forward challenge to client
