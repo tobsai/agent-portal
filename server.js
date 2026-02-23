@@ -70,7 +70,6 @@ gwProxy.on('connection', (clientWs, req) => {
           const publicKeyRaw = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
           const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
 
-          // Token-only auth — gateway accepts token without device identity
           const connectParams = {
             minProtocol: 3, maxProtocol: 3,
             client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
@@ -79,7 +78,29 @@ gwProxy.on('connection', (clientWs, req) => {
             auth: { token },
             userAgent: 'agent-portal-proxy/1.0'
           };
-          console.log('[gw-proxy] using token-only auth');
+
+          // Device auth for write scopes (token-only is read-only)
+          const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
+          const publicKeyB64 = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
+          if (privateKeyPem && publicKeyB64) {
+            try {
+              const crypto = require('crypto');
+              const raw = Buffer.from(publicKeyB64, 'base64url');
+              const deviceId = crypto.createHash('sha256').update(raw).digest('hex');
+              const signedAt = Date.now();
+              const scopes = 'operator.read,operator.write,operator.admin';
+              // Gateway payload format: pipe-delimited v2|deviceId|clientId|clientMode|role|scopes|signedAtMs|token|nonce
+              const payload = ['v2', deviceId, 'webchat-ui', 'webchat', 'operator', scopes, String(signedAt), token, nonce].join('|');
+              const privKey = crypto.createPrivateKey({ key: privateKeyPem, format: 'pem', type: 'pkcs8' });
+              const sig = crypto.sign(null, Buffer.from(payload), privKey);
+              connectParams.device = { id: deviceId, publicKey: publicKeyB64, signature: sig.toString('base64url'), signedAt, nonce };
+              console.log('[gw-proxy] device auth attached (write scopes)');
+            } catch (e) {
+              console.error('[gw-proxy] device sign failed, falling back to token-only:', e.message);
+            }
+          } else {
+            console.log('[gw-proxy] no device keys, using token-only (read-only)');
+          }
 
           gwWs.send(JSON.stringify({ type: 'req', id: 'proxy-connect', method: 'connect', params: connectParams }));
           return; // Don't forward challenge to client
