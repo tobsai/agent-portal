@@ -158,6 +158,212 @@ gwProxy.on('connection', (clientWs, req) => {
   clientWs.on('error', () => { if (gwWs.readyState === WebSocket.OPEN || gwWs.readyState === WebSocket.CONNECTING) gwWs.close(); });
 });
 
+const CHAT_SESSION_KEY = 'agent:main:main';
+const CHAT_BUFFER_LIMIT = 200;
+const chatMessageBuffer = [];
+const chatSseClients = new Set();
+const gatewayPendingReqs = new Map();
+let chatGatewayWs = null;
+let chatGatewayAuthenticated = false;
+let chatGatewayReconnectTimer = null;
+let chatGatewayReqCounter = 0;
+
+function writeSseEvent(res, event, data) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function broadcastChatEvent(event, data) {
+  for (const client of chatSseClients) {
+    writeSseEvent(client.res, event, data);
+  }
+}
+
+function normalizeChatText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter(part => part && part.type === 'text' && typeof part.text === 'string')
+      .map(part => part.text)
+      .join('\n');
+  }
+  return '';
+}
+
+function normalizeChatMessage(message) {
+  if (!message || (message.role !== 'user' && message.role !== 'assistant')) return null;
+  const text = normalizeChatText(message.content || message.text || '');
+  if (!text) return null;
+  return {
+    id: message.id || `msg-${uuidv4()}`,
+    role: message.role,
+    text,
+    timestamp: message.timestamp || new Date().toISOString(),
+    status: message.status || 'delivered'
+  };
+}
+
+function pushChatMessage(message) {
+  const index = chatMessageBuffer.findIndex(m => m.id === message.id);
+  if (index >= 0) chatMessageBuffer[index] = message;
+  else chatMessageBuffer.push(message);
+  while (chatMessageBuffer.length > CHAT_BUFFER_LIMIT) chatMessageBuffer.shift();
+}
+
+function buildGatewayConnectParams(nonce = '') {
+  const token = process.env.GATEWAY_TOKEN || '';
+  const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
+  const publicKeyB64 = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
+  const params = {
+    minProtocol: 3, maxProtocol: 3,
+    client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
+    role: 'operator',
+    scopes: ['operator.read', 'operator.write', 'operator.admin'],
+    auth: { token },
+    userAgent: 'agent-portal-chat-api/1.0'
+  };
+
+  if (privateKeyPem && publicKeyB64) {
+    try {
+      const crypto = require('crypto');
+      const raw = Buffer.from(publicKeyB64, 'base64url');
+      const deviceId = crypto.createHash('sha256').update(raw).digest('hex');
+      const signedAt = Date.now();
+      const scopes = 'operator.read,operator.write,operator.admin';
+      const payload = ['v2', deviceId, 'webchat-ui', 'webchat', 'operator', scopes, String(signedAt), token, nonce].join('|');
+      const privKey = crypto.createPrivateKey({ key: privateKeyPem, format: 'pem', type: 'pkcs8' });
+      const sig = crypto.sign(null, Buffer.from(payload), privKey);
+      params.device = { id: deviceId, publicKey: publicKeyB64, signature: sig.toString('base64url'), signedAt, nonce };
+    } catch (err) {
+      console.error('[chat-api] device auth signing failed:', err.message);
+    }
+  }
+
+  return params;
+}
+
+function scheduleChatGatewayReconnect() {
+  if (chatGatewayReconnectTimer) return;
+  chatGatewayReconnectTimer = setTimeout(() => {
+    chatGatewayReconnectTimer = null;
+    connectChatGateway();
+  }, 3000);
+}
+
+function chatGatewayRequest(method, params, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    if (!chatGatewayWs || chatGatewayWs.readyState !== WebSocket.OPEN || !chatGatewayAuthenticated) {
+      reject(new Error('Gateway not connected'));
+      return;
+    }
+    const id = `chat-${Date.now()}-${++chatGatewayReqCounter}`;
+    const timer = setTimeout(() => {
+      gatewayPendingReqs.delete(id);
+      reject(new Error(`${method} timed out`));
+    }, timeoutMs);
+    gatewayPendingReqs.set(id, {
+      resolve: (payload) => { clearTimeout(timer); resolve(payload); },
+      reject: (error) => { clearTimeout(timer); reject(error); }
+    });
+    chatGatewayWs.send(JSON.stringify({ type: 'req', id, method, params }));
+  });
+}
+
+async function refreshChatHistoryFromGateway() {
+  try {
+    const response = await chatGatewayRequest('chat.history', { sessionKey: CHAT_SESSION_KEY });
+    const history = (response.payload?.messages || []).map(normalizeChatMessage).filter(Boolean);
+    chatMessageBuffer.length = 0;
+    history.slice(-CHAT_BUFFER_LIMIT).forEach(pushChatMessage);
+  } catch (err) {
+    console.error('[chat-api] failed to refresh history:', err.message);
+  }
+}
+
+function connectChatGateway() {
+  if (chatGatewayWs && (chatGatewayWs.readyState === WebSocket.OPEN || chatGatewayWs.readyState === WebSocket.CONNECTING)) return;
+  const gwUrl = (process.env.GATEWAY_WS_URL || '').replace(/^https?/, 'ws').replace(/^(?!wss?:\/\/)/, 'wss://');
+  if (!gwUrl) return;
+
+  chatGatewayWs = new WebSocket(gwUrl, { headers: { Origin: 'https://talos.mtree.io' } });
+
+  chatGatewayWs.on('message', async (data, isBinary) => {
+    const text = isBinary ? data : data.toString();
+    let msg;
+    try {
+      msg = JSON.parse(text);
+    } catch {
+      return;
+    }
+
+    if (msg.event === 'connect.challenge') {
+      const connectId = `chat-connect-${Date.now()}`;
+      chatGatewayWs.send(JSON.stringify({ type: 'req', id: connectId, method: 'connect', params: buildGatewayConnectParams(msg.payload?.nonce || '') }));
+      return;
+    }
+
+    if (msg.type === 'res' && typeof msg.id === 'string' && msg.id.startsWith('chat-connect-')) {
+      chatGatewayAuthenticated = !!msg.ok;
+      broadcastChatEvent('status', { connected: chatGatewayAuthenticated });
+      if (!msg.ok) {
+        broadcastChatEvent('error', { message: msg.error?.message || 'Gateway auth failed' });
+        return;
+      }
+      try {
+        await chatGatewayRequest('chat.subscribe', { sessionKey: CHAT_SESSION_KEY });
+      } catch (err) {
+        console.error('[chat-api] subscribe failed:', err.message);
+      }
+      await refreshChatHistoryFromGateway();
+      return;
+    }
+
+    if (msg.type === 'res' && gatewayPendingReqs.has(msg.id)) {
+      const pending = gatewayPendingReqs.get(msg.id);
+      gatewayPendingReqs.delete(msg.id);
+      if (msg.ok) pending.resolve(msg);
+      else pending.reject(new Error(msg.error?.message || 'Gateway request failed'));
+      return;
+    }
+
+    if (msg.event === 'chat') {
+      const payload = msg.payload || msg.data || {};
+      const state = payload.state;
+      if (state === 'delta') {
+        broadcastChatEvent('typing', { active: true });
+        return;
+      }
+      if (state === 'error') {
+        broadcastChatEvent('typing', { active: false });
+        broadcastChatEvent('error', { message: payload.errorMessage || 'Agent error' });
+        return;
+      }
+      if (state === 'final') {
+        broadcastChatEvent('typing', { active: false });
+      }
+      const normalized = normalizeChatMessage(payload.message || payload);
+      if (normalized) {
+        pushChatMessage(normalized);
+        broadcastChatEvent('message', normalized);
+      }
+    }
+  });
+
+  chatGatewayWs.on('close', () => {
+    chatGatewayAuthenticated = false;
+    broadcastChatEvent('status', { connected: false });
+    for (const [id, pending] of gatewayPendingReqs.entries()) {
+      pending.reject(new Error('Gateway disconnected'));
+      gatewayPendingReqs.delete(id);
+    }
+    scheduleChatGatewayReconnect();
+  });
+
+  chatGatewayWs.on('error', () => {});
+}
+
+connectChatGateway();
+
 const PORT = process.env.PORT || 3847;
 
 // Feature Flags
@@ -996,6 +1202,77 @@ app.post('/api/chat-debug', (req, res) => {
 app.get('/api/chat-debug', (req, res) => {
   if (!req.isAuthenticated()) return res.status(401).json({ error: 'unauthorized' });
   res.json(chatDebugLog);
+});
+
+app.get('/api/chat/messages', requireAuth, (req, res) => {
+  connectChatGateway();
+  const rawLimit = parseInt(req.query.limit, 10);
+  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, CHAT_BUFFER_LIMIT)) : 50;
+  const before = req.query.before;
+  let end = chatMessageBuffer.length;
+  if (before) {
+    const beforeIndex = chatMessageBuffer.findIndex(m => m.id === before);
+    if (beforeIndex >= 0) end = beforeIndex;
+  }
+  const start = Math.max(0, end - limit);
+  res.json({
+    messages: chatMessageBuffer.slice(start, end),
+    hasMore: start > 0
+  });
+});
+
+app.post('/api/chat/send', requireAuth, async (req, res) => {
+  connectChatGateway();
+  const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+  if (!message) return res.status(400).json({ error: 'message is required' });
+  if (!chatGatewayAuthenticated) return res.status(503).json({ error: 'Gateway unavailable' });
+
+  const idempotencyKey = req.body?.idempotencyKey || `idemp-${uuidv4()}`;
+  try {
+    await chatGatewayRequest('chat.send', { sessionKey: CHAT_SESSION_KEY, message, idempotencyKey });
+    const entry = { id: `msg-${uuidv4()}`, role: 'user', text: message, timestamp: new Date().toISOString(), status: 'delivered' };
+    pushChatMessage(entry);
+    broadcastChatEvent('message', entry);
+    res.json({ id: entry.id, status: 'delivered' });
+  } catch (err) {
+    res.status(502).json({ error: err.message || 'Failed to send message' });
+  }
+});
+
+app.get('/api/chat/stream', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    const queryToken = typeof req.query?.token === 'string' ? req.query.token : '';
+    if (queryToken && !queryToken.startsWith('ak_')) {
+      try {
+        const decoded = jwt.verify(queryToken, JWT_SECRET);
+        const user = await db.get('SELECT * FROM users WHERE id = $1', [decoded.userId]);
+        if (user) {
+          req.user = user;
+          req.isAuthenticated = () => true;
+        }
+      } catch (err) {}
+    }
+  }
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Authentication required' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+  connectChatGateway();
+
+  const client = {
+    res,
+    keepalive: setInterval(() => res.write(': keepalive\n\n'), 25000)
+  };
+  chatSseClients.add(client);
+  writeSseEvent(res, 'status', { connected: chatGatewayAuthenticated });
+
+  req.on('close', () => {
+    clearInterval(client.keepalive);
+    chatSseClients.delete(client);
+  });
 });
 
 // API endpoint for chat config (gateway WS URL)

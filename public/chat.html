@@ -684,13 +684,11 @@
     }
 
     // State
-    let ws = null;
+    let eventSource = null;
     let reconnectTimer = null;
     let reconnectAttempts = 0;
     let isWaitingForResponse = false;
     let currentUser = null;
-    let gatewayConfig = null;
-    let currentRunId = null;
     let messageQueue = []; // queued messages to send after current response
     let pendingImage = null; // { dataUrl, mimeType } — selected but not yet sent
 
@@ -717,9 +715,8 @@
 
     async function init() {
       await loadUser();
-      await loadConfig();
-      dbg('init', { wsUrl: gatewayConfig?.gatewayWsUrl?.substring(0, 60), hasToken: !!gatewayConfig?.gatewayToken });
-      connectWebSocket();
+      await loadHistory();
+      connectEventStream();
       setupInputListeners();
     }
 
@@ -739,42 +736,112 @@
       } catch (err) { console.error('Failed to load user:', err); }
     }
 
-    async function loadConfig() {
+    async function loadHistory() {
       try {
         const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
-        const res = await fetch('/api/chat-config?_t=' + Date.now(), { headers, cache: 'no-store' });
-        gatewayConfig = await res.json();
-        console.log('[chat] config loaded:', { wsUrl: gatewayConfig?.gatewayWsUrl, hasToken: !!gatewayConfig?.gatewayToken, hasDevice: gatewayConfig?.hasDeviceIdentity });
-      } catch (err) { console.error('Failed to load config:', err); }
+        const res = await fetch('/api/chat/messages?limit=200', { headers, cache: 'no-store' });
+        if (!res.ok) throw new Error('History load failed');
+        const payload = await res.json();
+        const msgs = Array.isArray(payload?.messages) ? payload.messages.slice() : [];
+        msgs.sort((a, b) => {
+          const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          return ta - tb;
+        });
+        clearMessages();
+        msgs.forEach(msg => {
+          if (msg.role !== 'user' && msg.role !== 'assistant') return;
+          const content = msg.text || extractText(msg.content);
+          if (!content) return;
+          if (msg.role === 'user') {
+            if (content.startsWith('Read HEARTBEAT.md') ||
+                content.startsWith('System:') ||
+                content.startsWith('[media attached:') ||
+                content.startsWith('Pre-compaction memory') ||
+                content.includes('HEARTBEAT_OK') ||
+                content.includes('NO_REPLY')) return;
+          }
+          if (msg.role === 'assistant') {
+            if (content === 'NO_REPLY' ||
+                content === 'HEARTBEAT_OK' ||
+                content.includes('Read image file') ||
+                content.includes('(no output)') ||
+                content.includes('Process still running') ||
+                content.includes('Command still running') ||
+                content.includes('Process exited')) return;
+          }
+          addMessage(msg.role, content, msg.timestamp);
+        });
+      } catch (err) {
+        console.error('Failed to load history:', err);
+      }
     }
 
-    function connectWebSocket() {
+    function connectEventStream() {
       updateConnectionStatus('reconnecting', 'Connecting...');
-      if (!gatewayConfig || !gatewayConfig.gatewayWsUrl) {
-        showError('Gateway not configured.');
-        updateConnectionStatus('error', 'Not configured');
-        return;
-      }
       try {
-        // Use server-side WebSocket proxy instead of direct gateway connection
-        // This avoids Tailscale Funnel reachability issues from the browser
-        let wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/gateway';
-
-        console.log('[chat] connecting to:', wsUrl);
-        ws = new WebSocket(wsUrl);
-        ws.binaryType = 'arraybuffer';
-        ws.onopen = () => { console.log('[chat] ws-open'); dbg('ws-open'); };
-        ws.onmessage = (event) => {
-          try {
-            const text = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data);
-            handleMessage(JSON.parse(text));
-          } catch (err) { console.error('Parse error:', err); }
+        if (eventSource) eventSource.close();
+        const streamUrl = jwtToken ? `/api/chat/stream?token=${encodeURIComponent(jwtToken)}` : '/api/chat/stream';
+        eventSource = new EventSource(streamUrl);
+        eventSource.onopen = () => {
+          reconnectAttempts = 0;
+          updateConnectionStatus('connected', 'Connected');
+          hideError();
         };
-        ws.onerror = (err) => console.error('[chat] WS error:', err, 'readyState:', ws?.readyState);
-        ws.onclose = (event) => {
-          console.log('WS closed:', event.code, event.reason);
+        eventSource.addEventListener('status', (event) => {
+          try {
+            const data = JSON.parse(event.data || '{}');
+            if (data.connected) {
+              reconnectAttempts = 0;
+              updateConnectionStatus('connected', 'Connected');
+              hideError();
+            } else {
+              updateConnectionStatus('reconnecting', 'Connecting...');
+            }
+          } catch (err) {
+            console.error('Status parse error:', err);
+          }
+        });
+        eventSource.addEventListener('typing', (event) => {
+          try {
+            const data = JSON.parse(event.data || '{}');
+            if (data.active && isWaitingForResponse) addLoadingIndicator();
+            if (!data.active) removeLoadingIndicator();
+          } catch (err) {
+            console.error('Typing parse error:', err);
+          }
+        });
+        eventSource.addEventListener('error', (event) => {
+          let msg = 'Stream error';
+          try {
+            const data = JSON.parse(event.data || '{}');
+            msg = data.message || msg;
+          } catch (err) {}
+          showError(msg);
+        });
+        eventSource.addEventListener('message', (event) => {
+          try {
+            const msg = JSON.parse(event.data || '{}');
+            const content = msg.text || extractText(msg.content);
+            if (!content) return;
+            if (msg.role === 'user') {
+              const existing = messagesContainer.querySelectorAll('.message.user .message-bubble');
+              const duplicate = Array.from(existing).some(el => el.textContent === content);
+              if (!duplicate && !isWaitingForResponse) addMessage('user', content, msg.timestamp);
+              return;
+            }
+            if (msg.role === 'assistant') {
+              removeLoadingIndicator();
+              addMessage('assistant', content, msg.timestamp);
+              isWaitingForResponse = false;
+              processQueue();
+            }
+          } catch (err) {
+            console.error('Message parse error:', err);
+          }
+        });
+        eventSource.onerror = () => {
           updateConnectionStatus('error', 'Disconnected');
-          // Reset send lock so chat doesn't freeze after reconnect
           if (isWaitingForResponse) {
             isWaitingForResponse = false;
             removeLoadingIndicator();
@@ -793,203 +860,7 @@
       reconnectAttempts++;
       const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
       updateConnectionStatus('reconnecting', 'Reconnecting in ' + Math.round(delay/1000) + 's...');
-      reconnectTimer = setTimeout(() => { reconnectTimer = null; connectWebSocket(); }, delay);
-    }
-
-    function wsSend(data) {
-      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
-      else showError('Not connected');
-    }
-
-    function handleMessage(data) {
-      dbg('ws-msg', { event: data.event || data.type, ok: data.ok, error: data.error?.message, state: data.payload?.state });
-
-      // Proxy-managed auth: proxy handles gateway challenge/connect server-side
-      if (data.event === 'proxy.connected') {
-        dbg('proxy-connected');
-        reconnectAttempts = 0;
-        updateConnectionStatus('connected', 'Connected');
-        hideError();
-        wsSend({ type: 'req', id: 'hist-1', method: 'chat.history', params: { sessionKey: 'agent:main:main' } });
-        wsSend({ type: 'req', id: 'sub-1', method: 'chat.subscribe', params: { sessionKey: 'agent:main:main' } });
-        return;
-      }
-
-      if (data.event === 'proxy.error') {
-        dbg('proxy-error', data.payload?.error);
-        showError(data.payload?.error || 'Proxy auth failed');
-        updateConnectionStatus('error', 'Auth failed');
-        scheduleReconnect();
-        return;
-      }
-
-      // Legacy: direct gateway challenge (fallback if not using proxy)
-      if (data.event === 'connect.challenge') {
-        dbg('auth-challenge-direct');
-        const nonce = data.payload?.nonce || '';
-        wsSend({
-          type: 'req', id: 'connect-1', method: 'connect',
-          params: {
-            minProtocol: 3, maxProtocol: 3,
-            client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
-            role: 'operator',
-            scopes: ['operator.read', 'operator.write', 'operator.admin'],
-            auth: { token: gatewayConfig.gatewayToken },
-            userAgent: 'agent-portal-chat/1.0'
-          }
-        });
-        return;
-      }
-
-      // RPC responses
-      if (data.type === 'res') {
-        if (!data.ok && data.error) {
-          console.error('RPC error:', data.id, data.error);
-          if (data.id !== 'connect-1' && data.id !== 'hist-1' && data.id !== 'sub-1') {
-            showError(data.error.message || 'Request failed');
-            removeLoadingIndicator();
-            isWaitingForResponse = false;
-          }
-        }
-        if (data.id === 'connect-1') {
-          if (data.ok) {
-            reconnectAttempts = 0;
-            updateConnectionStatus('connected', 'Connected');
-            hideError();
-            wsSend({ type: 'req', id: 'hist-1', method: 'chat.history', params: { sessionKey: 'agent:main:main' } });
-            wsSend({ type: 'req', id: 'sub-1', method: 'chat.subscribe', params: { sessionKey: 'agent:main:main' } });
-          } else {
-            const err = data.error?.message || 'Auth failed';
-            showError(err);
-            updateConnectionStatus('error', 'Auth failed');
-            scheduleReconnect();
-          }
-          return;
-        }
-        if (data.id === 'hist-1') {
-          const msgs = (data.payload?.messages || []).slice();
-          // Sort by timestamp to ensure correct display order
-          msgs.sort((a, b) => {
-            const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-            const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-            return ta - tb;
-          });
-          clearMessages();
-          msgs.forEach(msg => {
-            // Skip system messages
-            if (msg.role === 'system') return;
-            
-            if (msg.role === 'user' || msg.role === 'assistant') {
-              const content = extractText(msg.content);
-              if (!content) return;
-              
-              // Filter tool noise from user messages
-              if (msg.role === 'user') {
-                if (content.startsWith('Read HEARTBEAT.md') || 
-                    content.startsWith('System:') || 
-                    content.startsWith('[media attached:') || 
-                    content.startsWith('Pre-compaction memory') ||
-                    content.includes('HEARTBEAT_OK') ||
-                    content.includes('NO_REPLY')) {
-                  return;
-                }
-              }
-              
-              // Filter tool noise from assistant messages
-              if (msg.role === 'assistant') {
-                if (content === 'NO_REPLY' || 
-                    content === 'HEARTBEAT_OK' ||
-                    content.includes('Read image file') ||
-                    content.includes('(no output)') ||
-                    content.includes('Process still running') ||
-                    content.includes('Command still running') ||
-                    content.includes('Process exited')) {
-                  return;
-                }
-              }
-              
-              addMessage(msg.role, content, msg.timestamp);
-            }
-          });
-          return;
-        }
-        // chat.send ack
-        if (data.ok && data.payload?.status === 'started') {
-          currentRunId = data.payload.runId;
-          return;
-        }
-        return;
-      }
-
-      // Streaming chat event — assistant reply (delta or final)
-      if (data.event === 'chat') {
-        const payload = data.payload || data.data || data;
-        const state = payload.state; // 'delta', 'final', or 'error'
-        const msg = payload.message;
-        console.log('[chat-event]', state, msg?.role, msg?.content?.substring?.(0, 50) || '');
-
-        if (state === 'error') {
-          removeLoadingIndicator();
-          showError(payload.errorMessage || 'Agent error');
-          isWaitingForResponse = false;
-          currentRunId = null;
-          processQueue();
-          return;
-        }
-
-        // Handle user message echo from subscription — ensure it appears
-        // BEFORE the assistant response (fixes response-above-question bug)
-        if (msg && msg.role === 'user') {
-          const content = extractText(msg.content);
-          if (content && !isWaitingForResponse) {
-            // Only add if this message isn't already in the DOM (sent from another surface like iMessage)
-            const existingMsgs = messagesContainer.querySelectorAll('.message.user .message-bubble');
-            const isDuplicate = Array.from(existingMsgs).some(el => el.textContent === content);
-            if (!isDuplicate) {
-              addMessage('user', content, msg.timestamp);
-            }
-          }
-          // Don't return — fall through in case state is also 'final'
-        }
-
-        if (msg && msg.role === 'assistant') {
-          const content = extractText(msg.content);
-          if (content) {
-            // Ensure the loading indicator (which sits after the user message)
-            // is removed before we add the response
-            removeLoadingIndicator();
-            if (state === 'delta') {
-              updateStreamingMessage(content);
-            } else {
-              // final or unrecognized state — finalize
-              finalizeStreamingMessage(content);
-              isWaitingForResponse = false;
-              currentRunId = null;
-              processQueue();
-            }
-          }
-        }
-
-        if (state === 'final' && (!msg || (msg.role !== 'assistant' && msg.role !== 'user'))) {
-          // final with no actionable message (e.g. empty response)
-          removeLoadingIndicator();
-          isWaitingForResponse = false;
-          currentRunId = null;
-          processQueue();
-        }
-        return;
-      }
-
-      // Ignore non-chat events
-      if (data.event) return;
-
-      // Error
-      if (data.error) {
-        showError(typeof data.error === 'string' ? data.error : data.error.message || 'Unknown error');
-        removeLoadingIndicator();
-        isWaitingForResponse = false;
-        processQueue();
-      }
+      reconnectTimer = setTimeout(() => { reconnectTimer = null; connectEventStream(); }, delay);
     }
 
     function extractText(content) {
@@ -1266,7 +1137,7 @@
       const text = messageInput.value.trim();
       const image = pendingImage;
       if (!text && !image) return;
-      if (!ws || ws.readyState !== WebSocket.OPEN) { showError('Not connected'); return; }
+      if (!eventSource || eventSource.readyState === EventSource.CLOSED) { showError('Not connected'); return; }
 
       messageInput.value = '';
       messageInput.style.height = 'auto';
@@ -1294,9 +1165,26 @@
       dispatchMessage(fullContent);
     }
 
-    function dispatchMessage(text) {
+    async function dispatchMessage(text) {
       const sendId = 'send-' + Date.now();
-      wsSend({ type: 'req', id: sendId, method: 'chat.send', params: { sessionKey: 'agent:main:main', message: text, idempotencyKey: sendId } });
+      const headers = { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) };
+      try {
+        const response = await fetch('/api/chat/send', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ message: text, idempotencyKey: sendId })
+        });
+        if (!response.ok) {
+          const errorPayload = await response.json().catch(() => ({}));
+          throw new Error(errorPayload.error || 'Send failed');
+        }
+      } catch (err) {
+        showError(err.message || 'Send failed');
+        isWaitingForResponse = false;
+        markMessageDone(activeUserMsg);
+        processQueue();
+        return;
+      }
       addLoadingIndicator();
       isWaitingForResponse = true;
       // Safety timeout: unlock after 120s if no response received
