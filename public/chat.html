@@ -691,6 +691,7 @@
     let currentUser = null;
     let messageQueue = []; // queued messages to send after current response
     let pendingImage = null; // { dataUrl, mimeType } — selected but not yet sent
+    const renderedMessageKeys = new Set(); // dedup: role|timestamp|content-prefix
 
     const messagesContainer = document.getElementById('messages');
     const messageInput = document.getElementById('message-input');
@@ -825,9 +826,9 @@
             const content = msg.text || extractText(msg.content);
             if (!content) return;
             if (msg.role === 'user') {
-              const existing = messagesContainer.querySelectorAll('.message.user .message-bubble');
-              const duplicate = Array.from(existing).some(el => el.textContent === content);
-              if (!duplicate && !isWaitingForResponse) addMessage('user', content, msg.timestamp);
+              // Only show user messages from the stream when NOT waiting for a response
+              // (i.e. messages from other sessions/surfaces). addMessage handles dedup.
+              if (!isWaitingForResponse) addMessage('user', content, msg.timestamp);
               return;
             }
             if (msg.role === 'assistant') {
@@ -839,6 +840,7 @@
                 processQueue();
                 return;
               }
+              // addMessage handles dedup via renderedMessageKeys
               addMessage('assistant', content, msg.timestamp);
               isWaitingForResponse = false;
               processQueue();
@@ -901,7 +903,13 @@
       return text;
     }
 
-    function clearMessages() { messagesContainer.innerHTML = ''; }
+    function clearMessages() { messagesContainer.innerHTML = ''; renderedMessageKeys.clear(); }
+
+    function msgKey(role, content, timestamp) {
+      // Key for dedup: role + timestamp (if available) + first 60 chars of content
+      const ts = timestamp ? new Date(timestamp).toISOString() : '';
+      return role + '|' + ts + '|' + (content || '').slice(0, 60);
+    }
 
     function addMessage(role, content, timestamp, statusType) {
       // Suppress internal control tokens — never render these as visible messages
@@ -909,6 +917,11 @@
           content === 'NO_REPLY' || content === 'HEARTBEAT_OK' ||
           content.trimStart().startsWith('NO_REPLY') || content.trimStart().startsWith('HEARTBEAT_OK')
       )) return null;
+
+      // Dedup: skip if we've already rendered this message
+      const key = msgKey(role, content, timestamp);
+      if (renderedMessageKeys.has(key)) return null;
+      renderedMessageKeys.add(key);
 
       const emptyState = messagesContainer.querySelector('.empty-state');
       if (emptyState) emptyState.remove();
@@ -1027,6 +1040,25 @@
       messageInput.addEventListener('input', () => {
         messageInput.style.height = 'auto';
         messageInput.style.height = messageInput.scrollHeight + 'px';
+      });
+      // Image paste: Cmd+V / Ctrl+V with an image in the clipboard
+      messageInput.addEventListener('paste', (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (!file) continue;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              pendingImage = { dataUrl: ev.target.result, mimeType: file.type };
+              showImagePreview(ev.target.result);
+            };
+            reader.readAsDataURL(file);
+            break; // only handle the first image
+          }
+        }
       });
     }
 
