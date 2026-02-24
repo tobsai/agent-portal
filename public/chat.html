@@ -873,42 +873,18 @@
     }
 
     function extractText(content) {
-      let text = '';
-      if (typeof content === 'string') {
-        text = content;
-      } else if (Array.isArray(content)) {
-        text = content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) {
+        return content.filter(c => c.type === 'text').map(c => c.text).join('\n');
       }
-      
-      // Filter tool noise patterns from streaming content
-      if (text) {
-        // Skip messages with tool output patterns
-        const toolPatterns = [
-          'Read image file',
-          '(no output)',
-          'Process still running',
-          'Command still running',
-          'Process exited',
-          'HEARTBEAT_OK',
-          'NO_REPLY'
-        ];
-        
-        for (const pattern of toolPatterns) {
-          if (text.includes(pattern)) {
-            return ''; // Filter out entirely if it contains tool noise
-          }
-        }
-      }
-      
-      return text;
+      return '';
     }
 
     function clearMessages() { messagesContainer.innerHTML = ''; renderedMessageKeys.clear(); }
 
     function msgKey(role, content, timestamp) {
-      // Key for dedup: role + timestamp (if available) + first 60 chars of content
-      const ts = timestamp ? new Date(timestamp).toISOString() : '';
-      return role + '|' + ts + '|' + (content || '').slice(0, 60);
+      // Key for dedup: role + first 120 chars of content (timestamp excluded to prevent duplicate bubbles)
+      return role + '|' + (content || '').slice(0, 120);
     }
 
     function addMessage(role, content, timestamp, statusType) {
@@ -1207,6 +1183,7 @@
       // Show as sending
       const msgEl = addMessage('user', fullContent, null, 'sending');
       activeUserMsg = msgEl;
+      isWaitingForResponse = true;   // set synchronously — before dispatchMessage's async fetch
       dispatchMessage(fullContent);
     }
 
