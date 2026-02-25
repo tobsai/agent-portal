@@ -691,7 +691,7 @@
     let currentUser = null;
     let messageQueue = []; // queued messages to send after current response
     let pendingImage = null; // { dataUrl, mimeType } — selected but not yet sent
-    const renderedMessageKeys = new Set(); // dedup: role|timestamp|content-prefix
+    const renderedMessageKeys = new Set(); // dedup: 'id|{msgId}' for assistant, 'role|content-prefix' for user
 
     const messagesContainer = document.getElementById('messages');
     const messageInput = document.getElementById('message-input');
@@ -771,7 +771,7 @@
                 content.includes('Command still running') ||
                 content.includes('Process exited')) return;
           }
-          addMessage(msg.role, content, msg.timestamp);
+          addMessage(msg.role, content, msg.timestamp, undefined, msg.id);
         });
       } catch (err) {
         console.error('Failed to load history:', err);
@@ -828,7 +828,7 @@
             if (msg.role === 'user') {
               // Only show user messages from the stream when NOT waiting for a response
               // (i.e. messages from other sessions/surfaces). addMessage handles dedup.
-              if (!isWaitingForResponse) addMessage('user', content, msg.timestamp);
+              if (!isWaitingForResponse) addMessage('user', content, msg.timestamp, undefined, msg.id);
               return;
             }
             if (msg.role === 'assistant') {
@@ -840,8 +840,14 @@
                 processQueue();
                 return;
               }
-              // addMessage handles dedup via renderedMessageKeys
-              addMessage('assistant', content, msg.timestamp);
+              // Filter tool noise patterns that sometimes surface as assistant messages
+              if (content.includes('Read image file') || content.includes('(no output)') ||
+                  content.includes('Process still running') || content.includes('Command still running') ||
+                  content.includes('Process exited')) {
+                return; // Don't reset isWaitingForResponse — this is tool noise, not a real reply
+              }
+              // addMessage handles dedup via renderedMessageKeys (ID-based for assistant)
+              addMessage('assistant', content, msg.timestamp, undefined, msg.id);
               isWaitingForResponse = false;
               processQueue();
             }
@@ -882,12 +888,15 @@
 
     function clearMessages() { messagesContainer.innerHTML = ''; renderedMessageKeys.clear(); }
 
-    function msgKey(role, content, timestamp) {
-      // Key for dedup: role + first 120 chars of content (timestamp excluded to prevent duplicate bubbles)
+    function msgKey(role, content, id) {
+      // Assistant messages: key by stable server ID so same-content responses are NOT over-deduplicated.
+      // User messages: key by content prefix to collapse the double-broadcast
+      //   (server emits once from /api/chat/send and once from the gateway echo, with different IDs).
+      if (role === 'assistant' && id) return 'id|' + id;
       return role + '|' + (content || '').slice(0, 120);
     }
 
-    function addMessage(role, content, timestamp, statusType) {
+    function addMessage(role, content, timestamp, statusType, id) {
       // Suppress internal control tokens — never render these as visible messages
       if (role === 'assistant' && content && (
           content === 'NO_REPLY' || content === 'HEARTBEAT_OK' ||
@@ -895,7 +904,7 @@
       )) return null;
 
       // Dedup: skip if we've already rendered this message
-      const key = msgKey(role, content, timestamp);
+      const key = msgKey(role, content, id);
       if (renderedMessageKeys.has(key)) return null;
       renderedMessageKeys.add(key);
 
