@@ -163,6 +163,30 @@ const CHAT_BUFFER_LIMIT = 200;
 const chatMessageBuffer = [];
 const chatSseClients = new Set();
 const gatewayPendingReqs = new Map();
+// Track recently-sent user message content to suppress gateway echo duplicates.
+// Maps content-hash → timestamp. Entries expire after 30 seconds.
+const recentUserSends = new Map();
+const RECENT_USER_SEND_TTL = 30000;
+function userContentKey(text) { return (text || '').slice(0, 200); }
+function trackUserSend(text) {
+  const key = userContentKey(text);
+  recentUserSends.set(key, Date.now());
+  // Prune old entries
+  if (recentUserSends.size > 50) {
+    const now = Date.now();
+    for (const [k, ts] of recentUserSends) {
+      if (now - ts > RECENT_USER_SEND_TTL) recentUserSends.delete(k);
+    }
+  }
+}
+function isRecentUserSend(text) {
+  const key = userContentKey(text);
+  const ts = recentUserSends.get(key);
+  if (!ts) return false;
+  if (Date.now() - ts > RECENT_USER_SEND_TTL) { recentUserSends.delete(key); return false; }
+  recentUserSends.delete(key); // consume — only suppress one echo
+  return true;
+}
 let chatGatewayWs = null;
 let chatGatewayAuthenticated = false;
 let chatGatewayReconnectTimer = null;
@@ -204,9 +228,19 @@ function normalizeChatMessage(message) {
 }
 
 function pushChatMessage(message) {
+  // ID-based dedup (update in place)
   const index = chatMessageBuffer.findIndex(m => m.id === message.id);
-  if (index >= 0) chatMessageBuffer[index] = message;
-  else chatMessageBuffer.push(message);
+  if (index >= 0) { chatMessageBuffer[index] = message; return; }
+  // Content-based dedup for user messages: skip if same content exists within last 30s
+  if (message.role === 'user') {
+    const msgTime = new Date(message.timestamp || Date.now()).getTime();
+    const dup = chatMessageBuffer.find(m =>
+      m.role === 'user' && m.text === message.text &&
+      Math.abs(new Date(m.timestamp || 0).getTime() - msgTime) < 30000
+    );
+    if (dup) return; // Already in buffer
+  }
+  chatMessageBuffer.push(message);
   while (chatMessageBuffer.length > CHAT_BUFFER_LIMIT) chatMessageBuffer.shift();
 }
 
@@ -343,6 +377,10 @@ function connectChatGateway() {
       }
       const normalized = normalizeChatMessage(payload.message || payload);
       if (normalized) {
+        // Suppress gateway echo of user messages we already broadcast from /api/chat/send
+        if (normalized.role === 'user' && isRecentUserSend(normalized.text)) {
+          return; // Already broadcast — skip the echo
+        }
         pushChatMessage(normalized);
         broadcastChatEvent('message', normalized);
       }
@@ -1231,6 +1269,7 @@ app.post('/api/chat/send', requireAuth, async (req, res) => {
   try {
     await chatGatewayRequest('chat.send', { sessionKey: CHAT_SESSION_KEY, message, idempotencyKey });
     const entry = { id: `msg-${uuidv4()}`, role: 'user', text: message, timestamp: new Date().toISOString(), status: 'delivered' };
+    trackUserSend(message); // Mark so gateway echo is suppressed
     pushChatMessage(entry);
     broadcastChatEvent('message', entry);
     res.json({ id: entry.id, status: 'delivered' });
