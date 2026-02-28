@@ -1315,6 +1315,54 @@ app.get('/api/chat/stream', async (req, res) => {
 });
 
 // API endpoint for chat config (gateway WS URL)
+// ─── TTS Endpoint (ElevenLabs proxy) ─────────────────────────────────────────
+app.post('/api/tts', requireAuth, async (req, res) => {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'TTS not configured' });
+
+  const { text, voiceId = 'JBFqnCBsd6RMkjVDRZzb' } = req.body || {};
+  if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text is required' });
+  if (text.length > 5000) return res.status(400).json({ error: 'text too long (max 5000 chars)' });
+
+  try {
+    const elevenRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    });
+
+    if (!elevenRes.ok) {
+      const errBody = await elevenRes.text().catch(() => '');
+      console.error('[tts] ElevenLabs error:', elevenRes.status, errBody);
+      return res.status(502).json({ error: 'TTS generation failed' });
+    }
+
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Cache-Control', 'no-store');
+    // Stream the response
+    const reader = elevenRes.body.getReader();
+    const pump = async () => {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+      }
+      res.end();
+    };
+    await pump();
+  } catch (err) {
+    console.error('[tts] Error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'TTS request failed' });
+  }
+});
+
 app.get('/api/chat-config', requireAuth, (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.set('Pragma', 'no-cache');
