@@ -1420,6 +1420,7 @@
     let currentAudio = null;
     let voiceSupported = false;
 
+    try {
     // Check Web Speech API support
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -1449,13 +1450,18 @@
       recognition.onend = () => {
         if (voiceState === 'listening') setVoiceState('idle');
       };
-    } else {
+    } else if (voiceBtn) {
       voiceBtn.classList.add('unsupported');
       voiceBtn.title = 'Voice not supported in this browser';
+    }
+    } catch (voiceInitErr) {
+      console.warn('[voice] Voice init failed (safe):', voiceInitErr);
+      if (voiceBtn) { voiceBtn.style.display = 'none'; }
     }
 
     function setVoiceState(state) {
       voiceState = state;
+      if (!voiceBtn) return;
       voiceBtn.className = 'voice-btn' + (state !== 'idle' ? ' ' + state : '');
       if (!voiceSupported) voiceBtn.classList.add('unsupported');
 
