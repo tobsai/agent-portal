@@ -1103,6 +1103,9 @@
     }
 
     function addLoadingIndicator() {
+      // Only allow ONE loading indicator at a time — remove any existing ones first
+      let existing;
+      while ((existing = document.getElementById('loading-indicator'))) existing.remove();
       const div = document.createElement('div');
       div.className = 'message assistant loading';
       div.id = 'loading-indicator';
@@ -1112,8 +1115,11 @@
     }
 
     function removeLoadingIndicator() {
-      const el = document.getElementById('loading-indicator');
-      if (el) el.remove();
+      // Remove ALL loading indicators (defensive — catches any strays)
+      let el;
+      while ((el = document.getElementById('loading-indicator'))) el.remove();
+      // Also remove any by class in case ID got stripped
+      document.querySelectorAll('.message.assistant.loading').forEach(e => e.remove());
       if (window._responseTimeout) { clearTimeout(window._responseTimeout); window._responseTimeout = null; }
     }
 
