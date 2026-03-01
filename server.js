@@ -214,10 +214,25 @@ function normalizeChatText(content) {
   return '';
 }
 
+function looksLikeToolOutput(text) {
+  if (!text || text.length < 5) return false;
+  const trimmed = text.trim();
+  // Raw JSON API responses (GraphQL, etc.)
+  if (/^\{"data":\{/.test(trimmed)) return true;
+  if (/^\{"errors":\[/.test(trimmed)) return true;
+  // Terminal/shell output with prompt markers
+  if (/^[\s\S]*➜\s/.test(trimmed) && trimmed.includes('workspace')) return true;
+  // Op CLI output
+  if (trimmed.startsWith('ID:') && trimmed.includes('Vault:')) return true;
+  return false;
+}
+
 function normalizeChatMessage(message) {
   if (!message || (message.role !== 'user' && message.role !== 'assistant')) return null;
   const text = normalizeChatText(message.content || message.text || '');
   if (!text) return null;
+  // Filter out raw tool output that shouldn't appear in chat
+  if (message.role === 'assistant' && looksLikeToolOutput(text)) return null;
   // Use provided ID, or generate a DETERMINISTIC one from content+role+time-bucket.
   // This ensures duplicate gateway events for the same message get the same ID,
   // so pushChatMessage's ID-based dedup catches them.
