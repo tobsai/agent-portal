@@ -575,16 +575,18 @@
 
     /* Voice Button */
     .voice-btn {
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
       border-radius: 50%;
-      border: 1px solid var(--border);
+      border: 2px solid var(--accent);
       background: var(--surface);
-      color: var(--text-muted);
+      color: var(--text);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 1.3rem;
       font-size: 1.1rem;
       transition: all 0.15s;
       flex-shrink: 0;
@@ -781,7 +783,7 @@
           placeholder="Type a message..." 
           rows="1"
           maxlength="10000"></textarea>
-        <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Voice input">🎤</button>
+        <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Voice input" aria-label="Voice input">🎙️</button>
         <button class="send-btn" id="send-btn" onclick="sendMessage()">
           ➤
         </button>
