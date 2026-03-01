@@ -770,6 +770,13 @@
       </div>
     </div>
 
+    <!-- Audio Player Bar -->
+    <div id="audio-player-bar" style="display:none; padding:8px 16px; background:rgba(129,140,248,0.1); border-top:1px solid var(--border); align-items:center; gap:10px;">
+      <span id="audio-player-label" style="color:var(--text-muted); font-size:0.8rem; flex-shrink:0;">🔊 Playing...</span>
+      <audio id="audio-player" controls style="flex:1; height:32px; max-width:100%;"></audio>
+      <button onclick="closeAudioPlayer()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;" title="Close">✕</button>
+    </div>
+
     <div class="input-area">
       <!-- Hidden file input for image selection -->
       <input type="file" id="file-input" accept="image/*" style="display:none;" onchange="handleFileSelect(event)">
@@ -1495,9 +1502,48 @@
       }
     }
 
+    // Audio player bar helpers
+    function showAudioPlayer(blob, label) {
+      const bar = document.getElementById('audio-player-bar');
+      const player = document.getElementById('audio-player');
+      const playerLabel = document.getElementById('audio-player-label');
+      if (!bar || !player) return null;
+
+      // Revoke previous URL if any
+      if (player._blobUrl) URL.revokeObjectURL(player._blobUrl);
+
+      const url = URL.createObjectURL(blob);
+      player._blobUrl = url;
+      player.src = url;
+      playerLabel.textContent = label || '🔊 Playing...';
+      bar.style.display = 'flex';
+      return player;
+    }
+
+    function closeAudioPlayer() {
+      const bar = document.getElementById('audio-player-bar');
+      const player = document.getElementById('audio-player');
+      if (player) {
+        player.pause();
+        if (player._blobUrl) { URL.revokeObjectURL(player._blobUrl); player._blobUrl = null; }
+        player.src = '';
+      }
+      if (bar) bar.style.display = 'none';
+      currentAudio = null;
+    }
+
     // TTS playback for a given text
     async function playTTS(text, onDone) {
+      const bar = document.getElementById('audio-player-bar');
+      const playerLabel = document.getElementById('audio-player-label');
+
       try {
+        // Show loading state
+        if (bar && playerLabel) {
+          playerLabel.textContent = '🔊 Generating audio...';
+          bar.style.display = 'flex';
+        }
+
         const headers = { 'Content-Type': 'application/json' };
         if (jwtToken) headers['Authorization'] = 'Bearer ' + jwtToken;
 
@@ -1508,31 +1554,35 @@
         });
 
         if (!res.ok) {
-          console.warn('[voice] TTS failed:', res.status);
+          const errText = await res.text().catch(() => '');
+          console.warn('[voice] TTS failed:', res.status, errText);
+          if (playerLabel) playerLabel.textContent = `❌ TTS failed (${res.status}): ${errText.slice(0, 100)}`;
+          setTimeout(() => { if (bar) bar.style.display = 'none'; }, 5000);
           if (onDone) onDone();
           return;
         }
 
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        currentAudio = audio;
+        const player = showAudioPlayer(blob, '🔊 Playing...');
+        if (!player) {
+          // Fallback to invisible Audio
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          currentAudio = audio;
+          audio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; if (onDone) onDone(); };
+          audio.onerror = () => { URL.revokeObjectURL(url); currentAudio = null; if (onDone) onDone(); };
+          await audio.play();
+          return;
+        }
 
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          currentAudio = null;
-          if (onDone) onDone();
-        };
-
-        audio.onerror = () => {
-          URL.revokeObjectURL(url);
-          currentAudio = null;
-          if (onDone) onDone();
-        };
-
-        await audio.play();
+        currentAudio = player;
+        player.onended = () => { currentAudio = null; if (playerLabel) playerLabel.textContent = '🔊 Done'; if (onDone) onDone(); };
+        player.onerror = (e) => { console.warn('[voice] Playback error:', e); currentAudio = null; if (playerLabel) playerLabel.textContent = '❌ Playback error'; if (onDone) onDone(); };
+        await player.play();
       } catch (err) {
         console.warn('[voice] TTS error:', err);
+        if (playerLabel) playerLabel.textContent = `❌ Error: ${err.message}`;
+        setTimeout(() => { if (bar) bar.style.display = 'none'; }, 5000);
         currentAudio = null;
         if (onDone) onDone();
       }
