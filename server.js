@@ -376,6 +376,7 @@ function connectChatGateway() {
     if (msg.event === 'chat') {
       const payload = msg.payload || msg.data || {};
       const state = payload.state;
+      console.log(`[chat-debug] event state=${state} role=${(payload.message||payload)?.role} hasText=${!!(payload.message||payload)?.text || !!(payload.message||payload)?.content} msgId=${(payload.message||payload)?.id?.slice(0,12)}`);
       if (state === 'delta') {
         broadcastChatEvent('typing', { active: true });
         return;
@@ -390,13 +391,16 @@ function connectChatGateway() {
       }
       const normalized = normalizeChatMessage(payload.message || payload);
       if (normalized) {
+        console.log(`[chat-debug] normalized role=${normalized.role} id=${normalized.id?.slice(0,12)} text=${normalized.text?.slice(0,60)}`);
         // Suppress gateway echo of user messages we already broadcast from /api/chat/send
         if (normalized.role === 'user' && isRecentUserSend(normalized.text)) {
+          console.log(`[chat-debug] SUPPRESSED user echo`);
           return; // Already broadcast — skip the echo
         }
         // pushChatMessage returns false if this is a duplicate (ID or content-based)
         const added = pushChatMessage(normalized);
-        if (!added) return; // Duplicate — don't broadcast again
+        if (!added) { console.log(`[chat-debug] DEDUP caught — not broadcasting`); return; }
+        console.log(`[chat-debug] BROADCASTING message role=${normalized.role}`);
         broadcastChatEvent('message', normalized);
       }
     }
