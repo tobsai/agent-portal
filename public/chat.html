@@ -1544,36 +1544,40 @@
       const el = _origAddMessage(role, content, timestamp, statusType, id);
       if (!el) return el;
 
-      if (role === 'assistant' && content) {
-        // Add speaker icon to agent messages
-        const bubble = el.querySelector('.message-bubble');
-        if (bubble) {
-          const wrap = document.createElement('div');
-          wrap.className = 'message-bubble-wrap';
-          bubble.parentNode.insertBefore(wrap, bubble);
-          wrap.appendChild(bubble);
+      try {
+        if (role === 'assistant' && content) {
+          // Add speaker icon to agent messages
+          const bubble = el.querySelector('.message-bubble');
+          if (bubble && bubble.parentNode) {
+            const wrap = document.createElement('div');
+            wrap.className = 'message-bubble-wrap';
+            bubble.parentNode.insertBefore(wrap, bubble);
+            wrap.appendChild(bubble);
 
-          const speakBtn = document.createElement('button');
-          speakBtn.className = 'msg-speak-btn';
-          speakBtn.innerHTML = '🔊';
-          speakBtn.title = 'Play audio';
-          speakBtn.onclick = () => {
-            if (speakBtn.classList.contains('playing')) {
-              if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-              speakBtn.classList.remove('playing');
-              return;
-            }
-            speakBtn.classList.add('playing');
-            playTTS(content, () => speakBtn.classList.remove('playing'));
-          };
-          wrap.appendChild(speakBtn);
-        }
+            const speakBtn = document.createElement('button');
+            speakBtn.className = 'msg-speak-btn';
+            speakBtn.innerHTML = '🔊';
+            speakBtn.title = 'Play audio';
+            speakBtn.onclick = () => {
+              if (speakBtn.classList.contains('playing')) {
+                if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+                speakBtn.classList.remove('playing');
+                return;
+              }
+              speakBtn.classList.add('playing');
+              playTTS(content, () => speakBtn.classList.remove('playing'));
+            };
+            wrap.appendChild(speakBtn);
+          }
 
-        // Auto-play if we're in voice conversation mode (thinking state)
-        if (voiceState === 'thinking') {
-          setVoiceState('speaking');
-          playTTS(content, () => setVoiceState('idle'));
+          // Auto-play if we're in voice conversation mode (thinking state)
+          if (voiceState === 'thinking') {
+            setVoiceState('speaking');
+            playTTS(content, () => setVoiceState('idle'));
+          }
         }
+      } catch (err) {
+        console.warn('[voice] Error adding speaker icon:', err);
       }
 
       return el;
