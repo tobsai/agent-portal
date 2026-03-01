@@ -218,8 +218,12 @@ function normalizeChatMessage(message) {
   if (!message || (message.role !== 'user' && message.role !== 'assistant')) return null;
   const text = normalizeChatText(message.content || message.text || '');
   if (!text) return null;
+  // Use provided ID, or generate a DETERMINISTIC one from content+role+time-bucket.
+  // This ensures duplicate gateway events for the same message get the same ID,
+  // so pushChatMessage's ID-based dedup catches them.
+  const id = message.id || `msg-${message.role}-${simpleHash(text)}-${Math.floor(Date.now() / 15000)}`;
   return {
-    id: message.id || `msg-${uuidv4()}`,
+    id,
     role: message.role,
     text,
     timestamp: message.timestamp || new Date().toISOString(),
@@ -227,21 +231,30 @@ function normalizeChatMessage(message) {
   };
 }
 
+// Simple string hash for deterministic message IDs
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < Math.min(str.length, 200); i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 function pushChatMessage(message) {
   // ID-based dedup (update in place)
   const index = chatMessageBuffer.findIndex(m => m.id === message.id);
-  if (index >= 0) { chatMessageBuffer[index] = message; return; }
-  // Content-based dedup for user messages: skip if same content exists within last 30s
-  if (message.role === 'user') {
-    const msgTime = new Date(message.timestamp || Date.now()).getTime();
-    const dup = chatMessageBuffer.find(m =>
-      m.role === 'user' && m.text === message.text &&
-      Math.abs(new Date(m.timestamp || 0).getTime() - msgTime) < 30000
-    );
-    if (dup) return; // Already in buffer
-  }
+  if (index >= 0) { chatMessageBuffer[index] = message; return false; }
+  // Content-based dedup for ALL messages: skip if same role+content exists within last 30s
+  const msgTime = new Date(message.timestamp || Date.now()).getTime();
+  const dup = chatMessageBuffer.find(m =>
+    m.role === message.role && m.text === message.text &&
+    Math.abs(new Date(m.timestamp || 0).getTime() - msgTime) < 30000
+  );
+  if (dup) return false; // Already in buffer
   chatMessageBuffer.push(message);
   while (chatMessageBuffer.length > CHAT_BUFFER_LIMIT) chatMessageBuffer.shift();
+  return true; // Actually added
 }
 
 function buildGatewayConnectParams(nonce = '') {
@@ -381,7 +394,9 @@ function connectChatGateway() {
         if (normalized.role === 'user' && isRecentUserSend(normalized.text)) {
           return; // Already broadcast — skip the echo
         }
-        pushChatMessage(normalized);
+        // pushChatMessage returns false if this is a duplicate (ID or content-based)
+        const added = pushChatMessage(normalized);
+        if (!added) return; // Duplicate — don't broadcast again
         broadcastChatEvent('message', normalized);
       }
     }
@@ -1270,8 +1285,8 @@ app.post('/api/chat/send', requireAuth, async (req, res) => {
     await chatGatewayRequest('chat.send', { sessionKey: CHAT_SESSION_KEY, message, idempotencyKey });
     const entry = { id: `msg-${uuidv4()}`, role: 'user', text: message, timestamp: new Date().toISOString(), status: 'delivered' };
     trackUserSend(message); // Mark so gateway echo is suppressed
-    pushChatMessage(entry);
-    broadcastChatEvent('message', entry);
+    const added = pushChatMessage(entry);
+    if (added) broadcastChatEvent('message', entry);
     res.json({ id: entry.id, status: 'delivered' });
   } catch (err) {
     res.status(502).json({ error: err.message || 'Failed to send message' });

@@ -1005,10 +1005,12 @@
     function clearMessages() { messagesContainer.innerHTML = ''; renderedMessageKeys.clear(); }
 
     function msgKey(role, content, id) {
-      // Assistant messages: key by stable server ID so same-content responses are NOT over-deduplicated.
-      // User messages: key by content prefix to collapse the double-broadcast
-      //   (server emits once from /api/chat/send and once from the gateway echo, with different IDs).
-      if (role === 'assistant' && id) return 'id|' + id;
+      // Content-based dedup for ALL roles.
+      // Previous approach keyed assistant messages by ID only, but duplicate gateway
+      // events generate different IDs for the same content → duplicates slip through.
+      // Content-prefix key catches duplicates regardless of ID differences.
+      // Risk of over-dedup (two legitimately identical messages) is negligible within
+      // a single page session — 120 chars is enough to distinguish real messages.
       return role + '|' + (content || '').slice(0, 120);
     }
 
