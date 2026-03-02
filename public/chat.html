@@ -152,6 +152,81 @@
       color: var(--text);
     }
 
+    /* Model Selector */
+    .model-selector {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .model-pill {
+      font-size: 0.7rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.15s;
+      max-width: 180px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .model-pill:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    .model-pill:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .model-pill.switching {
+      color: var(--yellow);
+      border-color: var(--yellow);
+      opacity: 0.8;
+    }
+
+    .model-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      background: #13131a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.25rem;
+      z-index: 100;
+      min-width: 240px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .model-dropdown.open { display: block; }
+
+    .model-option {
+      display: block;
+      width: 100%;
+      padding: 0.4rem 0.6rem;
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-align: left;
+      border-radius: 5px;
+      transition: all 0.1s;
+      white-space: nowrap;
+    }
+
+    .model-option:hover { background: var(--surface-hover); color: var(--text); }
+    .model-option.active { color: var(--accent); background: var(--accent-dim); }
+
     /* Chat Container */
     .chat-container {
       flex: 1;
@@ -741,6 +816,16 @@
       </nav>
     </div>
     <div class="header-right">
+      <div class="model-selector" id="model-selector">
+        <button class="model-pill" id="model-pill" onclick="toggleModelDropdown(event)" title="Switch model">…</button>
+        <div class="model-dropdown" id="model-dropdown">
+          <button class="model-option" data-model="anthropic/claude-opus-4-6" onclick="selectModel(this)">anthropic/claude-opus-4-6</button>
+          <button class="model-option" data-model="anthropic/claude-sonnet-4-6" onclick="selectModel(this)">anthropic/claude-sonnet-4-6</button>
+          <button class="model-option" data-model="xai/grok-4-1-fast-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-reasoning</button>
+          <button class="model-option" data-model="xai/grok-4-1-fast-non-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-non-reasoning</button>
+          <button class="model-option" data-model="xai/grok-3" onclick="selectModel(this)">xai/grok-3</button>
+        </div>
+      </div>
       <div class="conn" id="connection-status">
         <span class="status-dot"></span>
         <span class="status-text">Connecting...</span>
@@ -841,6 +926,7 @@
 
     async function init() {
       await loadUser();
+      await loadCurrentModel();
       await loadHistory();
       connectEventStream();
       setupInputListeners();
@@ -861,6 +947,71 @@
         }
       } catch (err) { console.error('Failed to load user:', err); }
     }
+
+    // ---- Model Selector ----
+    const MODEL_PILL = document.getElementById('model-pill');
+    const MODEL_DROPDOWN = document.getElementById('model-dropdown');
+
+    function shortModelName(model) {
+      if (!model) return '…';
+      const parts = model.split('/');
+      return parts[parts.length - 1];
+    }
+
+    function setActivePillModel(model) {
+      MODEL_PILL.textContent = shortModelName(model);
+      MODEL_PILL.title = model || 'Switch model';
+      MODEL_DROPDOWN.querySelectorAll('.model-option').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.model === model);
+      });
+    }
+
+    async function loadCurrentModel() {
+      try {
+        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
+        const res = await fetch('/api/model', { headers });
+        const data = await res.json();
+        setActivePillModel(data.model || null);
+      } catch (e) { console.warn('model load failed', e); }
+    }
+
+    function toggleModelDropdown(e) {
+      e.stopPropagation();
+      MODEL_DROPDOWN.classList.toggle('open');
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!document.getElementById('model-selector').contains(e.target)) {
+        MODEL_DROPDOWN.classList.remove('open');
+      }
+    });
+
+    async function selectModel(btn) {
+      const model = btn.dataset.model;
+      MODEL_DROPDOWN.classList.remove('open');
+      if (btn.classList.contains('active')) return;
+      MODEL_PILL.textContent = 'Switching…';
+      MODEL_PILL.classList.add('switching');
+      MODEL_PILL.disabled = true;
+      try {
+        const headers = { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) };
+        const res = await fetch('/api/model', { method: 'POST', headers, body: JSON.stringify({ model }) });
+        const data = await res.json();
+        if (data.success) {
+          setActivePillModel(data.model);
+        } else {
+          MODEL_PILL.textContent = 'Error';
+          setTimeout(() => loadCurrentModel(), 2000);
+        }
+      } catch (e) {
+        MODEL_PILL.textContent = 'Error';
+        setTimeout(() => loadCurrentModel(), 2000);
+      } finally {
+        MODEL_PILL.classList.remove('switching');
+        MODEL_PILL.disabled = false;
+      }
+    }
+    // ---- End Model Selector ----
 
     async function loadHistory() {
       try {

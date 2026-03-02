@@ -1440,6 +1440,37 @@ app.post('/api/chat-sign', requireAuth, (req, res) => {
   }
 });
 
+// ============ MODEL SELECTOR ============
+const { execFile } = require('child_process');
+
+app.get('/api/model', requireAuth, (req, res) => {
+  execFile('openclaw', ['config', 'get', 'agents.defaults.model.primary'], { timeout: 5000 }, (err, stdout) => {
+    if (err) return res.json({ model: null, error: err.message });
+    res.json({ model: stdout.trim() || null });
+  });
+});
+
+app.post('/api/model', requireAuth, (req, res) => {
+  const { model } = req.body || {};
+  if (!model || typeof model !== 'string') return res.status(400).json({ error: 'model is required' });
+  const allowed = [
+    'anthropic/claude-opus-4-6',
+    'anthropic/claude-sonnet-4-6',
+    'xai/grok-4-1-fast-reasoning',
+    'xai/grok-4-1-fast-non-reasoning',
+    'xai/grok-3',
+  ];
+  if (!allowed.includes(model)) return res.status(400).json({ error: 'unknown model' });
+
+  execFile('openclaw', ['config', 'set', 'agents.defaults.model.primary', model], { timeout: 5000 }, (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    execFile('openclaw', ['gateway', 'restart'], { timeout: 15000 }, (err2) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      res.json({ success: true, model });
+    });
+  });
+});
+
 // ============ AUTH ROUTES ============
 app.get('/auth/google', (req, res, next) => {
   const state = req.query.mobile === '1' ? 'mobile' : 'web';
