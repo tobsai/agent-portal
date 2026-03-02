@@ -1443,11 +1443,16 @@ app.post('/api/chat-sign', requireAuth, (req, res) => {
 // ============ MODEL SELECTOR ============
 const { execFile } = require('child_process');
 
+const MODEL_OVERRIDE_PATH = path.join(__dirname, 'data', 'model-override.json');
+const MODEL_DEFAULT = 'anthropic/claude-opus-4-6';
+
 app.get('/api/model', requireAuth, (req, res) => {
-  execFile('openclaw', ['config', 'get', 'agents.defaults.model.primary'], { timeout: 5000 }, (err, stdout) => {
-    if (err) return res.json({ model: null, error: err.message });
-    res.json({ model: stdout.trim() || null });
-  });
+  try {
+    const data = JSON.parse(fs.readFileSync(MODEL_OVERRIDE_PATH, 'utf8'));
+    res.json({ model: data.model || MODEL_DEFAULT });
+  } catch {
+    res.json({ model: MODEL_DEFAULT });
+  }
 });
 
 app.post('/api/model', requireAuth, (req, res) => {
@@ -1462,13 +1467,13 @@ app.post('/api/model', requireAuth, (req, res) => {
   ];
   if (!allowed.includes(model)) return res.status(400).json({ error: 'unknown model' });
 
-  execFile('openclaw', ['config', 'set', 'agents.defaults.model.primary', model], { timeout: 5000 }, (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    execFile('openclaw', ['gateway', 'restart'], { timeout: 15000 }, (err2) => {
-      if (err2) return res.status(500).json({ error: err2.message });
-      res.json({ success: true, model });
-    });
-  });
+  try {
+    fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
+    fs.writeFileSync(MODEL_OVERRIDE_PATH, JSON.stringify({ model }, null, 2));
+    res.json({ success: true, model, note: 'Model preference saved. Gateway restart required on host to apply.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============ AUTH ROUTES ============
