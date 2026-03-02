@@ -41,6 +41,29 @@
     /* Embed mode — hide header when inside iframe */
     body.embed-mode header { display: none; }
 
+    /* Floating model selector — visible in both normal and embed mode */
+    .model-selector-float {
+      position: fixed;
+      top: 8px;
+      right: 8px;
+      z-index: 100;
+      background: rgba(10,10,15,0.85);
+      border-radius: 8px;
+      padding: 4px 6px;
+      backdrop-filter: blur(8px);
+    }
+
+    body.embed-mode .model-selector-float {
+      top: 4px;
+      right: 4px;
+      padding: 2px 4px;
+    }
+
+    body.embed-mode .model-pill {
+      font-size: 0.65rem;
+      padding: 0.2rem 0.4rem;
+    }
+
     /* Header */
     header {
       display: flex;
@@ -816,16 +839,6 @@
       </nav>
     </div>
     <div class="header-right">
-      <div class="model-selector" id="model-selector">
-        <button class="model-pill" id="model-pill" onclick="toggleModelDropdown(event)" title="Switch model">…</button>
-        <div class="model-dropdown" id="model-dropdown">
-          <button class="model-option" data-model="anthropic/claude-opus-4-6" onclick="selectModel(this)">anthropic/claude-opus-4-6</button>
-          <button class="model-option" data-model="anthropic/claude-sonnet-4-6" onclick="selectModel(this)">anthropic/claude-sonnet-4-6</button>
-          <button class="model-option" data-model="xai/grok-4-1-fast-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-reasoning</button>
-          <button class="model-option" data-model="xai/grok-4-1-fast-non-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-non-reasoning</button>
-          <button class="model-option" data-model="xai/grok-3" onclick="selectModel(this)">xai/grok-3</button>
-        </div>
-      </div>
       <div class="conn" id="connection-status">
         <span class="status-dot"></span>
         <span class="status-text">Connecting...</span>
@@ -837,6 +850,20 @@
       <button class="btn-s" onclick="logout()">Logout</button>
     </div>
   </header>
+
+  <!-- Floating model selector — visible in embed mode (header is hidden there) -->
+  <div class="model-selector-float">
+    <div class="model-selector" id="model-selector">
+      <button class="model-pill" id="model-pill" onclick="toggleModelDropdown(event)" title="Switch model">…</button>
+      <div class="model-dropdown" id="model-dropdown">
+        <button class="model-option" data-model="anthropic/claude-opus-4-6" onclick="selectModel(this)">anthropic/claude-opus-4-6</button>
+        <button class="model-option" data-model="anthropic/claude-sonnet-4-6" onclick="selectModel(this)">anthropic/claude-sonnet-4-6</button>
+        <button class="model-option" data-model="xai/grok-4-1-fast-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-reasoning</button>
+        <button class="model-option" data-model="xai/grok-4-1-fast-non-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-non-reasoning</button>
+        <button class="model-option" data-model="xai/grok-3" onclick="selectModel(this)">xai/grok-3</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Error Banner -->
   <div class="error-banner" id="error-banner">
