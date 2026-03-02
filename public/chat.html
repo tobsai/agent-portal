@@ -728,6 +728,18 @@
       50% { box-shadow: 0 0 0 10px rgba(248,113,113,0); }
     }
 
+    .voice-btn.activating {
+      background: #f59e0b;
+      border-color: #f59e0b;
+      color: #fff;
+      animation: activating-pulse 1s ease-in-out infinite;
+    }
+
+    @keyframes activating-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.5); }
+      50% { box-shadow: 0 0 0 8px rgba(245,158,11,0); }
+    }
+
     .voice-btn .spinner {
       width: 18px; height: 18px;
       border: 2px solid transparent;
@@ -781,6 +793,144 @@
 
     .msg-speak-btn:hover { color: var(--accent); background: var(--accent-dim); }
     .msg-speak-btn.playing { color: var(--green); }
+
+    /* Inline audio player (replaces speak button while playing) */
+    .inline-audio-player {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 180px;
+      padding: 2px 0;
+    }
+
+    .inline-audio-player .iap-play-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: color 0.1s;
+    }
+
+    .inline-audio-player .iap-play-btn:hover { color: var(--text); }
+
+    .inline-audio-player .iap-progress-wrap {
+      flex: 1;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .inline-audio-player .iap-progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .inline-audio-player .iap-time {
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* Voice settings gear button */
+    .voice-settings-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 0.7rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .voice-settings-btn:hover { background: var(--surface-hover); color: var(--text-muted); border-color: var(--text-dim); }
+
+    .voice-settings-popover {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      right: 0;
+      background: #13131a;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem;
+      z-index: 200;
+      width: 220px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    .voice-settings-popover.open { display: block; }
+
+    .voice-settings-popover .vsp-title {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .voice-settings-popover .vsp-row {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 0.7rem;
+    }
+
+    .voice-settings-popover .vsp-row:last-child { margin-bottom: 0; }
+
+    .voice-settings-popover .vsp-label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .voice-settings-popover .vsp-label-row span:last-child {
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .voice-settings-popover input[type=range] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .voice-settings-popover .vsp-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .voice-settings-popover input[type=checkbox] {
+      accent-color: var(--accent);
+      cursor: pointer;
+      width: 14px;
+      height: 14px;
+    }
 
     .message-bubble-wrap {
       display: flex;
@@ -882,10 +1032,10 @@
       </div>
     </div>
 
-    <!-- Audio Player Bar -->
+    <!-- Audio Player Bar (hidden — kept as fallback only) -->
     <div id="audio-player-bar" style="display:none; padding:8px 16px; background:rgba(129,140,248,0.1); border-top:1px solid var(--border); align-items:center; gap:10px;">
       <span id="audio-player-label" style="color:var(--text-muted); font-size:0.8rem; flex-shrink:0;">🔊 Playing...</span>
-      <audio id="audio-player" controls style="flex:1; height:32px; max-width:100%;"></audio>
+      <audio id="audio-player" style="flex:1; height:32px; max-width:100%;"></audio>
       <button onclick="closeAudioPlayer()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;" title="Close">✕</button>
     </div>
 
@@ -902,7 +1052,26 @@
           placeholder="Type a message..." 
           rows="1"
           maxlength="10000"></textarea>
-        <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Voice input" aria-label="Voice input">🎙️</button>
+        <div style="position:relative; display:flex; align-items:center; gap:4px; flex-shrink:0;">
+          <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Voice input" aria-label="Voice input">🎙️</button>
+          <button class="voice-settings-btn" id="voice-settings-btn" onclick="toggleVoiceSettings(event)" title="Voice settings">⚙️</button>
+          <div class="voice-settings-popover" id="voice-settings-popover">
+            <div class="vsp-title">Voice Settings</div>
+            <div class="vsp-row">
+              <div class="vsp-label-row">
+                <span>Silence delay</span>
+                <span id="silence-delay-val">2.5s</span>
+              </div>
+              <input type="range" id="silence-delay-slider" min="1" max="5" step="0.5" value="2.5" oninput="updateSilenceDelay(this.value)">
+            </div>
+            <div class="vsp-row">
+              <div class="vsp-toggle-row">
+                <span>Auto-play responses</span>
+                <input type="checkbox" id="autoplay-toggle" checked onchange="updateAutoplay(this.checked)">
+              </div>
+            </div>
+          </div>
+        </div>
         <button class="send-btn" id="send-btn" onclick="sendMessage()">
           ➤
         </button>
@@ -1590,13 +1759,72 @@
 
     function logout() { window.location.href = '/auth/logout'; }
 
+    // ─── Voice Settings ─────────────────────────────────────────────────────────
+
+    const voiceSettings = { silenceTimeout: 2500, autoplay: true };
+
+    function loadVoiceSettings() {
+      const t = parseFloat(localStorage.getItem('voiceSilenceTimeout'));
+      if (!isNaN(t)) voiceSettings.silenceTimeout = t * 1000;
+      const a = localStorage.getItem('voiceAutoplay');
+      if (a !== null) voiceSettings.autoplay = a !== 'false';
+
+      const slider = document.getElementById('silence-delay-slider');
+      const valEl = document.getElementById('silence-delay-val');
+      const toggle = document.getElementById('autoplay-toggle');
+      if (slider) slider.value = voiceSettings.silenceTimeout / 1000;
+      if (valEl) valEl.textContent = (voiceSettings.silenceTimeout / 1000).toFixed(1) + 's';
+      if (toggle) toggle.checked = voiceSettings.autoplay;
+    }
+
+    function updateSilenceDelay(val) {
+      voiceSettings.silenceTimeout = parseFloat(val) * 1000;
+      localStorage.setItem('voiceSilenceTimeout', val);
+      const valEl = document.getElementById('silence-delay-val');
+      if (valEl) valEl.textContent = parseFloat(val).toFixed(1) + 's';
+    }
+
+    function updateAutoplay(checked) {
+      voiceSettings.autoplay = checked;
+      localStorage.setItem('voiceAutoplay', checked ? 'true' : 'false');
+    }
+
+    function toggleVoiceSettings(e) {
+      e.stopPropagation();
+      const pop = document.getElementById('voice-settings-popover');
+      if (!pop) return;
+      pop.classList.toggle('open');
+    }
+
+    document.addEventListener('click', (e) => {
+      const pop = document.getElementById('voice-settings-popover');
+      const btn = document.getElementById('voice-settings-btn');
+      if (pop && pop.classList.contains('open') && !pop.contains(e.target) && e.target !== btn) {
+        pop.classList.remove('open');
+      }
+    });
+
+    loadVoiceSettings();
+
     // ─── Voice Dialog ──────────────────────────────────────────────────────────
 
     const voiceBtn = document.getElementById('voice-btn');
-    let voiceState = 'idle'; // idle | listening | thinking | speaking
+    let voiceState = 'idle'; // idle | activating | listening | thinking | speaking
     let recognition = null;
     let currentAudio = null;
     let voiceSupported = false;
+    let silenceTimer = null;
+    let finalTranscript = '';
+
+    function resetSilenceTimer() {
+      if (silenceTimer) clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        silenceTimer = null;
+        if (recognition && (voiceState === 'listening' || voiceState === 'activating')) {
+          recognition.stop();
+        }
+      }, voiceSettings.silenceTimeout);
+    }
 
     try {
     // Native speech bridge (iOS WKWebView) — injected by Swift via window.hasNativeSpeech = true
@@ -1604,7 +1832,6 @@
       voiceSupported = true;
       console.log('[voice] Using native speech bridge (iOS)');
 
-      // Callbacks invoked by Swift via evaluateJavaScript
       window.nativeSpeechTranscript = function(text) {
         if (text) {
           setVoiceState('thinking');
@@ -1622,28 +1849,44 @@
       if (SpeechRecognition) {
         voiceSupported = true;
         recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
+        recognition.continuous = true;
+        recognition.interimResults = true;
         recognition.lang = 'en-US';
 
+        recognition.onaudiostart = () => {
+          if (voiceState === 'activating') setVoiceState('listening');
+        };
+
         recognition.onresult = (event) => {
-          const transcript = event.results[0][0].transcript.trim();
-          if (transcript) {
-            setVoiceState('thinking');
-            messageInput.value = transcript;
-            sendMessage();
-          } else {
-            setVoiceState('idle');
+          let interim = '';
+          finalTranscript = '';
+          for (let i = 0; i < event.results.length; i++) {
+            const t = event.results[i][0].transcript;
+            if (event.results[i].isFinal) finalTranscript += t;
+            else interim += t;
           }
+          const display = (finalTranscript + interim).trim();
+          if (display) messageInput.value = display;
+          resetSilenceTimer();
         };
 
         recognition.onerror = (event) => {
           console.warn('[voice] Recognition error:', event.error);
+          if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
           if (event.error !== 'aborted') setVoiceState('idle');
         };
 
         recognition.onend = () => {
-          if (voiceState === 'listening') setVoiceState('idle');
+          if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+          const transcript = (finalTranscript || messageInput.value).trim();
+          if ((voiceState === 'listening' || voiceState === 'activating') && transcript) {
+            setVoiceState('thinking');
+            messageInput.value = transcript;
+            sendMessage();
+          } else if (voiceState === 'listening' || voiceState === 'activating') {
+            setVoiceState('idle');
+          }
+          finalTranscript = '';
         };
       } else if (voiceBtn) {
         voiceBtn.classList.add('unsupported');
@@ -1663,6 +1906,9 @@
 
       switch (state) {
         case 'idle':
+          voiceBtn.innerHTML = '🎤';
+          break;
+        case 'activating':
           voiceBtn.innerHTML = '🎤';
           break;
         case 'listening':
@@ -1691,8 +1937,11 @@
       }
 
       // Web Speech API (desktop)
-      if (voiceState === 'listening') {
+      if (voiceState === 'activating' || voiceState === 'listening') {
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
         recognition.abort();
+        finalTranscript = '';
+        messageInput.value = '';
         setVoiceState('idle');
         return;
       }
@@ -1706,57 +1955,86 @@
 
       if (voiceState !== 'idle') return;
 
-      setVoiceState('listening');
+      finalTranscript = '';
+      messageInput.value = '';
+      setVoiceState('activating');
       try {
         recognition.start();
+        // Start silence timer in case onaudiostart never fires
+        resetSilenceTimer();
       } catch (e) {
         console.warn('[voice] Recognition start failed:', e);
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
         setVoiceState('idle');
       }
     }
 
-    // Audio player bar helpers
-    function showAudioPlayer(blob, label) {
-      const bar = document.getElementById('audio-player-bar');
-      const player = document.getElementById('audio-player');
-      const playerLabel = document.getElementById('audio-player-label');
-      if (!bar || !player) return null;
+    // ─── Inline Audio Player ───────────────────────────────────────────────────
 
-      // Revoke previous URL if any
-      if (player._blobUrl) URL.revokeObjectURL(player._blobUrl);
-
+    function createInlinePlayer(blob, onDone) {
       const url = URL.createObjectURL(blob);
-      player._blobUrl = url;
-      player.src = url;
-      playerLabel.textContent = label || '🔊 Playing...';
-      bar.style.display = 'flex';
-      return player;
+      const audio = new Audio(url);
+
+      const container = document.createElement('div');
+      container.className = 'inline-audio-player';
+
+      const playBtn = document.createElement('button');
+      playBtn.className = 'iap-play-btn';
+      playBtn.textContent = '⏸';
+      playBtn.title = 'Play/Pause';
+
+      const progressWrap = document.createElement('div');
+      progressWrap.className = 'iap-progress-wrap';
+      const progressFill = document.createElement('div');
+      progressFill.className = 'iap-progress-fill';
+      progressWrap.appendChild(progressFill);
+
+      const timeEl = document.createElement('span');
+      timeEl.className = 'iap-time';
+      timeEl.textContent = '0:00';
+
+      container.appendChild(playBtn);
+      container.appendChild(progressWrap);
+      container.appendChild(timeEl);
+
+      playBtn.onclick = () => {
+        if (audio.paused) { audio.play(); playBtn.textContent = '⏸'; }
+        else { audio.pause(); playBtn.textContent = '▶'; }
+      };
+
+      progressWrap.onclick = (e) => {
+        if (!audio.duration) return;
+        const rect = progressWrap.getBoundingClientRect();
+        audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
+      };
+
+      audio.ontimeupdate = () => {
+        const pct = audio.duration ? (audio.currentTime / audio.duration * 100) : 0;
+        progressFill.style.width = pct + '%';
+        const s = Math.floor(audio.currentTime);
+        timeEl.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      };
+
+      const cleanup = () => {
+        URL.revokeObjectURL(url);
+        if (currentAudio === audio) currentAudio = null;
+        if (onDone) onDone(container);
+      };
+
+      audio.onended = cleanup;
+      audio.onerror = cleanup;
+
+      container._audio = audio;
+      return { container, audio };
     }
 
     function closeAudioPlayer() {
-      const bar = document.getElementById('audio-player-bar');
-      const player = document.getElementById('audio-player');
-      if (player) {
-        player.pause();
-        if (player._blobUrl) { URL.revokeObjectURL(player._blobUrl); player._blobUrl = null; }
-        player.src = '';
-      }
-      if (bar) bar.style.display = 'none';
-      currentAudio = null;
+      if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     }
 
-    // TTS playback for a given text
-    async function playTTS(text, onDone) {
-      const bar = document.getElementById('audio-player-bar');
-      const playerLabel = document.getElementById('audio-player-label');
-
+    // TTS playback — speakBtnEl is optional; if provided, replaced with inline player
+    async function playTTS(text, onDone, speakBtnEl) {
       try {
-        // Show loading state
-        if (bar && playerLabel) {
-          playerLabel.textContent = '🔊 Generating audio...';
-          bar.style.display = 'flex';
-        }
-
         const headers = { 'Content-Type': 'application/json' };
         if (jwtToken) headers['Authorization'] = 'Bearer ' + jwtToken;
 
@@ -1769,33 +2047,33 @@
         if (!res.ok) {
           const errText = await res.text().catch(() => '');
           console.warn('[voice] TTS failed:', res.status, errText);
-          if (playerLabel) playerLabel.textContent = `❌ TTS failed (${res.status}): ${errText.slice(0, 100)}`;
-          setTimeout(() => { if (bar) bar.style.display = 'none'; }, 5000);
           if (onDone) onDone();
           return;
         }
 
         const blob = await res.blob();
-        const player = showAudioPlayer(blob, '🔊 Playing...');
-        if (!player) {
-          // Fallback to invisible Audio
+
+        if (speakBtnEl && speakBtnEl.parentNode) {
+          const { container, audio } = createInlinePlayer(blob, (inlineEl) => {
+            // Restore speak button when audio ends
+            if (inlineEl.parentNode) inlineEl.parentNode.replaceChild(speakBtnEl, inlineEl);
+            speakBtnEl.classList.remove('playing');
+            if (onDone) onDone();
+          });
+          speakBtnEl.parentNode.replaceChild(container, speakBtnEl);
+          currentAudio = audio;
+          audio.play().catch(e => console.warn('[voice] Play error:', e));
+        } else {
+          // Fallback: invisible Audio element
           const url = URL.createObjectURL(blob);
           const audio = new Audio(url);
           currentAudio = audio;
           audio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; if (onDone) onDone(); };
           audio.onerror = () => { URL.revokeObjectURL(url); currentAudio = null; if (onDone) onDone(); };
-          await audio.play();
-          return;
+          audio.play().catch(e => console.warn('[voice] Play error:', e));
         }
-
-        currentAudio = player;
-        player.onended = () => { currentAudio = null; if (playerLabel) playerLabel.textContent = '🔊 Done'; if (onDone) onDone(); };
-        player.onerror = (e) => { console.warn('[voice] Playback error:', e); currentAudio = null; if (playerLabel) playerLabel.textContent = '❌ Playback error'; if (onDone) onDone(); };
-        await player.play();
       } catch (err) {
         console.warn('[voice] TTS error:', err);
-        if (playerLabel) playerLabel.textContent = `❌ Error: ${err.message}`;
-        setTimeout(() => { if (bar) bar.style.display = 'none'; }, 5000);
         currentAudio = null;
         if (onDone) onDone();
       }
@@ -1828,15 +2106,16 @@
                 return;
               }
               speakBtn.classList.add('playing');
-              playTTS(content, () => speakBtn.classList.remove('playing'));
+              playTTS(content, () => speakBtn.classList.remove('playing'), speakBtn);
             };
             wrap.appendChild(speakBtn);
-          }
 
-          // Auto-play if we're in voice conversation mode (thinking state)
-          if (voiceState === 'thinking') {
-            setVoiceState('speaking');
-            playTTS(content, () => setVoiceState('idle'));
+            // Auto-play if we're in voice conversation mode (thinking state)
+            if (voiceState === 'thinking' && voiceSettings.autoplay) {
+              setVoiceState('speaking');
+              speakBtn.classList.add('playing');
+              playTTS(content, () => { setVoiceState('idle'); }, speakBtn);
+            }
           }
         }
       } catch (err) {
