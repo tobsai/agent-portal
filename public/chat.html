@@ -1421,38 +1421,56 @@
     let voiceSupported = false;
 
     try {
-    // Check Web Speech API support
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
+    // Native speech bridge (iOS WKWebView) — injected by Swift via window.hasNativeSpeech = true
+    if (window.hasNativeSpeech && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.voiceInput) {
       voiceSupported = true;
-      recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
+      console.log('[voice] Using native speech bridge (iOS)');
 
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript.trim();
-        if (transcript) {
+      // Callbacks invoked by Swift via evaluateJavaScript
+      window.nativeSpeechTranscript = function(text) {
+        if (text) {
           setVoiceState('thinking');
-          // Send as a normal chat message
-          messageInput.value = transcript;
+          messageInput.value = text;
           sendMessage();
-        } else {
-          setVoiceState('idle');
         }
       };
-
-      recognition.onerror = (event) => {
-        console.warn('[voice] Recognition error:', event.error);
-        if (event.error !== 'aborted') setVoiceState('idle');
+      window.nativeSpeechStateChanged = function(isListening) {
+        setVoiceState(isListening ? 'listening' : 'idle');
       };
 
-      recognition.onend = () => {
-        if (voiceState === 'listening') setVoiceState('idle');
-      };
-    } else if (voiceBtn) {
-      voiceBtn.classList.add('unsupported');
-      voiceBtn.title = 'Voice not supported in this browser';
+    // Web Speech API fallback (desktop browsers)
+    } else {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        voiceSupported = true;
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event) => {
+          const transcript = event.results[0][0].transcript.trim();
+          if (transcript) {
+            setVoiceState('thinking');
+            messageInput.value = transcript;
+            sendMessage();
+          } else {
+            setVoiceState('idle');
+          }
+        };
+
+        recognition.onerror = (event) => {
+          console.warn('[voice] Recognition error:', event.error);
+          if (event.error !== 'aborted') setVoiceState('idle');
+        };
+
+        recognition.onend = () => {
+          if (voiceState === 'listening') setVoiceState('idle');
+        };
+      } else if (voiceBtn) {
+        voiceBtn.classList.add('unsupported');
+        voiceBtn.title = 'Voice not supported in this browser';
+      }
     }
     } catch (voiceInitErr) {
       console.warn('[voice] Voice init failed (safe):', voiceInitErr);
@@ -1484,6 +1502,17 @@
     function toggleVoice() {
       if (!voiceSupported) return;
 
+      // Native speech bridge (iOS)
+      if (window.hasNativeSpeech && window.webkit && window.webkit.messageHandlers.voiceInput) {
+        if (voiceState === 'listening') {
+          window.webkit.messageHandlers.voiceInput.postMessage({ action: 'stop' });
+        } else if (voiceState === 'idle') {
+          window.webkit.messageHandlers.voiceInput.postMessage({ action: 'start' });
+        }
+        return;
+      }
+
+      // Web Speech API (desktop)
       if (voiceState === 'listening') {
         recognition.abort();
         setVoiceState('idle');
