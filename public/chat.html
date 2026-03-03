@@ -740,6 +740,12 @@
       50% { box-shadow: 0 0 0 8px rgba(245,158,11,0); }
     }
 
+    .voice-btn.paused {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+
     .voice-btn .spinner {
       width: 18px; height: 18px;
       border: 2px solid transparent;
@@ -932,6 +938,17 @@
       height: 14px;
     }
 
+    .voice-settings-popover select {
+      width: 100%;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 6px;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+
     .message-bubble-wrap {
       display: flex;
       align-items: flex-end;
@@ -1069,6 +1086,12 @@
                 <span>Auto-play responses</span>
                 <input type="checkbox" id="autoplay-toggle" checked onchange="updateAutoplay(this.checked)">
               </div>
+            </div>
+            <div class="vsp-row" id="mic-selector-row">
+              <div class="vsp-label-row" style="margin-bottom:4px"><span>Microphone</span></div>
+              <select id="mic-select" onchange="updatePreferredMic(this.value)">
+                <option value="">System Default</option>
+              </select>
             </div>
           </div>
         </div>
@@ -1793,7 +1816,9 @@
       e.stopPropagation();
       const pop = document.getElementById('voice-settings-popover');
       if (!pop) return;
+      const wasOpen = pop.classList.contains('open');
       pop.classList.toggle('open');
+      if (!wasOpen) loadMicDevices();
     }
 
     document.addEventListener('click', (e) => {
@@ -1806,15 +1831,44 @@
 
     loadVoiceSettings();
 
+    async function loadMicDevices() {
+      const select = document.getElementById('mic-select');
+      if (!select || !navigator.mediaDevices) return;
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const mics = devices.filter(d => d.kind === 'audioinput');
+        const preferred = localStorage.getItem('voicePreferredMic') || '';
+        select.innerHTML = '<option value="">System Default</option>';
+        mics.forEach(d => {
+          const opt = document.createElement('option');
+          opt.value = d.deviceId;
+          opt.textContent = d.label || ('Microphone ' + d.deviceId.slice(0, 8));
+          if (d.deviceId === preferred) opt.selected = true;
+          select.appendChild(opt);
+        });
+      } catch (e) {
+        console.warn('[voice] Could not enumerate devices:', e);
+      }
+    }
+
+    function updatePreferredMic(deviceId) {
+      if (deviceId) {
+        localStorage.setItem('voicePreferredMic', deviceId);
+      } else {
+        localStorage.removeItem('voicePreferredMic');
+      }
+    }
+
     // ─── Voice Dialog ──────────────────────────────────────────────────────────
 
     const voiceBtn = document.getElementById('voice-btn');
-    let voiceState = 'idle'; // idle | activating | listening | thinking | speaking
+    let voiceState = 'idle'; // idle | activating | listening | paused | thinking | speaking
     let recognition = null;
     let currentAudio = null;
     let voiceSupported = false;
     let silenceTimer = null;
     let finalTranscript = '';
+    let lastTapTime = 0;
 
     function resetSilenceTimer() {
       if (silenceTimer) clearTimeout(silenceTimer);
@@ -1885,6 +1939,9 @@
             sendMessage();
           } else if (voiceState === 'listening' || voiceState === 'activating') {
             setVoiceState('idle');
+          } else if (voiceState === 'paused') {
+            // Recognition ended unexpectedly while paused — go idle without sending
+            setVoiceState('idle');
           }
           finalTranscript = '';
         };
@@ -1914,6 +1971,9 @@
         case 'listening':
           voiceBtn.innerHTML = '🎤'; // pulse animation via CSS
           break;
+        case 'paused':
+          voiceBtn.innerHTML = '⏸️';
+          break;
         case 'thinking':
           voiceBtn.innerHTML = '<div class="spinner"></div>';
           break;
@@ -1936,8 +1996,43 @@
         return;
       }
 
-      // Web Speech API (desktop)
-      if (voiceState === 'activating' || voiceState === 'listening') {
+      // Double-tap detection (within 350ms) while listening or paused → stop and send
+      const now = Date.now();
+      const isDoubleTap = (now - lastTapTime) < 350;
+      lastTapTime = now;
+
+      if (isDoubleTap && (voiceState === 'listening' || voiceState === 'paused')) {
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+        const transcript = (finalTranscript || messageInput.value).trim();
+        recognition.abort();
+        if (transcript) {
+          setVoiceState('thinking');
+          messageInput.value = transcript;
+          sendMessage();
+        } else {
+          finalTranscript = '';
+          messageInput.value = '';
+          setVoiceState('idle');
+        }
+        return;
+      }
+
+      // Single tap while listening → PAUSE (clear silence timer, keep recognition running)
+      if (voiceState === 'listening') {
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+        setVoiceState('paused');
+        return;
+      }
+
+      // Single tap while paused → RESUME (restart silence timer)
+      if (voiceState === 'paused') {
+        setVoiceState('listening');
+        resetSilenceTimer();
+        return;
+      }
+
+      // Single tap while activating → cancel
+      if (voiceState === 'activating') {
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
         recognition.abort();
         finalTranscript = '';
@@ -1959,9 +2054,19 @@
       messageInput.value = '';
       setVoiceState('activating');
       try {
-        recognition.start();
-        // Start silence timer in case onaudiostart never fires
-        resetSilenceTimer();
+        const preferredMic = localStorage.getItem('voicePreferredMic');
+        const startRecognition = () => {
+          recognition.start();
+          resetSilenceTimer();
+        };
+        if (preferredMic && navigator.mediaDevices) {
+          // Prime the audio subsystem with the preferred device before starting recognition
+          navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: preferredMic } } })
+            .then(stream => { stream.getTracks().forEach(t => t.stop()); startRecognition(); })
+            .catch(() => startRecognition());
+        } else {
+          startRecognition();
+        }
       } catch (e) {
         console.warn('[voice] Recognition start failed:', e);
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
