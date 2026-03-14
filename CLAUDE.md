@@ -31,6 +31,14 @@ Agent Portal is Talos's personal AI agent dashboard — a real-time web interfac
   - `FEATURE_ACTIVITY_DASHBOARD` — `true` to enable activity dashboard tab
 - **API Key** (Talos's key): `ak_e83ddf5617724e41b80419e19037c2d0`
 
+## Commands
+```bash
+npm install       # Install deps
+npm start         # Start server (port from PORT env or 3000)
+npm run dev       # Same — no hot-reload, restart manually
+# No test suite, no lint config
+```
+
 ## Current Focus / Next Steps
 - Gateway WebSocket proxy (`/ws/gateway`) is live — chat interface connects to OpenClaw via `gw.mtree.io` tunnel
 - Activity dashboard behind feature flag (`FEATURE_ACTIVITY_DASHBOARD=true`)
