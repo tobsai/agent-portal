@@ -20,13 +20,10 @@
       --yellow: #fbbf24;
       --red: #f87171;
       --blue: #60a5fa;
+      --sidebar-width: 240px;
     }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
       font-family: 'Inter', system-ui, sans-serif;
@@ -35,13 +32,269 @@
       height: 100vh;
       overflow: hidden;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
     }
 
-    /* Embed mode — hide header when inside iframe */
-    body.embed-mode header { display: none; }
+    /* Embed mode — hide sidebar */
+    body.embed-mode #channel-sidebar { display: none; }
+    body.embed-mode .hamburger-btn { display: none; }
+    body.embed-mode .main-chat-area { width: 100%; }
 
-    /* Floating model selector — visible in both normal and embed mode */
+    /* ─── Channel Sidebar ─────────────────────────────────────────── */
+    #channel-sidebar {
+      width: var(--sidebar-width);
+      min-width: var(--sidebar-width);
+      height: 100vh;
+      background: rgba(10,10,15,0.95);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 50;
+      transition: transform 0.25s ease;
+    }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .sidebar-logo img {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .sidebar-logo .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+
+    .sidebar-conn {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .sidebar-conn .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: all 0.2s;
+    }
+
+    .sidebar-conn.connected .status-dot {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    .sidebar-conn.connected { color: var(--text-muted); }
+
+    .sidebar-conn.reconnecting .status-dot {
+      background: var(--yellow);
+      box-shadow: 0 0 6px var(--yellow);
+    }
+
+    .sidebar-conn.error .status-dot {
+      background: var(--red);
+      box-shadow: 0 0 6px var(--red);
+    }
+
+    .sidebar-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem 0.4rem;
+      flex-shrink: 0;
+    }
+
+    .sidebar-section-header span {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .sidebar-add-btn {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .sidebar-add-btn:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .channel-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.25rem 0.5rem;
+    }
+
+    .channel-list::-webkit-scrollbar { width: 4px; }
+    .channel-list::-webkit-scrollbar-track { background: transparent; }
+    .channel-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .channel-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.12s;
+      margin-bottom: 1px;
+    }
+
+    .channel-item:hover { background: var(--surface-hover); }
+
+    .channel-item.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .channel-item .channel-name {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .channel-item.active .channel-name { color: var(--accent); }
+
+    .channel-item .channel-badge {
+      font-size: 0.65rem;
+      background: var(--accent);
+      color: #000;
+      border-radius: 10px;
+      padding: 0.05rem 0.4rem;
+      font-weight: 700;
+      min-width: 18px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .channel-item .channel-badge.hidden { display: none; }
+
+    .sidebar-footer {
+      padding: 0.5rem 1rem;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-user {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      overflow: hidden;
+    }
+
+    .sidebar-user img {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .sidebar-user span {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .btn-s {
+      font-size: 0.7rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .btn-s:hover { background: var(--surface-hover); color: var(--text); }
+
+    /* ─── Hamburger (mobile only) ─────────────────────────────────── */
+    .hamburger-btn {
+      display: none;
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 60;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(10,10,15,0.9);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 1.1rem;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(8px);
+    }
+
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 40;
+    }
+
+    /* ─── Main Chat Area ──────────────────────────────────────────── */
+    .main-chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    /* Floating model selector */
     .model-selector-float {
       position: fixed;
       top: 8px;
@@ -64,123 +317,8 @@
       padding: 0.2rem 0.4rem;
     }
 
-    /* Header */
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.75rem 1.5rem;
-      border-bottom: 1px solid var(--border);
-      background: rgba(10,10,15,0.85);
-      backdrop-filter: blur(12px);
-      flex-shrink: 0;
-    }
-
-    .logo {
-      font-size: 1rem;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .logo .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 8px var(--green);
-    }
-
-    .nav-links { display: flex; gap: 0.25rem; }
-    .nav-link {
-      font-size: 0.85rem; padding: 0.4rem 0.75rem; border-radius: 6px;
-      color: var(--text-muted); text-decoration: none; transition: all 0.15s; font-weight: 500;
-    }
-    .nav-link:hover { background: var(--surface-hover); color: var(--text); }
-    .nav-link.active { background: var(--accent-dim); color: var(--accent); }
-
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    .conn {
-      font-size: 0.7rem;
-      color: var(--text-dim);
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-    }
-
-    .conn .status-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--text-dim);
-      transition: all 0.2s;
-    }
-
-    .conn.connected .status-dot {
-      background: var(--green);
-      box-shadow: 0 0 6px var(--green);
-    }
-
-    .conn.connected {
-      color: var(--text-muted);
-    }
-
-    .conn.reconnecting .status-dot {
-      background: var(--yellow);
-      box-shadow: 0 0 6px var(--yellow);
-    }
-
-    .conn.error .status-dot {
-      background: var(--red);
-      box-shadow: 0 0 6px var(--red);
-    }
-
-    .user {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .user img {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-    }
-
-    .user span {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-    }
-
-    .btn-s {
-      font-size: 0.75rem;
-      padding: 0.3rem 0.6rem;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-muted);
-      cursor: pointer;
-      text-decoration: none;
-      transition: all 0.15s;
-    }
-
-    .btn-s:hover {
-      background: var(--surface-hover);
-      color: var(--text);
-    }
-
     /* Model Selector */
-    .model-selector {
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
+    .model-selector { position: relative; display: flex; align-items: center; }
 
     .model-pill {
       font-size: 0.7rem;
@@ -204,10 +342,7 @@
       background: var(--accent-dim);
     }
 
-    .model-pill:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
+    .model-pill:disabled { opacity: 0.5; cursor: default; }
 
     .model-pill.switching {
       color: var(--yellow);
@@ -250,7 +385,7 @@
     .model-option:hover { background: var(--surface-hover); color: var(--text); }
     .model-option.active { color: var(--accent); background: var(--accent-dim); }
 
-    /* Chat Container */
+    /* ─── Chat Container ──────────────────────────────────────────── */
     .chat-container {
       flex: 1;
       display: flex;
@@ -272,22 +407,10 @@
       scroll-behavior: smooth;
     }
 
-    .messages::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    .messages::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    .messages::-webkit-scrollbar-thumb {
-      background: var(--border);
-      border-radius: 4px;
-    }
-
-    .messages::-webkit-scrollbar-thumb:hover {
-      background: var(--surface);
-    }
+    .messages::-webkit-scrollbar { width: 8px; }
+    .messages::-webkit-scrollbar-track { background: transparent; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .messages::-webkit-scrollbar-thumb:hover { background: var(--surface); }
 
     .message {
       display: flex;
@@ -296,19 +419,11 @@
     }
 
     @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(8px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
-    .message.user {
-      flex-direction: row-reverse;
-    }
+    .message.user { flex-direction: row-reverse; }
 
     .message-avatar {
       width: 32px;
@@ -336,8 +451,17 @@
       gap: 0.25rem;
     }
 
-    .message.user .message-content {
-      align-items: flex-end;
+    .message.user .message-content { align-items: flex-end; }
+
+    .message-sender-info {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      padding: 0 0.5rem;
+      font-weight: 500;
+    }
+
+    .message-sender-info .sender-emoji {
+      margin-right: 2px;
     }
 
     .message-bubble {
@@ -365,6 +489,18 @@
       padding: 0 0.5rem;
     }
 
+    /* Mention highlighting */
+    .mention-highlight {
+      color: var(--accent);
+      font-weight: 600;
+      cursor: default;
+    }
+
+    .message.user .mention-highlight {
+      color: rgba(0,0,0,0.7);
+      text-decoration: underline;
+    }
+
     /* Message status badges */
     .message-status {
       font-size: 0.65rem;
@@ -374,12 +510,8 @@
       gap: 0.3rem;
       font-family: 'JetBrains Mono', monospace;
     }
-    .message-status.sending {
-      color: var(--accent);
-    }
-    .message-status.queued {
-      color: var(--yellow);
-    }
+    .message-status.sending { color: var(--accent); }
+    .message-status.queued { color: var(--yellow); }
     .message-status .status-icon {
       display: inline-block;
       width: 6px; height: 6px;
@@ -418,7 +550,7 @@
     .queue-banner .queue-dots span:nth-child(2) { animation-delay: 0.2s; }
     .queue-banner .queue-dots span:nth-child(3) { animation-delay: 0.4s; }
 
-    /* Loading indicator */
+    /* Loading / Typing indicator */
     .message.assistant.loading .message-bubble {
       display: flex;
       align-items: center;
@@ -439,29 +571,49 @@
       animation: bounce 1.4s infinite;
     }
 
-    .typing-indicator span:nth-child(2) {
-      animation-delay: 0.2s;
-    }
-
-    .typing-indicator span:nth-child(3) {
-      animation-delay: 0.4s;
-    }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
 
     @keyframes bounce {
-      0%, 60%, 100% {
-        transform: translateY(0);
-      }
-      30% {
-        transform: translateY(-8px);
-      }
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-8px); }
     }
 
-    /* Input Area */
+    /* Agent typing indicator bar */
+    .agent-typing-bar {
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 1.5rem;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .agent-typing-bar.visible { display: flex; }
+
+    .agent-typing-bar .typing-dots {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .agent-typing-bar .typing-dots span {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      animation: bounce 1.4s infinite;
+    }
+
+    .agent-typing-bar .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .agent-typing-bar .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    /* ─── Input Area ──────────────────────────────────────────────── */
     .input-area {
       padding: 1rem 1.5rem;
       border-top: 1px solid var(--border);
       background: var(--bg);
       flex-shrink: 0;
+      position: relative;
     }
 
     .input-wrapper {
@@ -493,9 +645,7 @@
       background: var(--surface-hover);
     }
 
-    .input-box::placeholder {
-      color: var(--text-dim);
-    }
+    .input-box::placeholder { color: var(--text-dim); }
 
     .send-btn {
       width: 40px;
@@ -513,14 +663,60 @@
       flex-shrink: 0;
     }
 
-    .send-btn:hover:not(:disabled) {
-      filter: brightness(1.15);
-      transform: scale(1.05);
+    .send-btn:hover:not(:disabled) { filter: brightness(1.15); transform: scale(1.05); }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* @-mention autocomplete popup */
+    .mention-popup {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 1.5rem;
+      right: 1.5rem;
+      max-width: 400px;
+      background: #13131a;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.35rem;
+      z-index: 150;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      max-height: 220px;
+      overflow-y: auto;
     }
 
-    .send-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
+    .mention-popup.open { display: block; }
+
+    .mention-option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.45rem 0.6rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.1s;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .mention-option:hover,
+    .mention-option.selected {
+      background: var(--surface-hover);
+      color: var(--text);
+    }
+
+    .mention-option .mention-emoji {
+      font-size: 1rem;
+      width: 24px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .mention-option .mention-name { font-weight: 500; }
+
+    .mention-option .mention-type {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      margin-left: auto;
     }
 
     /* Empty State */
@@ -535,23 +731,9 @@
       text-align: center;
     }
 
-    .empty-state .icon {
-      font-size: 3rem;
-      opacity: 0.3;
-    }
-
-    .empty-state h2 {
-      font-size: 1.25rem;
-      font-weight: 600;
-      color: var(--text-muted);
-    }
-
-    .empty-state p {
-      font-size: 0.9rem;
-      color: var(--text-dim);
-      max-width: 400px;
-      line-height: 1.5;
-    }
+    .empty-state .icon { font-size: 3rem; opacity: 0.3; }
+    .empty-state h2 { font-size: 1.25rem; font-weight: 600; color: var(--text-muted); }
+    .empty-state p { font-size: 0.9rem; color: var(--text-dim); max-width: 400px; line-height: 1.5; }
 
     /* Error Banner */
     .error-banner {
@@ -567,24 +749,10 @@
       color: var(--red);
     }
 
-    .error-banner.show {
-      display: flex;
-    }
-
-    .error-banner .icon {
-      font-size: 1.25rem;
-    }
-
-    .error-banner .close {
-      margin-left: auto;
-      cursor: pointer;
-      opacity: 0.7;
-      transition: opacity 0.15s;
-    }
-
-    .error-banner .close:hover {
-      opacity: 1;
-    }
+    .error-banner.show { display: flex; }
+    .error-banner .icon { font-size: 1.25rem; }
+    .error-banner .close { margin-left: auto; cursor: pointer; opacity: 0.7; transition: opacity 0.15s; }
+    .error-banner .close:hover { opacity: 1; }
 
     /* Attachment button */
     .attach-btn {
@@ -617,10 +785,7 @@
       display: none;
     }
 
-    .preview-thumb {
-      position: relative;
-      display: inline-block;
-    }
+    .preview-thumb { position: relative; display: inline-block; }
 
     .preview-thumb img {
       max-width: 150px;
@@ -659,17 +824,9 @@
       transition: opacity 0.15s;
     }
 
-    .chat-image:hover {
-      opacity: 0.88;
-    }
-
-    .message.user .chat-image {
-      border: 1px solid rgba(255,255,255,0.15);
-    }
-
-    .message.assistant .chat-image {
-      border: 1px solid var(--border);
-    }
+    .chat-image:hover { opacity: 0.88; }
+    .message.user .chat-image { border: 1px solid rgba(255,255,255,0.15); }
+    .message.assistant .chat-image { border: 1px solid var(--border); }
 
     /* Voice Button */
     .voice-btn {
@@ -684,18 +841,13 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.3rem;
       font-size: 1.1rem;
       transition: all 0.15s;
       flex-shrink: 0;
       position: relative;
     }
 
-    .voice-btn:hover {
-      background: var(--surface-hover);
-      color: var(--text);
-      border-color: var(--accent);
-    }
+    .voice-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--accent); }
 
     .voice-btn.listening {
       background: var(--red);
@@ -717,11 +869,7 @@
       color: var(--green);
     }
 
-    .voice-btn.unsupported {
-      opacity: 0.3;
-      cursor: not-allowed;
-      pointer-events: none;
-    }
+    .voice-btn.unsupported { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
 
     @keyframes voice-pulse {
       0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.4); }
@@ -740,11 +888,7 @@
       50% { box-shadow: 0 0 0 8px rgba(245,158,11,0); }
     }
 
-    .voice-btn.paused {
-      background: #3b82f6;
-      border-color: #3b82f6;
-      color: #fff;
-    }
+    .voice-btn.paused { background: #3b82f6; border-color: #3b82f6; color: #fff; }
 
     .voice-btn .spinner {
       width: 18px; height: 18px;
@@ -754,13 +898,9 @@
       animation: spin 0.8s linear infinite;
     }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    .voice-btn .waveform {
-      display: flex; align-items: center; gap: 2px; height: 18px;
-    }
+    .voice-btn .waveform { display: flex; align-items: center; gap: 2px; height: 18px; }
 
     .voice-btn .waveform span {
       width: 3px;
@@ -800,7 +940,7 @@
     .msg-speak-btn:hover { color: var(--accent); background: var(--accent-dim); }
     .msg-speak-btn.playing { color: var(--green); }
 
-    /* Inline audio player (replaces speak button while playing) */
+    /* Inline audio player */
     .inline-audio-player {
       display: flex;
       align-items: center;
@@ -917,11 +1057,7 @@
       font-family: 'JetBrains Mono', monospace;
     }
 
-    .voice-settings-popover input[type=range] {
-      width: 100%;
-      accent-color: var(--accent);
-      cursor: pointer;
-    }
+    .voice-settings-popover input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
 
     .voice-settings-popover .vsp-toggle-row {
       display: flex;
@@ -931,12 +1067,7 @@
       color: var(--text-muted);
     }
 
-    .voice-settings-popover input[type=checkbox] {
-      accent-color: var(--accent);
-      cursor: pointer;
-      width: 14px;
-      height: 14px;
-    }
+    .voice-settings-popover input[type=checkbox] { accent-color: var(--accent); cursor: pointer; width: 14px; height: 14px; }
 
     .voice-settings-popover select {
       width: 100%;
@@ -955,27 +1086,115 @@
       gap: 2px;
     }
 
-    /* Mobile Responsive */
+    /* ─── Create Channel Modal ────────────────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open { display: flex; }
+
+    .modal-box {
+      background: #13131a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      width: 380px;
+      max-width: 90vw;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+    }
+
+    .modal-box h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .modal-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .modal-field label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .modal-field input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.88rem;
+      color: var(--text);
+      font-family: inherit;
+    }
+
+    .modal-field input:focus { outline: none; border-color: var(--accent); }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .modal-btn {
+      padding: 0.45rem 1rem;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+
+    .modal-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+    .modal-btn.primary {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+    }
+
+    .modal-btn.primary:hover { filter: brightness(1.15); }
+
+    /* ─── Mobile Responsive ───────────────────────────────────────── */
     @media (max-width: 768px) {
-      .messages {
-        padding: 1rem;
+      #channel-sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100vh;
+        transform: translateX(-100%);
+        z-index: 50;
       }
 
-      .message-content {
-        max-width: 85%;
-      }
+      #channel-sidebar.open { transform: translateX(0); }
 
-      .input-area {
-        padding: 0.75rem 1rem;
-      }
+      .sidebar-overlay.open { display: block; }
 
-      #image-preview-area {
-        padding: 0 1rem;
-      }
+      .hamburger-btn { display: flex; }
 
-      .user span {
-        display: none;
-      }
+      .main-chat-area { width: 100%; }
+
+      .messages { padding: 1rem; padding-top: 3rem; }
+
+      .message-content { max-width: 85%; }
+
+      .input-area { padding: 0.75rem 1rem; }
+
+      #image-preview-area { padding: 0 1rem; }
     }
   </style>
 <script>
@@ -990,137 +1209,188 @@
       document.body.classList.add('embed-mode');
     }
   </script>
-  <!-- Header -->
-  <header>
-    <div style="display:flex;align-items:center;gap:1.5rem;">
-      <div class="logo">
+
+  <!-- Hamburger button (mobile only) -->
+  <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()">☰</button>
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- Channel Sidebar -->
+  <aside id="channel-sidebar">
+    <div class="sidebar-header">
+      <a href="/" class="sidebar-logo">
+        <img src="/assets/lewis-avatar.png" alt="Lewis">
         <span class="dot"></span>
-        <a href="/" style="color:var(--text);text-decoration:none;font-weight:700;display:flex;align-items:center;gap:8px;"><img src="/assets/lewis-avatar.png" alt="Lewis" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">Lewis</a>
-      </div>
-      <nav class="nav-links">
-        <a href="/dashboard" class="nav-link">Dashboard</a>
-        <a href="/architecture" class="nav-link">Architecture</a>
-        <a href="/docs" class="nav-link">Docs</a>
-        <a href="/c" class="nav-link active">Chat</a>
-        <a href="/game" class="nav-link">🎮 Game Assets</a>
-      </nav>
-    </div>
-    <div class="header-right">
-      <div class="conn" id="connection-status">
+        Lewis
+      </a>
+      <div class="sidebar-conn" id="connection-status">
         <span class="status-dot"></span>
         <span class="status-text">Connecting...</span>
       </div>
-      <div class="user" id="user-info">
+    </div>
+
+    <div class="sidebar-section-header">
+      <span>Channels</span>
+      <button class="sidebar-add-btn" onclick="openCreateChannelModal()" title="Create channel">+</button>
+    </div>
+
+    <div class="channel-list" id="channel-list">
+      <!-- Channels populated via JS -->
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user" id="sidebar-user-info">
         <img src="" alt="" id="user-avatar" style="display: none;">
         <span id="user-name"></span>
       </div>
       <button class="btn-s" onclick="logout()">Logout</button>
     </div>
-  </header>
+  </aside>
 
-  <!-- Floating model selector — visible in embed mode (header is hidden there) -->
-  <div class="model-selector-float">
-    <div class="model-selector" id="model-selector">
-      <button class="model-pill" id="model-pill" onclick="toggleModelDropdown(event)" title="Switch model">…</button>
-      <div class="model-dropdown" id="model-dropdown">
-        <button class="model-option" data-model="anthropic/claude-opus-4-6" onclick="selectModel(this)">anthropic/claude-opus-4-6</button>
-        <button class="model-option" data-model="anthropic/claude-sonnet-4-6" onclick="selectModel(this)">anthropic/claude-sonnet-4-6</button>
-        <button class="model-option" data-model="xai/grok-4-1-fast-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-reasoning</button>
-        <button class="model-option" data-model="xai/grok-4-1-fast-non-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-non-reasoning</button>
-        <button class="model-option" data-model="xai/grok-3" onclick="selectModel(this)">xai/grok-3</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Error Banner -->
-  <div class="error-banner" id="error-banner">
-    <span class="icon">⚠️</span>
-    <span class="message" id="error-message"></span>
-    <span class="close" onclick="hideError()">✕</span>
-  </div>
-
-  <!-- Chat Container -->
-  <div class="chat-container">
-    <div class="messages" id="messages">
-      <div class="empty-state">
-        <div class="icon">💬</div>
-        <h2>Start a conversation</h2>
-        <p>Ask me anything! I'm connected to your OpenClaw gateway and ready to help.</p>
+  <!-- Main Chat Area -->
+  <div class="main-chat-area">
+    <!-- Floating model selector -->
+    <div class="model-selector-float">
+      <div class="model-selector" id="model-selector">
+        <button class="model-pill" id="model-pill" onclick="toggleModelDropdown(event)" title="Switch model">…</button>
+        <div class="model-dropdown" id="model-dropdown">
+          <button class="model-option" data-model="anthropic/claude-opus-4-6" onclick="selectModel(this)">anthropic/claude-opus-4-6</button>
+          <button class="model-option" data-model="anthropic/claude-sonnet-4-6" onclick="selectModel(this)">anthropic/claude-sonnet-4-6</button>
+          <button class="model-option" data-model="xai/grok-4-1-fast-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-reasoning</button>
+          <button class="model-option" data-model="xai/grok-4-1-fast-non-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-non-reasoning</button>
+          <button class="model-option" data-model="xai/grok-3" onclick="selectModel(this)">xai/grok-3</button>
+        </div>
       </div>
     </div>
 
-    <!-- Audio Player Bar (hidden — kept as fallback only) -->
-    <div id="audio-player-bar" style="display:none; padding:8px 16px; background:rgba(129,140,248,0.1); border-top:1px solid var(--border); align-items:center; gap:10px;">
-      <span id="audio-player-label" style="color:var(--text-muted); font-size:0.8rem; flex-shrink:0;">🔊 Playing...</span>
-      <audio id="audio-player" style="flex:1; height:32px; max-width:100%;"></audio>
-      <button onclick="closeAudioPlayer()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;" title="Close">✕</button>
+    <!-- Error Banner -->
+    <div class="error-banner" id="error-banner">
+      <span class="icon">⚠️</span>
+      <span class="message" id="error-message"></span>
+      <span class="close" onclick="hideError()">✕</span>
     </div>
 
-    <div class="input-area">
-      <!-- Hidden file input for image selection -->
-      <input type="file" id="file-input" accept="image/*" style="display:none;" onchange="handleFileSelect(event)">
-      <!-- Image preview above input box -->
-      <div id="image-preview-area"></div>
-      <div class="input-wrapper">
-        <button class="attach-btn" onclick="openFilePicker()" title="Attach image">📎</button>
-        <textarea 
-          class="input-box" 
-          id="message-input" 
-          placeholder="Type a message..." 
-          rows="1"
-          maxlength="10000"></textarea>
-        <div style="position:relative; display:flex; align-items:center; gap:4px; flex-shrink:0;">
-          <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Voice input" aria-label="Voice input">🎙️</button>
-          <button class="voice-settings-btn" id="voice-settings-btn" onclick="toggleVoiceSettings(event)" title="Voice settings">⚙️</button>
-          <div class="voice-settings-popover" id="voice-settings-popover">
-            <div class="vsp-title">Voice Settings</div>
-            <div class="vsp-row">
-              <div class="vsp-label-row">
-                <span>Silence delay</span>
-                <span id="silence-delay-val">2.5s</span>
+    <!-- Chat Container -->
+    <div class="chat-container">
+      <div class="messages" id="messages">
+        <div class="empty-state">
+          <div class="icon">💬</div>
+          <h2>Start a conversation</h2>
+          <p>Ask me anything! I'm connected to your OpenClaw gateway and ready to help.</p>
+        </div>
+      </div>
+
+      <!-- Agent typing indicator bar -->
+      <div class="agent-typing-bar" id="agent-typing-bar">
+        <span id="agent-typing-text"></span>
+        <div class="typing-dots"><span></span><span></span><span></span></div>
+      </div>
+
+      <!-- Audio Player Bar (hidden — kept as fallback only) -->
+      <div id="audio-player-bar" style="display:none; padding:8px 16px; background:rgba(129,140,248,0.1); border-top:1px solid var(--border); align-items:center; gap:10px;">
+        <span id="audio-player-label" style="color:var(--text-muted); font-size:0.8rem; flex-shrink:0;">🔊 Playing...</span>
+        <audio id="audio-player" style="flex:1; height:32px; max-width:100%;"></audio>
+        <button onclick="closeAudioPlayer()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;" title="Close">✕</button>
+      </div>
+
+      <div class="input-area">
+        <!-- Hidden file input for image selection -->
+        <input type="file" id="file-input" accept="image/*" style="display:none;" onchange="handleFileSelect(event)">
+        <!-- @-mention autocomplete popup -->
+        <div class="mention-popup" id="mention-popup"></div>
+        <!-- Image preview above input box -->
+        <div id="image-preview-area"></div>
+        <div class="input-wrapper">
+          <button class="attach-btn" onclick="openFilePicker()" title="Attach image">📎</button>
+          <textarea
+            class="input-box"
+            id="message-input"
+            placeholder="Type a message..."
+            rows="1"
+            maxlength="10000"></textarea>
+          <div style="position:relative; display:flex; align-items:center; gap:4px; flex-shrink:0;">
+            <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Voice input" aria-label="Voice input">🎙️</button>
+            <button class="voice-settings-btn" id="voice-settings-btn" onclick="toggleVoiceSettings(event)" title="Voice settings">⚙️</button>
+            <div class="voice-settings-popover" id="voice-settings-popover">
+              <div class="vsp-title">Voice Settings</div>
+              <div class="vsp-row">
+                <div class="vsp-label-row">
+                  <span>Silence delay</span>
+                  <span id="silence-delay-val">2.5s</span>
+                </div>
+                <input type="range" id="silence-delay-slider" min="1" max="5" step="0.5" value="2.5" oninput="updateSilenceDelay(this.value)">
               </div>
-              <input type="range" id="silence-delay-slider" min="1" max="5" step="0.5" value="2.5" oninput="updateSilenceDelay(this.value)">
-            </div>
-            <div class="vsp-row">
-              <div class="vsp-toggle-row">
-                <span>Auto-play responses</span>
-                <input type="checkbox" id="autoplay-toggle" checked onchange="updateAutoplay(this.checked)">
+              <div class="vsp-row">
+                <div class="vsp-toggle-row">
+                  <span>Auto-play responses</span>
+                  <input type="checkbox" id="autoplay-toggle" checked onchange="updateAutoplay(this.checked)">
+                </div>
               </div>
-            </div>
-            <div class="vsp-row" id="mic-selector-row">
-              <div class="vsp-label-row" style="margin-bottom:4px"><span>Microphone</span></div>
-              <select id="mic-select" onchange="updatePreferredMic(this.value)">
-                <option value="">System Default</option>
-              </select>
+              <div class="vsp-row" id="mic-selector-row">
+                <div class="vsp-label-row" style="margin-bottom:4px"><span>Microphone</span></div>
+                <select id="mic-select" onchange="updatePreferredMic(this.value)">
+                  <option value="">System Default</option>
+                </select>
+              </div>
             </div>
           </div>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()">
+            ➤
+          </button>
         </div>
-        <button class="send-btn" id="send-btn" onclick="sendMessage()">
-          ➤
-        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Channel Modal -->
+  <div class="modal-overlay" id="create-channel-modal">
+    <div class="modal-box">
+      <h3>Create Channel</h3>
+      <div class="modal-field">
+        <label for="new-channel-name">Name</label>
+        <input type="text" id="new-channel-name" placeholder="general" maxlength="50" autocomplete="off">
+      </div>
+      <div class="modal-field">
+        <label for="new-channel-desc">Description (optional)</label>
+        <input type="text" id="new-channel-desc" placeholder="What's this channel about?" maxlength="200" autocomplete="off">
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn" onclick="closeCreateChannelModal()">Cancel</button>
+        <button class="modal-btn primary" onclick="createChannel()">Create</button>
       </div>
     </div>
   </div>
 
   <script>
-    // Extract JWT from URL param for embedded auth
+    // ─── Config & Embed Auth ─────────────────────────────────────────────────
     const urlParams = new URLSearchParams(window.location.search);
     const jwtToken = urlParams.get('token');
-    // Clean token from URL without reload
     if (jwtToken) {
       const cleanUrl = window.location.pathname + '?embed=1';
       window.history.replaceState({}, '', cleanUrl);
     }
 
-    // State
-    let eventSource = null;
+    // ─── State ───────────────────────────────────────────────────────────────
+    let eventSource = null;       // gateway SSE
+    let channelEventSource = null; // channel SSE
     let reconnectTimer = null;
     let reconnectAttempts = 0;
     let isWaitingForResponse = false;
     let currentUser = null;
-    let messageQueue = []; // queued messages to send after current response
-    let pendingImage = null; // { dataUrl, mimeType } — selected but not yet sent
-    const renderedMessageKeys = new Set(); // dedup: 'id|{msgId}' for assistant, 'role|content-prefix' for user
+    let messageQueue = [];
+    let pendingImage = null;
+    const renderedMessageKeys = new Set();
+
+    // Channel state
+    let channels = [];
+    let activeChannelId = null;
+    let agents = [];               // from /api/agents
+
+    // @-mention state
+    let mentionActive = false;
+    let mentionQuery = '';
+    let mentionStartPos = -1;
+    let mentionSelectedIndex = 0;
+    let collectedMentions = [];
 
     const messagesContainer = document.getElementById('messages');
     const messageInput = document.getElementById('message-input');
@@ -1128,14 +1398,16 @@
     const connectionStatus = document.getElementById('connection-status');
     const errorBanner = document.getElementById('error-banner');
     const errorMessage = document.getElementById('error-message');
+    const mentionPopup = document.getElementById('mention-popup');
+    const agentTypingBar = document.getElementById('agent-typing-bar');
+    const agentTypingText = document.getElementById('agent-typing-text');
 
-    // Debug log - POST errors to server for remote debugging
+    // Debug log
     const debugLog = [];
     function dbg(msg, data) {
       const entry = { ts: new Date().toISOString(), msg, data };
       debugLog.push(entry);
       console.log('[chat-debug]', msg, data || '');
-      // POST debug info to server
       fetch('/api/chat-debug', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) },
@@ -1143,14 +1415,17 @@
       }).catch(() => {});
     }
 
+    // ─── Init ────────────────────────────────────────────────────────────────
     async function init() {
       await loadUser();
       await loadCurrentModel();
-      await loadHistory();
+      await loadAgents();
+      await loadChannels();
       connectEventStream();
       setupInputListeners();
     }
 
+    // ─── User ────────────────────────────────────────────────────────────────
     async function loadUser() {
       try {
         const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
@@ -1167,7 +1442,315 @@
       } catch (err) { console.error('Failed to load user:', err); }
     }
 
-    // ---- Model Selector ----
+    // ─── Agents ──────────────────────────────────────────────────────────────
+    async function loadAgents() {
+      try {
+        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
+        const res = await fetch('/api/agents', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          agents = Array.isArray(data) ? data : (data.agents || []);
+        }
+      } catch (err) {
+        console.warn('Failed to load agents:', err);
+        // Fallback agents
+        agents = [{ id: 'lewis', name: 'Lewis', emoji: '📚' }];
+      }
+    }
+
+    function getAgentInfo(nameOrId) {
+      if (!nameOrId) return null;
+      const lower = nameOrId.toLowerCase();
+      return agents.find(a => a.id?.toLowerCase() === lower || a.name?.toLowerCase() === lower);
+    }
+
+    // ─── Channels ────────────────────────────────────────────────────────────
+    async function loadChannels() {
+      try {
+        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
+        const res = await fetch('/api/channels', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          channels = Array.isArray(data) ? data : (data.channels || []);
+        }
+      } catch (err) {
+        console.warn('Failed to load channels:', err);
+      }
+
+      // If no channels from API, create a virtual #general
+      if (channels.length === 0) {
+        channels = [{ id: 'general', name: 'general', description: 'General chat', is_default: true }];
+      }
+
+      renderChannelList();
+
+      // Select default channel
+      const defaultCh = channels.find(c => c.is_default) || channels[0];
+      if (defaultCh) switchChannel(defaultCh.id);
+    }
+
+    function renderChannelList() {
+      const list = document.getElementById('channel-list');
+      list.innerHTML = '';
+      channels.forEach(ch => {
+        const item = document.createElement('div');
+        item.className = 'channel-item' + (ch.id === activeChannelId ? ' active' : '');
+        item.dataset.channelId = ch.id;
+        item.onclick = () => switchChannel(ch.id);
+
+        const name = document.createElement('span');
+        name.className = 'channel-name';
+        name.textContent = '# ' + ch.name;
+
+        const badge = document.createElement('span');
+        badge.className = 'channel-badge hidden';
+        badge.textContent = '0';
+        badge.id = 'badge-' + ch.id;
+
+        item.appendChild(name);
+        item.appendChild(badge);
+        list.appendChild(item);
+      });
+    }
+
+    async function switchChannel(channelId) {
+      if (channelId === activeChannelId) return;
+      activeChannelId = channelId;
+
+      // Update sidebar active state
+      document.querySelectorAll('.channel-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.channelId === channelId);
+      });
+
+      // Clear messages
+      clearMessages();
+      messagesContainer.innerHTML = '<div class="empty-state"><div class="icon">💬</div><h2>Loading messages...</h2></div>';
+
+      // Hide typing indicator
+      hideAgentTyping();
+
+      // Load channel messages
+      await loadChannelMessages(channelId);
+
+      // Connect channel SSE
+      connectChannelStream(channelId);
+
+      // Close mobile sidebar
+      closeSidebar();
+    }
+
+    async function loadChannelMessages(channelId) {
+      try {
+        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
+        const res = await fetch(`/api/channels/${channelId}/messages?limit=200`, { headers, cache: 'no-store' });
+        if (res.ok) {
+          const payload = await res.json();
+          const msgs = Array.isArray(payload?.messages) ? payload.messages.slice() : (Array.isArray(payload) ? payload : []);
+          msgs.sort((a, b) => {
+            const ta = a.created_at ? new Date(a.created_at).getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
+            const tb = b.created_at ? new Date(b.created_at).getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+            return ta - tb;
+          });
+          clearMessages();
+          msgs.forEach(msg => {
+            const role = msg.sender_type === 'agent' ? 'assistant' : (msg.role || 'user');
+            const content = msg.content || msg.text || extractText(msg.content);
+            if (!content) return;
+            if (shouldFilter(role, content)) return;
+            addMessage(role, content, msg.created_at || msg.timestamp, undefined, msg.id, msg.sender_name, msg.sender_emoji);
+          });
+          if (messagesContainer.children.length === 0) {
+            messagesContainer.innerHTML = '<div class="empty-state"><div class="icon">💬</div><h2>Start a conversation</h2><p>Ask me anything! I\'m connected to your OpenClaw gateway and ready to help.</p></div>';
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('Failed to load channel messages, falling back to gateway history:', err);
+      }
+
+      // Fallback: load from gateway chat history
+      await loadGatewayHistory();
+    }
+
+    async function loadGatewayHistory() {
+      try {
+        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
+        const res = await fetch('/api/chat/messages?limit=200', { headers, cache: 'no-store' });
+        if (!res.ok) throw new Error('History load failed');
+        const payload = await res.json();
+        const msgs = Array.isArray(payload?.messages) ? payload.messages.slice() : [];
+        msgs.sort((a, b) => {
+          const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          return ta - tb;
+        });
+        clearMessages();
+        msgs.forEach(msg => {
+          if (msg.role !== 'user' && msg.role !== 'assistant') return;
+          const content = msg.text || extractText(msg.content);
+          if (!content) return;
+          if (shouldFilter(msg.role, content)) return;
+          addMessage(msg.role, content, msg.timestamp, undefined, msg.id);
+        });
+      } catch (err) {
+        console.error('Failed to load history:', err);
+      }
+    }
+
+    function shouldFilter(role, content) {
+      if (role === 'user') {
+        if (content.startsWith('Read HEARTBEAT.md') ||
+            content.startsWith('System:') ||
+            content.startsWith('[media attached:') ||
+            content.startsWith('Pre-compaction memory') ||
+            content.includes('HEARTBEAT_OK') ||
+            content.includes('NO_REPLY')) return true;
+      }
+      if (role === 'assistant') {
+        if (content === 'NO_REPLY' || content === 'HEARTBEAT_OK' ||
+            content.includes('Read image file') || content.includes('(no output)') ||
+            content.includes('Process still running') || content.includes('Command still running') ||
+            content.includes('Process exited')) return true;
+      }
+      return false;
+    }
+
+    function connectChannelStream(channelId) {
+      if (channelEventSource) { channelEventSource.close(); channelEventSource = null; }
+
+      try {
+        const tokenParam = jwtToken ? `?token=${encodeURIComponent(jwtToken)}` : '';
+        channelEventSource = new EventSource(`/api/channels/${channelId}/stream${tokenParam}`);
+
+        channelEventSource.addEventListener('message', (event) => {
+          try {
+            const msg = JSON.parse(event.data || '{}');
+            if (msg.channel_id && msg.channel_id !== activeChannelId) return;
+            const role = msg.sender_type === 'agent' ? 'assistant' : (msg.role || 'user');
+            const content = msg.content || msg.text || extractText(msg.content);
+            if (!content) return;
+            if (shouldFilter(role, content)) return;
+            removeLoadingIndicator();
+            addMessage(role, content, msg.created_at || msg.timestamp, undefined, msg.id, msg.sender_name, msg.sender_emoji);
+            if (role === 'assistant') {
+              isWaitingForResponse = false;
+              hideAgentTyping();
+              processQueue();
+            }
+          } catch (err) { console.error('Channel stream message parse error:', err); }
+        });
+
+        channelEventSource.addEventListener('typing', (event) => {
+          try {
+            const data = JSON.parse(event.data || '{}');
+            if (data.active) {
+              showAgentTyping(data.agent_id || data.sender_id, data.agent_name || data.sender_name, data.agent_emoji || data.sender_emoji);
+            } else {
+              hideAgentTyping();
+            }
+          } catch (err) {}
+        });
+
+        channelEventSource.onerror = () => {
+          // Channel SSE failed — not critical, gateway SSE is primary
+          console.warn('Channel SSE disconnected for', channelId);
+        };
+      } catch (err) {
+        console.warn('Channel SSE connection failed:', err);
+      }
+    }
+
+    // ─── Agent Typing Indicator ──────────────────────────────────────────────
+    let typingTimeout = null;
+
+    function showAgentTyping(agentId, agentName, agentEmoji) {
+      // Try to resolve agent info
+      let emoji = agentEmoji || '';
+      let name = agentName || agentId || 'Agent';
+
+      if (!emoji || !agentName) {
+        const info = getAgentInfo(agentId || agentName);
+        if (info) {
+          emoji = emoji || info.emoji || '';
+          name = info.name || name;
+        }
+      }
+
+      agentTypingText.textContent = `${emoji} ${name} is typing`;
+      agentTypingBar.classList.add('visible');
+
+      // Also show loading indicator in chat
+      if (isWaitingForResponse) addLoadingIndicator();
+
+      // Auto-hide after 10s
+      if (typingTimeout) clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(hideAgentTyping, 10000);
+    }
+
+    function hideAgentTyping() {
+      agentTypingBar.classList.remove('visible');
+      if (typingTimeout) { clearTimeout(typingTimeout); typingTimeout = null; }
+    }
+
+    // ─── Create Channel ──────────────────────────────────────────────────────
+    function openCreateChannelModal() {
+      document.getElementById('create-channel-modal').classList.add('open');
+      document.getElementById('new-channel-name').value = '';
+      document.getElementById('new-channel-desc').value = '';
+      setTimeout(() => document.getElementById('new-channel-name').focus(), 100);
+    }
+
+    function closeCreateChannelModal() {
+      document.getElementById('create-channel-modal').classList.remove('open');
+    }
+
+    async function createChannel() {
+      const name = document.getElementById('new-channel-name').value.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+      const description = document.getElementById('new-channel-desc').value.trim();
+      if (!name) return;
+
+      try {
+        const headers = { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) };
+        const res = await fetch('/api/channels', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ name, description })
+        });
+        if (res.ok) {
+          const ch = await res.json();
+          channels.push(ch);
+          renderChannelList();
+          switchChannel(ch.id);
+          closeCreateChannelModal();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          showError(err.error || 'Failed to create channel');
+        }
+      } catch (err) {
+        showError('Failed to create channel');
+      }
+    }
+
+    // Handle Enter in modal
+    document.getElementById('new-channel-name').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); createChannel(); }
+      if (e.key === 'Escape') closeCreateChannelModal();
+    });
+
+    // ─── Sidebar Toggle (mobile) ─────────────────────────────────────────────
+    function toggleSidebar() {
+      const sidebar = document.getElementById('channel-sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('open');
+    }
+
+    function closeSidebar() {
+      document.getElementById('channel-sidebar').classList.remove('open');
+      document.getElementById('sidebar-overlay').classList.remove('open');
+    }
+
+    // ─── Model Selector ──────────────────────────────────────────────────────
     const MODEL_PILL = document.getElementById('model-pill');
     const MODEL_DROPDOWN = document.getElementById('model-dropdown');
 
@@ -1230,49 +1813,8 @@
         MODEL_PILL.disabled = false;
       }
     }
-    // ---- End Model Selector ----
 
-    async function loadHistory() {
-      try {
-        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
-        const res = await fetch('/api/chat/messages?limit=200', { headers, cache: 'no-store' });
-        if (!res.ok) throw new Error('History load failed');
-        const payload = await res.json();
-        const msgs = Array.isArray(payload?.messages) ? payload.messages.slice() : [];
-        msgs.sort((a, b) => {
-          const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-          const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-          return ta - tb;
-        });
-        clearMessages();
-        msgs.forEach(msg => {
-          if (msg.role !== 'user' && msg.role !== 'assistant') return;
-          const content = msg.text || extractText(msg.content);
-          if (!content) return;
-          if (msg.role === 'user') {
-            if (content.startsWith('Read HEARTBEAT.md') ||
-                content.startsWith('System:') ||
-                content.startsWith('[media attached:') ||
-                content.startsWith('Pre-compaction memory') ||
-                content.includes('HEARTBEAT_OK') ||
-                content.includes('NO_REPLY')) return;
-          }
-          if (msg.role === 'assistant') {
-            if (content === 'NO_REPLY' ||
-                content === 'HEARTBEAT_OK' ||
-                content.includes('Read image file') ||
-                content.includes('(no output)') ||
-                content.includes('Process still running') ||
-                content.includes('Command still running') ||
-                content.includes('Process exited')) return;
-          }
-          addMessage(msg.role, content, msg.timestamp, undefined, msg.id);
-        });
-      } catch (err) {
-        console.error('Failed to load history:', err);
-      }
-    }
-
+    // ─── Gateway SSE (existing) ──────────────────────────────────────────────
     function connectEventStream() {
       updateConnectionStatus('reconnecting', 'Connecting...');
       try {
@@ -1294,18 +1836,19 @@
             } else {
               updateConnectionStatus('reconnecting', 'Connecting...');
             }
-          } catch (err) {
-            console.error('Status parse error:', err);
-          }
+          } catch (err) { console.error('Status parse error:', err); }
         });
         eventSource.addEventListener('typing', (event) => {
           try {
             const data = JSON.parse(event.data || '{}');
-            if (data.active && isWaitingForResponse) addLoadingIndicator();
-            if (!data.active) removeLoadingIndicator();
-          } catch (err) {
-            console.error('Typing parse error:', err);
-          }
+            if (data.active) {
+              showAgentTyping(data.agent_id, data.agent_name, data.agent_emoji);
+              if (isWaitingForResponse) addLoadingIndicator();
+            } else {
+              hideAgentTyping();
+              removeLoadingIndicator();
+            }
+          } catch (err) { console.error('Typing parse error:', err); }
         });
         eventSource.addEventListener('error', (event) => {
           let msg = 'Stream error';
@@ -1321,34 +1864,28 @@
             const content = msg.text || extractText(msg.content);
             if (!content) return;
             if (msg.role === 'user') {
-              // Only show user messages from the stream when NOT waiting for a response
-              // (i.e. messages from other sessions/surfaces). addMessage handles dedup.
               if (!isWaitingForResponse) addMessage('user', content, msg.timestamp, undefined, msg.id);
               return;
             }
             if (msg.role === 'assistant') {
               removeLoadingIndicator();
-              // Suppress internal control tokens — never show these to the user
+              hideAgentTyping();
               if (content === 'NO_REPLY' || content === 'HEARTBEAT_OK' ||
                   content.startsWith('NO_REPLY\n') || content.startsWith('HEARTBEAT_OK\n')) {
                 isWaitingForResponse = false;
                 processQueue();
                 return;
               }
-              // Filter tool noise patterns that sometimes surface as assistant messages
               if (content.includes('Read image file') || content.includes('(no output)') ||
                   content.includes('Process still running') || content.includes('Command still running') ||
                   content.includes('Process exited')) {
-                return; // Don't reset isWaitingForResponse — this is tool noise, not a real reply
+                return;
               }
-              // addMessage handles dedup via renderedMessageKeys (ID-based for assistant)
               addMessage('assistant', content, msg.timestamp, undefined, msg.id);
               isWaitingForResponse = false;
               processQueue();
             }
-          } catch (err) {
-            console.error('Message parse error:', err);
-          }
+          } catch (err) { console.error('Message parse error:', err); }
         });
         eventSource.onerror = () => {
           updateConnectionStatus('error', 'Disconnected');
@@ -1384,23 +1921,17 @@
     function clearMessages() { messagesContainer.innerHTML = ''; renderedMessageKeys.clear(); }
 
     function msgKey(role, content, id) {
-      // Content-based dedup for ALL roles.
-      // Previous approach keyed assistant messages by ID only, but duplicate gateway
-      // events generate different IDs for the same content → duplicates slip through.
-      // Content-prefix key catches duplicates regardless of ID differences.
-      // Risk of over-dedup (two legitimately identical messages) is negligible within
-      // a single page session — 120 chars is enough to distinguish real messages.
       return role + '|' + (content || '').slice(0, 120);
     }
 
-    function addMessage(role, content, timestamp, statusType, id) {
-      // Suppress internal control tokens — never render these as visible messages
+    function addMessage(role, content, timestamp, statusType, id, senderName, senderEmoji) {
+      // Suppress internal control tokens
       if (role === 'assistant' && content && (
           content === 'NO_REPLY' || content === 'HEARTBEAT_OK' ||
           content.trimStart().startsWith('NO_REPLY') || content.trimStart().startsWith('HEARTBEAT_OK')
       )) return null;
 
-      // Dedup: skip if we've already rendered this message
+      // Dedup
       const key = msgKey(role, content, id);
       if (renderedMessageKeys.has(key)) return null;
       renderedMessageKeys.add(key);
@@ -1413,10 +1944,22 @@
 
       const avatar = document.createElement('div');
       avatar.className = 'message-avatar';
-      avatar.textContent = role === 'user' ? (currentUser?.name?.[0] || 'T') : '🦞';
+      if (role === 'user') {
+        avatar.textContent = currentUser?.name?.[0] || 'T';
+      } else {
+        avatar.textContent = senderEmoji || '📚';
+      }
 
       const contentDiv = document.createElement('div');
       contentDiv.className = 'message-content';
+
+      // Agent sender info
+      if (role === 'assistant' && (senderName || senderEmoji)) {
+        const senderInfo = document.createElement('div');
+        senderInfo.className = 'message-sender-info';
+        senderInfo.innerHTML = `<span class="sender-emoji">${senderEmoji || '📚'}</span>${senderName || 'Lewis'}`;
+        contentDiv.appendChild(senderInfo);
+      }
 
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
@@ -1428,7 +1971,6 @@
 
       contentDiv.appendChild(bubble);
 
-      // Status badge for user messages
       if (role === 'user' && statusType) {
         const status = document.createElement('div');
         status.className = 'message-status ' + statusType;
@@ -1454,7 +1996,7 @@
         el = document.createElement('div');
         el.className = 'message assistant';
         el.id = 'streaming-message';
-        el.innerHTML = '<div class="message-avatar">🦞</div><div class="message-content"><div class="message-bubble"></div></div>';
+        el.innerHTML = '<div class="message-avatar">📚</div><div class="message-content"><div class="message-bubble"></div></div>';
         messagesContainer.appendChild(el);
       }
       const bubble = el.querySelector('.message-bubble');
@@ -1470,7 +2012,6 @@
         const bubble = el.querySelector('.message-bubble');
         bubble.innerHTML = '';
         renderMessageContent(bubble, content, 'assistant');
-        // Add timestamp
         const time = document.createElement('div');
         time.className = 'message-timestamp';
         time.textContent = formatTimestamp(new Date().toISOString());
@@ -1482,22 +2023,19 @@
     }
 
     function addLoadingIndicator() {
-      // Only allow ONE loading indicator at a time — remove any existing ones first
       let existing;
       while ((existing = document.getElementById('loading-indicator'))) existing.remove();
       const div = document.createElement('div');
       div.className = 'message assistant loading';
       div.id = 'loading-indicator';
-      div.innerHTML = '<div class="message-avatar">🦞</div><div class="message-content"><div class="message-bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div></div>';
+      div.innerHTML = '<div class="message-avatar">📚</div><div class="message-content"><div class="message-bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div></div>';
       messagesContainer.appendChild(div);
       scrollToBottom();
     }
 
     function removeLoadingIndicator() {
-      // Remove ALL loading indicators (defensive — catches any strays)
       let el;
       while ((el = document.getElementById('loading-indicator'))) el.remove();
-      // Also remove any by class in case ID got stripped
       document.querySelectorAll('.message.assistant.loading').forEach(e => e.remove());
       if (window._responseTimeout) { clearTimeout(window._responseTimeout); window._responseTimeout = null; }
     }
@@ -1514,22 +2052,243 @@
     }
 
     function updateConnectionStatus(state, text) {
-      connectionStatus.className = 'conn ' + state;
+      connectionStatus.className = 'sidebar-conn ' + state;
       connectionStatus.querySelector('.status-text').textContent = text;
     }
 
     function showError(msg) { errorMessage.textContent = msg; errorBanner.classList.add('show'); }
     function hideError() { errorBanner.classList.remove('show'); }
 
+    // ─── @-Mention Autocomplete ──────────────────────────────────────────────
+    function getMentionCandidates() {
+      const candidates = [];
+      agents.forEach(a => {
+        candidates.push({ id: a.id, name: a.name, emoji: a.emoji || '🤖', type: 'agent' });
+      });
+      if (currentUser) {
+        candidates.push({ id: currentUser.id || 'me', name: currentUser.name || currentUser.email, emoji: '👤', type: 'user' });
+      }
+      return candidates;
+    }
+
+    function filterMentionCandidates(query) {
+      const q = query.toLowerCase();
+      return getMentionCandidates().filter(c =>
+        c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q)
+      );
+    }
+
+    function showMentionPopup(filtered) {
+      mentionPopup.innerHTML = '';
+      if (filtered.length === 0) { mentionPopup.classList.remove('open'); return; }
+
+      mentionSelectedIndex = 0;
+      filtered.forEach((c, i) => {
+        const opt = document.createElement('div');
+        opt.className = 'mention-option' + (i === 0 ? ' selected' : '');
+        opt.innerHTML = `<span class="mention-emoji">${c.emoji}</span><span class="mention-name">${c.name}</span><span class="mention-type">${c.type}</span>`;
+        opt.onclick = () => insertMention(c);
+        opt.onmouseenter = () => {
+          mentionPopup.querySelectorAll('.mention-option').forEach(el => el.classList.remove('selected'));
+          opt.classList.add('selected');
+          mentionSelectedIndex = i;
+        };
+        mentionPopup.appendChild(opt);
+      });
+
+      mentionPopup.classList.add('open');
+    }
+
+    function hideMentionPopup() {
+      mentionPopup.classList.remove('open');
+      mentionActive = false;
+      mentionQuery = '';
+      mentionStartPos = -1;
+    }
+
+    function insertMention(candidate) {
+      const val = messageInput.value;
+      const before = val.slice(0, mentionStartPos);
+      const after = val.slice(messageInput.selectionStart);
+      const mentionText = `@${candidate.name} `;
+      messageInput.value = before + mentionText + after;
+      const newPos = before.length + mentionText.length;
+      messageInput.setSelectionRange(newPos, newPos);
+      messageInput.focus();
+
+      // Track mention
+      if (!collectedMentions.find(m => m.id === candidate.id)) {
+        collectedMentions.push({ id: candidate.id, name: candidate.name, type: candidate.type });
+      }
+
+      hideMentionPopup();
+    }
+
+    function handleMentionInput() {
+      const val = messageInput.value;
+      const cursorPos = messageInput.selectionStart;
+
+      // Find the last @ before cursor
+      let atPos = -1;
+      for (let i = cursorPos - 1; i >= 0; i--) {
+        if (val[i] === '@') {
+          // Check that @ is at start or preceded by whitespace
+          if (i === 0 || /\s/.test(val[i - 1])) {
+            atPos = i;
+          }
+          break;
+        }
+        if (/\s/.test(val[i])) break;
+      }
+
+      if (atPos >= 0) {
+        mentionActive = true;
+        mentionStartPos = atPos;
+        mentionQuery = val.slice(atPos + 1, cursorPos);
+        const filtered = filterMentionCandidates(mentionQuery);
+        showMentionPopup(filtered);
+      } else {
+        hideMentionPopup();
+      }
+    }
+
+    function handleMentionKeydown(e) {
+      if (!mentionPopup.classList.contains('open')) return false;
+
+      const options = mentionPopup.querySelectorAll('.mention-option');
+      if (options.length === 0) return false;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        options[mentionSelectedIndex]?.classList.remove('selected');
+        mentionSelectedIndex = (mentionSelectedIndex + 1) % options.length;
+        options[mentionSelectedIndex]?.classList.add('selected');
+        options[mentionSelectedIndex]?.scrollIntoView({ block: 'nearest' });
+        return true;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        options[mentionSelectedIndex]?.classList.remove('selected');
+        mentionSelectedIndex = (mentionSelectedIndex - 1 + options.length) % options.length;
+        options[mentionSelectedIndex]?.classList.add('selected');
+        options[mentionSelectedIndex]?.scrollIntoView({ block: 'nearest' });
+        return true;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const filtered = filterMentionCandidates(mentionQuery);
+        if (filtered[mentionSelectedIndex]) {
+          insertMention(filtered[mentionSelectedIndex]);
+        }
+        return true;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        hideMentionPopup();
+        return true;
+      }
+      return false;
+    }
+
+    // ─── Message Content Rendering ───────────────────────────────────────────
+    function renderMessageContent(bubble, content, role) {
+      const imgTagRe = /\[image:(data:[^\]]+)\]/g;
+      const mediaRe = /MEDIA:\s*(\S+)/g;
+
+      const matches = [];
+      let m;
+
+      imgTagRe.lastIndex = 0;
+      while ((m = imgTagRe.exec(content)) !== null) {
+        matches.push({ start: m.index, end: m.index + m[0].length, src: m[1] });
+      }
+
+      if (role === 'assistant') {
+        mediaRe.lastIndex = 0;
+        while ((m = mediaRe.exec(content)) !== null) {
+          matches.push({ start: m.index, end: m.index + m[0].length, src: m[1] });
+        }
+      }
+
+      if (matches.length === 0) {
+        // Render with mention highlighting
+        renderTextWithMentions(bubble, content, role);
+        return;
+      }
+
+      bubble.innerHTML = '';
+      matches.sort((a, b) => a.start - b.start);
+
+      let pos = 0;
+      for (const match of matches) {
+        if (match.start > pos) {
+          const textSpan = document.createElement('span');
+          textSpan.style.whiteSpace = 'pre-wrap';
+          renderTextWithMentions(textSpan, content.slice(pos, match.start), role);
+          bubble.appendChild(textSpan);
+        }
+        const img = document.createElement('img');
+        img.className = 'chat-image';
+        img.src = match.src;
+        img.alt = 'Image';
+        img.title = 'Click to view full size';
+        img.onclick = () => window.open(match.src, '_blank');
+        img.onerror = () => {
+          const err = document.createElement('span');
+          err.textContent = '[Image failed to load]';
+          err.style.color = 'var(--red)';
+          img.replaceWith(err);
+        };
+        bubble.appendChild(img);
+        pos = match.end;
+      }
+
+      if (pos < content.length) {
+        const textSpan = document.createElement('span');
+        textSpan.style.whiteSpace = 'pre-wrap';
+        renderTextWithMentions(textSpan, content.slice(pos), role);
+        bubble.appendChild(textSpan);
+      }
+    }
+
+    function renderTextWithMentions(el, text, role) {
+      // Parse @mentions and highlight them
+      const mentionRe = /@(\w+)/g;
+      let lastIdx = 0;
+      let m;
+      let hasMentions = false;
+
+      while ((m = mentionRe.exec(text)) !== null) {
+        hasMentions = true;
+        if (m.index > lastIdx) {
+          el.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+        }
+        const span = document.createElement('span');
+        span.className = 'mention-highlight';
+        span.textContent = m[0];
+        el.appendChild(span);
+        lastIdx = m.index + m[0].length;
+      }
+
+      if (!hasMentions) {
+        el.textContent = text;
+      } else if (lastIdx < text.length) {
+        el.appendChild(document.createTextNode(text.slice(lastIdx)));
+      }
+    }
+
+    // ─── Input Listeners ─────────────────────────────────────────────────────
     function setupInputListeners() {
       messageInput.addEventListener('keydown', (e) => {
+        // Check mention popup first
+        if (handleMentionKeydown(e)) return;
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
       });
       messageInput.addEventListener('input', () => {
         messageInput.style.height = 'auto';
         messageInput.style.height = messageInput.scrollHeight + 'px';
+        handleMentionInput();
       });
-      // Image paste: Cmd+V / Ctrl+V with an image in the clipboard
       messageInput.addEventListener('paste', (e) => {
         const items = e.clipboardData?.items;
         if (!items) return;
@@ -1544,17 +2303,20 @@
               showImagePreview(ev.target.result);
             };
             reader.readAsDataURL(file);
-            break; // only handle the first image
+            break;
           }
+        }
+      });
+      // Close mention popup on click outside
+      document.addEventListener('click', (e) => {
+        if (!mentionPopup.contains(e.target) && e.target !== messageInput) {
+          hideMentionPopup();
         }
       });
     }
 
-    // ─── Image handling ───────────────────────────────────────────────────────
-
-    function openFilePicker() {
-      document.getElementById('file-input').click();
-    }
+    // ─── Image Handling ──────────────────────────────────────────────────────
+    function openFilePicker() { document.getElementById('file-input').click(); }
 
     function handleFileSelect(e) {
       const file = e.target.files[0];
@@ -1565,7 +2327,7 @@
         showImagePreview(ev.target.result);
       };
       reader.readAsDataURL(file);
-      e.target.value = ''; // reset so same file can be re-selected
+      e.target.value = '';
     }
 
     function showImagePreview(dataUrl) {
@@ -1592,79 +2354,9 @@
       area.innerHTML = '';
     }
 
-    /**
-     * Render message content into a bubble element.
-     * Detects:
-     *   [image:data:image/...;base64,...] — inline base64 image (user or assistant)
-     *   MEDIA: <url>                      — media URL in assistant messages
-     */
-    function renderMessageContent(bubble, content, role) {
-      // Patterns
-      const imgTagRe = /\[image:(data:[^\]]+)\]/g;
-      const mediaRe = /MEDIA:\s*(\S+)/g;
-
-      const matches = [];
-      let m;
-
-      imgTagRe.lastIndex = 0;
-      while ((m = imgTagRe.exec(content)) !== null) {
-        matches.push({ start: m.index, end: m.index + m[0].length, src: m[1] });
-      }
-
-      if (role === 'assistant') {
-        mediaRe.lastIndex = 0;
-        while ((m = mediaRe.exec(content)) !== null) {
-          matches.push({ start: m.index, end: m.index + m[0].length, src: m[1] });
-        }
-      }
-
-      if (matches.length === 0) {
-        bubble.textContent = content;
-        return;
-      }
-
-      bubble.innerHTML = '';
-      matches.sort((a, b) => a.start - b.start);
-
-      let pos = 0;
-      for (const match of matches) {
-        // Text before image
-        if (match.start > pos) {
-          const textSpan = document.createElement('span');
-          textSpan.style.whiteSpace = 'pre-wrap';
-          textSpan.textContent = content.slice(pos, match.start);
-          bubble.appendChild(textSpan);
-        }
-        // Image element
-        const img = document.createElement('img');
-        img.className = 'chat-image';
-        img.src = match.src;
-        img.alt = 'Image';
-        img.title = 'Click to view full size';
-        img.onclick = () => window.open(match.src, '_blank');
-        img.onerror = () => {
-          const err = document.createElement('span');
-          err.textContent = '[Image failed to load]';
-          err.style.color = 'var(--red)';
-          img.replaceWith(err);
-        };
-        bubble.appendChild(img);
-        pos = match.end;
-      }
-
-      // Remaining text
-      if (pos < content.length) {
-        const textSpan = document.createElement('span');
-        textSpan.style.whiteSpace = 'pre-wrap';
-        textSpan.textContent = content.slice(pos);
-        bubble.appendChild(textSpan);
-      }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-
-    let activeUserMsg = null; // track the message being processed
-    let queuedUserMsgs = []; // track queued message elements
+    // ─── Send Message ────────────────────────────────────────────────────────
+    let activeUserMsg = null;
+    let queuedUserMsgs = [];
 
     function sendMessage() {
       const text = messageInput.value.trim();
@@ -1674,8 +2366,8 @@
 
       messageInput.value = '';
       messageInput.style.height = 'auto';
+      hideMentionPopup();
 
-      // Build full message content (text + optional inline image)
       let fullContent = text;
       if (image) {
         const imageTag = `[image:${image.dataUrl}]`;
@@ -1683,50 +2375,71 @@
         clearImagePreview();
       }
 
+      // Extract mentions from the text
+      const mentions = [...collectedMentions];
+      collectedMentions = [];
+
       if (isWaitingForResponse) {
-        // Show as queued
         const msgEl = addMessage('user', fullContent, null, 'queued');
-        messageQueue.push({ text: fullContent, el: msgEl });
+        messageQueue.push({ text: fullContent, el: msgEl, mentions });
         queuedUserMsgs.push(msgEl);
         updateQueueIndicator();
         return;
       }
 
-      // Show as sending
       const msgEl = addMessage('user', fullContent, null, 'sending');
       activeUserMsg = msgEl;
-      isWaitingForResponse = true;   // set synchronously — before dispatchMessage's async fetch
-      dispatchMessage(fullContent);
+      isWaitingForResponse = true;
+      dispatchMessage(fullContent, mentions);
     }
 
-    async function dispatchMessage(text) {
+    async function dispatchMessage(text, mentions) {
       const sendId = 'send-' + Date.now();
       const headers = { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) };
-      try {
-        const response = await fetch('/api/chat/send', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ message: text, idempotencyKey: sendId })
-        });
-        if (!response.ok) {
-          const errorPayload = await response.json().catch(() => ({}));
-          throw new Error(errorPayload.error || 'Send failed');
+
+      // Try channel API first, then fall back to gateway
+      let sent = false;
+      if (activeChannelId) {
+        try {
+          const res = await fetch(`/api/channels/${activeChannelId}/messages`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ content: text, message: text, mentions: mentions?.map(m => m.id) || [] })
+          });
+          if (res.ok) sent = true;
+        } catch (err) {
+          console.warn('Channel message send failed, falling back to gateway:', err);
         }
-      } catch (err) {
-        showError(err.message || 'Send failed');
-        isWaitingForResponse = false;
-        markMessageDone(activeUserMsg);
-        processQueue();
-        return;
       }
+
+      if (!sent) {
+        try {
+          const response = await fetch('/api/chat/send', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ message: text, idempotencyKey: sendId })
+          });
+          if (!response.ok) {
+            const errorPayload = await response.json().catch(() => ({}));
+            throw new Error(errorPayload.error || 'Send failed');
+          }
+        } catch (err) {
+          showError(err.message || 'Send failed');
+          isWaitingForResponse = false;
+          markMessageDone(activeUserMsg);
+          processQueue();
+          return;
+        }
+      }
+
       addLoadingIndicator();
       isWaitingForResponse = true;
-      // Safety timeout: unlock after 120s if no response received
       if (window._responseTimeout) clearTimeout(window._responseTimeout);
       window._responseTimeout = setTimeout(() => {
         if (isWaitingForResponse) {
           isWaitingForResponse = false;
           removeLoadingIndicator();
+          hideAgentTyping();
           markMessageDone(activeUserMsg);
           console.warn('Response timeout — unlocking chat input');
           processQueue();
@@ -1745,14 +2458,11 @@
     }
 
     function processQueue() {
-      // Mark the completed message as done
       markMessageDone(activeUserMsg);
       activeUserMsg = null;
-
       updateQueueIndicator();
       if (messageQueue.length > 0 && !isWaitingForResponse) {
         const next = messageQueue.shift();
-        // Promote from queued → sending
         if (next.el && next.el._statusEl) {
           next.el._statusEl.className = 'message-status sending';
           next.el._statusEl.innerHTML = '<span class="status-icon"></span>Sending…';
@@ -1760,7 +2470,7 @@
         activeUserMsg = next.el;
         queuedUserMsgs = queuedUserMsgs.filter(m => m !== next.el);
         updateQueueIndicator();
-        dispatchMessage(next.text);
+        dispatchMessage(next.text, next.mentions);
       }
     }
 
@@ -1782,8 +2492,7 @@
 
     function logout() { window.location.href = '/auth/logout'; }
 
-    // ─── Voice Settings ─────────────────────────────────────────────────────────
-
+    // ─── Voice Settings ──────────────────────────────────────────────────────
     const voiceSettings = { silenceTimeout: 2500, autoplay: true };
 
     function loadVoiceSettings() {
@@ -1852,17 +2561,13 @@
     }
 
     function updatePreferredMic(deviceId) {
-      if (deviceId) {
-        localStorage.setItem('voicePreferredMic', deviceId);
-      } else {
-        localStorage.removeItem('voicePreferredMic');
-      }
+      if (deviceId) localStorage.setItem('voicePreferredMic', deviceId);
+      else localStorage.removeItem('voicePreferredMic');
     }
 
-    // ─── Voice Dialog ──────────────────────────────────────────────────────────
-
+    // ─── Voice Dialog ────────────────────────────────────────────────────────
     const voiceBtn = document.getElementById('voice-btn');
-    let voiceState = 'idle'; // idle | activating | listening | paused | thinking | speaking
+    let voiceState = 'idle';
     let recognition = null;
     let currentAudio = null;
     let voiceSupported = false;
@@ -1881,23 +2586,15 @@
     }
 
     try {
-    // Native speech bridge (iOS WKWebView) — injected by Swift via window.hasNativeSpeech = true
     if (window.hasNativeSpeech && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.voiceInput) {
       voiceSupported = true;
       console.log('[voice] Using native speech bridge (iOS)');
-
       window.nativeSpeechTranscript = function(text) {
-        if (text) {
-          setVoiceState('thinking');
-          messageInput.value = text;
-          sendMessage();
-        }
+        if (text) { setVoiceState('thinking'); messageInput.value = text; sendMessage(); }
       };
       window.nativeSpeechStateChanged = function(isListening) {
         setVoiceState(isListening ? 'listening' : 'idle');
       };
-
-    // Web Speech API fallback (desktop browsers)
     } else {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
@@ -1907,9 +2604,7 @@
         recognition.interimResults = true;
         recognition.lang = 'en-US';
 
-        recognition.onaudiostart = () => {
-          if (voiceState === 'activating') setVoiceState('listening');
-        };
+        recognition.onaudiostart = () => { if (voiceState === 'activating') setVoiceState('listening'); };
 
         recognition.onresult = (event) => {
           let interim = '';
@@ -1940,7 +2635,6 @@
           } else if (voiceState === 'listening' || voiceState === 'activating') {
             setVoiceState('idle');
           } else if (voiceState === 'paused') {
-            // Recognition ended unexpectedly while paused — go idle without sending
             setVoiceState('idle');
           }
           finalTranscript = '';
@@ -1960,43 +2654,25 @@
       if (!voiceBtn) return;
       voiceBtn.className = 'voice-btn' + (state !== 'idle' ? ' ' + state : '');
       if (!voiceSupported) voiceBtn.classList.add('unsupported');
-
       switch (state) {
-        case 'idle':
-          voiceBtn.innerHTML = '🎤';
-          break;
-        case 'activating':
-          voiceBtn.innerHTML = '🎤';
-          break;
-        case 'listening':
-          voiceBtn.innerHTML = '🎤'; // pulse animation via CSS
-          break;
-        case 'paused':
-          voiceBtn.innerHTML = '⏸️';
-          break;
-        case 'thinking':
-          voiceBtn.innerHTML = '<div class="spinner"></div>';
-          break;
-        case 'speaking':
-          voiceBtn.innerHTML = '<div class="waveform"><span></span><span></span><span></span><span></span></div>';
-          break;
+        case 'idle': voiceBtn.innerHTML = '🎤'; break;
+        case 'activating': voiceBtn.innerHTML = '🎤'; break;
+        case 'listening': voiceBtn.innerHTML = '🎤'; break;
+        case 'paused': voiceBtn.innerHTML = '⏸️'; break;
+        case 'thinking': voiceBtn.innerHTML = '<div class="spinner"></div>'; break;
+        case 'speaking': voiceBtn.innerHTML = '<div class="waveform"><span></span><span></span><span></span><span></span></div>'; break;
       }
     }
 
     function toggleVoice() {
       if (!voiceSupported) return;
 
-      // Native speech bridge (iOS)
       if (window.hasNativeSpeech && window.webkit && window.webkit.messageHandlers.voiceInput) {
-        if (voiceState === 'listening') {
-          window.webkit.messageHandlers.voiceInput.postMessage({ action: 'stop' });
-        } else if (voiceState === 'idle') {
-          window.webkit.messageHandlers.voiceInput.postMessage({ action: 'start' });
-        }
+        if (voiceState === 'listening') window.webkit.messageHandlers.voiceInput.postMessage({ action: 'stop' });
+        else if (voiceState === 'idle') window.webkit.messageHandlers.voiceInput.postMessage({ action: 'start' });
         return;
       }
 
-      // Double-tap detection (within 350ms) while listening or paused → stop and send
       const now = Date.now();
       const isDoubleTap = (now - lastTapTime) < 350;
       lastTapTime = now;
@@ -2005,46 +2681,27 @@
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
         const transcript = (finalTranscript || messageInput.value).trim();
         recognition.abort();
-        if (transcript) {
-          setVoiceState('thinking');
-          messageInput.value = transcript;
-          sendMessage();
-        } else {
-          finalTranscript = '';
-          messageInput.value = '';
-          setVoiceState('idle');
-        }
+        if (transcript) { setVoiceState('thinking'); messageInput.value = transcript; sendMessage(); }
+        else { finalTranscript = ''; messageInput.value = ''; setVoiceState('idle'); }
         return;
       }
 
-      // Single tap while listening → PAUSE (clear silence timer, keep recognition running)
       if (voiceState === 'listening') {
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
         setVoiceState('paused');
         return;
       }
 
-      // Single tap while paused → RESUME (restart silence timer)
-      if (voiceState === 'paused') {
-        setVoiceState('listening');
-        resetSilenceTimer();
-        return;
-      }
+      if (voiceState === 'paused') { setVoiceState('listening'); resetSilenceTimer(); return; }
 
-      // Single tap while activating → cancel
       if (voiceState === 'activating') {
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-        recognition.abort();
-        finalTranscript = '';
-        messageInput.value = '';
-        setVoiceState('idle');
+        recognition.abort(); finalTranscript = ''; messageInput.value = ''; setVoiceState('idle');
         return;
       }
 
       if (voiceState === 'speaking' && currentAudio) {
-        currentAudio.pause();
-        currentAudio = null;
-        setVoiceState('idle');
+        currentAudio.pause(); currentAudio = null; setVoiceState('idle');
         return;
       }
 
@@ -2055,12 +2712,8 @@
       setVoiceState('activating');
       try {
         const preferredMic = localStorage.getItem('voicePreferredMic');
-        const startRecognition = () => {
-          recognition.start();
-          resetSilenceTimer();
-        };
+        const startRecognition = () => { recognition.start(); resetSilenceTimer(); };
         if (preferredMic && navigator.mediaDevices) {
-          // Prime the audio subsystem with the preferred device before starting recognition
           navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: preferredMic } } })
             .then(stream => { stream.getTracks().forEach(t => t.stop()); startRecognition(); })
             .catch(() => startRecognition());
@@ -2074,8 +2727,7 @@
       }
     }
 
-    // ─── Inline Audio Player ───────────────────────────────────────────────────
-
+    // ─── Inline Audio Player ─────────────────────────────────────────────────
     function createInlinePlayer(blob, onDone) {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
@@ -2137,7 +2789,6 @@
       if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     }
 
-    // TTS playback — speakBtnEl is optional; if provided, replaced with inline player
     async function playTTS(text, onDone, speakBtnEl) {
       try {
         const headers = { 'Content-Type': 'application/json' };
@@ -2160,7 +2811,6 @@
 
         if (speakBtnEl && speakBtnEl.parentNode) {
           const { container, audio } = createInlinePlayer(blob, (inlineEl) => {
-            // Restore speak button when audio ends
             if (inlineEl.parentNode) inlineEl.parentNode.replaceChild(speakBtnEl, inlineEl);
             speakBtnEl.classList.remove('playing');
             if (onDone) onDone();
@@ -2169,7 +2819,6 @@
           currentAudio = audio;
           audio.play().catch(e => console.warn('[voice] Play error:', e));
         } else {
-          // Fallback: invisible Audio element
           const url = URL.createObjectURL(blob);
           const audio = new Audio(url);
           currentAudio = audio;
@@ -2184,15 +2833,14 @@
       }
     }
 
-    // Hook into message rendering to auto-play TTS when in voice mode and add speaker icons
+    // Hook into message rendering to add speaker icons + auto-play TTS
     const _origAddMessage = addMessage;
-    addMessage = function(role, content, timestamp, statusType, id) {
-      const el = _origAddMessage(role, content, timestamp, statusType, id);
+    addMessage = function(role, content, timestamp, statusType, id, senderName, senderEmoji) {
+      const el = _origAddMessage(role, content, timestamp, statusType, id, senderName, senderEmoji);
       if (!el) return el;
 
       try {
         if (role === 'assistant' && content) {
-          // Add speaker icon to agent messages
           const bubble = el.querySelector('.message-bubble');
           if (bubble && bubble.parentNode) {
             const wrap = document.createElement('div');
@@ -2215,7 +2863,6 @@
             };
             wrap.appendChild(speakBtn);
 
-            // Auto-play if we're in voice conversation mode (thinking state)
             if (voiceState === 'thinking' && voiceSettings.autoplay) {
               setVoiceState('speaking');
               speakBtn.classList.add('playing');
