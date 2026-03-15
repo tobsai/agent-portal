@@ -1350,7 +1350,7 @@ app.post('/api/tts', requireAuth, async (req, res) => {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return res.status(503).json({ error: 'TTS not configured' });
 
-  const { text, voiceId = 'JBFqnCBsd6RMkjVDRZzb' } = req.body || {};
+  const { text, voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM' } = req.body || {};
   if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text is required' });
   if (text.length > 5000) return res.status(400).json({ error: 'text too long (max 5000 chars)' });
 
@@ -1390,6 +1390,60 @@ app.post('/api/tts', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[tts] Error:', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'TTS request failed' });
+  }
+});
+
+// Streaming TTS — sentence-chunked for low-latency voice (fires first audio as sentences complete)
+// Returns: chunked audio/mpeg with X-Chunk-Index header per chunk for sequential playback
+app.post('/api/tts/stream', requireAuth, async (req, res) => {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'TTS not configured' });
+
+  const { text, voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM' } = req.body || {};
+  if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text is required' });
+  if (text.length > 8000) return res.status(400).json({ error: 'text too long' });
+
+  // Split into sentence-level chunks for streaming
+  const sentences = text.match(/[^.!?]+[.!?]+[\s]*/g) || [text];
+
+  res.set('Content-Type', 'audio/mpeg');
+  res.set('Cache-Control', 'no-store');
+  res.set('Transfer-Encoding', 'chunked');
+
+  try {
+    for (let i = 0; i < sentences.length; i++) {
+      const sentence = sentences[i].trim();
+      if (!sentence) continue;
+
+      const elevenRes = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
+          body: JSON.stringify({
+            text: sentence,
+            model_id: 'eleven_flash_v2_5', // lowest latency model
+            voice_settings: { stability: 0.4, similarity_boost: 0.75, speed: 1.1 },
+          }),
+        }
+      );
+
+      if (!elevenRes.ok) {
+        console.error('[tts/stream] ElevenLabs error chunk', i, elevenRes.status);
+        continue; // skip bad sentence, keep streaming rest
+      }
+
+      const reader = elevenRes.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!res.writableEnded) res.write(value);
+      }
+    }
+  } catch (err) {
+    console.error('[tts/stream] Error:', err.message);
+  } finally {
+    if (!res.writableEnded) res.end();
   }
 });
 
