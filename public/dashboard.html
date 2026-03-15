@@ -595,6 +595,144 @@
       font-weight: 500;
     }
 
+    /* New channel button */
+    .new-channel-btn {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    .new-channel-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+    /* Channel delete button (shown on hover) */
+    .channel-delete {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-dim);
+      font-size: 11px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      display: none;
+      transition: all 0.15s;
+    }
+    .channel-item:hover .channel-delete { display: block; }
+    .channel-delete:hover { color: var(--red); background: rgba(248,113,113,0.1); }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 300;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    .modal-overlay.visible { display: flex; }
+
+    .modal-box {
+      background: #16161f;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: 360px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 2px 6px;
+    }
+    .modal-close:hover { color: var(--text); }
+
+    .modal-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-row label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .form-input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+      width: 100%;
+    }
+    .form-input:focus { border-color: rgba(129,140,248,0.5); }
+    .form-input::placeholder { color: var(--text-dim); }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: opacity 0.2s;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.2s;
+    }
+    .btn-secondary:hover { background: var(--surface-hover); }
+
     /* Mobile responsive */
     @media (max-width: 600px) {
       .sidebar { display: none; }
@@ -609,23 +747,14 @@
     <span>⚡ Agent Portal</span>
   </div>
 
-  <div class="sidebar-section">
-    <div class="sidebar-section-label">Direct Messages</div>
-    <div class="channel-item active" data-channel="lewis" data-emoji="🤖" data-name="Lewis" onclick="switchChannel(this)">
-      <span class="channel-emoji">🤖</span>
-      <span class="channel-name">Lewis</span>
+  <div class="sidebar-section" style="flex:1;overflow-y:auto;">
+    <div class="sidebar-section-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:4px;">
+      <span>Channels</span>
+      <button class="new-channel-btn" onclick="openNewChannelModal()" title="New channel">＋</button>
     </div>
-    <div class="channel-item" data-channel="pascal" data-emoji="⚙️" data-name="Pascal" onclick="switchChannel(this)">
-      <span class="channel-emoji">⚙️</span>
-      <span class="channel-name">Pascal</span>
-    </div>
-  </div>
-
-  <div class="sidebar-section">
-    <div class="sidebar-section-label">Channels</div>
-    <div class="channel-item" data-channel="agents" data-emoji="👥" data-name="#agents" onclick="switchChannel(this)">
-      <span class="channel-emoji">👥</span>
-      <span class="channel-name">#agents</span>
+    <div id="channelList">
+      <!-- Populated by JS -->
+      <div style="padding:8px 10px;font-size:12px;color:var(--text-dim);">Loading…</div>
     </div>
   </div>
 
@@ -637,6 +766,34 @@
     </div>
   </div>
 </nav>
+
+<!-- New channel modal -->
+<div class="modal-overlay" id="newChannelModal" onclick="closeNewChannelModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span>New Channel</span>
+      <button class="modal-close" onclick="closeNewChannelModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Emoji</label>
+        <input type="text" id="newChEmoji" value="💬" maxlength="2" class="form-input" style="width:60px;">
+      </div>
+      <div class="form-row">
+        <label>Name</label>
+        <input type="text" id="newChName" placeholder="e.g. Lewis, #general" class="form-input" autofocus>
+      </div>
+      <div class="form-row">
+        <label>Session key <span style="color:var(--text-dim);font-size:11px;">(optional)</span></label>
+        <input type="text" id="newChSession" placeholder="agent:main:main" class="form-input">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeNewChannelModal()">Cancel</button>
+      <button class="btn-primary" onclick="createChannel()">Create</button>
+    </div>
+  </div>
+</div>
 
 <!-- Main chat -->
 <div class="main">
@@ -705,17 +862,15 @@
 <script>
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const AGENTS = [
-  { id: 'lewis', name: 'Lewis', emoji: '🤖', session: 'agent:main:main' },
-  { id: 'pascal', name: 'Pascal', emoji: '⚙️', session: 'agent:main:main' },
-];
+// Populated from API on load
+let AGENTS = [];
 
 // ── State ──────────────────────────────────────────────────────────────────
 
 let ws = null;
 let wsConnected = false;
 let wsReconnectTimer = null;
-let currentChannel = { id: 'lewis', emoji: '🤖', name: 'Lewis', session: 'agent:main:main' };
+let currentChannel = { id: null, emoji: '💬', name: '', session: 'agent:main:main' };
 let messages = [];
 let streamingMessageId = null;
 let isWaiting = false;
@@ -758,8 +913,153 @@ async function init() {
     document.getElementById('userName').textContent = user.name || user.email || 'You';
   } catch (e) { console.warn('user load failed', e); }
 
+  // Load agents list for @mention autocomplete
+  try {
+    const res = await fetch('/api/agents', { credentials: 'include' });
+    const agents = await res.json();
+    AGENTS = agents.map(a => ({ id: a.id, name: a.name, emoji: '🤖', session: 'agent:main:main' }));
+  } catch (e) { console.warn('agents load failed', e); }
+
+  // Load channels
+  await loadChannels();
+
   connectWS();
 }
+
+// ── Channels ───────────────────────────────────────────────────────────────
+
+let channelList = [];
+
+async function loadChannels() {
+  try {
+    const res = await fetch('/api/channels', { credentials: 'include' });
+    channelList = await res.json();
+    renderChannelList();
+    // Auto-select first channel
+    if (channelList.length > 0 && !currentChannel.id) {
+      selectChannelById(channelList[0].id);
+    }
+  } catch (e) {
+    console.warn('channels load failed', e);
+    document.getElementById('channelList').innerHTML =
+      '<div style="padding:8px 10px;font-size:12px;color:var(--text-dim);">No channels yet</div>';
+  }
+}
+
+function renderChannelList() {
+  const list = document.getElementById('channelList');
+  list.innerHTML = '';
+
+  if (channelList.length === 0) {
+    list.innerHTML = '<div style="padding:8px 10px;font-size:12px;color:var(--text-dim);">No channels — create one ↑</div>';
+    return;
+  }
+
+  for (const ch of channelList) {
+    const item = document.createElement('div');
+    item.className = 'channel-item' + (currentChannel.id === ch.id ? ' active' : '');
+    item.dataset.channelId = ch.id;
+    item.onclick = () => selectChannelById(ch.id);
+
+    const emoji = document.createElement('span');
+    emoji.className = 'channel-emoji';
+    emoji.textContent = ch.emoji || '💬';
+
+    const name = document.createElement('span');
+    name.className = 'channel-name';
+    name.textContent = ch.name;
+
+    const del = document.createElement('button');
+    del.className = 'channel-delete';
+    del.title = 'Delete channel';
+    del.textContent = '✕';
+    del.onclick = (e) => { e.stopPropagation(); deleteChannel(ch.id); };
+
+    item.appendChild(emoji);
+    item.appendChild(name);
+    if (!ch.is_default) item.appendChild(del);
+
+    list.appendChild(item);
+  }
+}
+
+function selectChannelById(id) {
+  const ch = channelList.find(c => c.id === id);
+  if (!ch) return;
+
+  currentChannel = {
+    id: ch.id,
+    emoji: ch.emoji || '💬',
+    name: ch.name,
+    session: ch.session_key || 'agent:main:main',
+  };
+
+  document.getElementById('headerEmoji').textContent = currentChannel.emoji;
+  document.getElementById('headerName').textContent = currentChannel.name;
+  document.getElementById('headerStatus').textContent = 'AI assistant';
+
+  renderChannelList(); // re-render to update active state
+  messages = [];
+  renderAllMessages();
+  if (wsConnected) loadHistory();
+}
+
+async function deleteChannel(id) {
+  if (!confirm('Delete this channel?')) return;
+  try {
+    await fetch('/api/channels/' + id, { method: 'DELETE', credentials: 'include' });
+    channelList = channelList.filter(c => c.id !== id);
+    if (currentChannel.id === id && channelList.length > 0) {
+      selectChannelById(channelList[0].id);
+    }
+    renderChannelList();
+  } catch (e) { console.error('delete channel failed', e); }
+}
+
+function openNewChannelModal() {
+  document.getElementById('newChannelModal').classList.add('visible');
+  document.getElementById('newChName').focus();
+}
+
+function closeNewChannelModal(event) {
+  if (event && event.target !== document.getElementById('newChannelModal')) return;
+  document.getElementById('newChannelModal').classList.remove('visible');
+  document.getElementById('newChName').value = '';
+  document.getElementById('newChSession').value = '';
+  document.getElementById('newChEmoji').value = '💬';
+}
+
+async function createChannel() {
+  const name = document.getElementById('newChName').value.trim();
+  const emoji = document.getElementById('newChEmoji').value.trim() || '💬';
+  const session_key = document.getElementById('newChSession').value.trim() || 'agent:main:main';
+
+  if (!name) { document.getElementById('newChName').focus(); return; }
+
+  try {
+    const res = await fetch('/api/channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name, emoji, session_key }),
+    });
+    const ch = await res.json();
+    if (!res.ok) throw new Error(ch.error || 'Create failed');
+    channelList.push(ch);
+    closeNewChannelModal();
+    selectChannelById(ch.id);
+  } catch (e) {
+    console.error('create channel failed', e);
+    alert('Failed to create channel: ' + e.message);
+  }
+}
+
+// Allow Enter key in modal name field to submit
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('newChName').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') createChannel();
+  });
+});
 
 // ── WebSocket ──────────────────────────────────────────────────────────────
 
@@ -1360,31 +1660,8 @@ function toggleMic() {
   }
 }
 
-// ── Channel switching ─────────────────────────────────────────────────────
-
-function switchChannel(el) {
-  document.querySelectorAll('.channel-item').forEach(i => i.classList.remove('active'));
-  el.classList.add('active');
-
-  const emoji = el.dataset.emoji || '💬';
-  const name = el.dataset.name || 'Chat';
-  const channelId = el.dataset.channel;
-
-  currentChannel = {
-    id: channelId,
-    emoji,
-    name,
-    session: 'agent:main:main', // all use same session for now
-  };
-
-  document.getElementById('headerEmoji').textContent = emoji;
-  document.getElementById('headerName').textContent = name;
-  document.getElementById('headerStatus').textContent = 'AI assistant';
-
-  messages = [];
-  renderAllMessages();
-  loadHistory();
-}
+// switchChannel alias kept for any stale inline references
+function switchChannel(el) { /* replaced by selectChannelById */ }
 
 // ── Connection status ─────────────────────────────────────────────────────
 
