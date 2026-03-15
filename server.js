@@ -765,17 +765,14 @@ function requireAdmin(req, res, next) {
 }
 
 // ============ STATIC ============
-app.get('/', (req, res) => res.redirect('/c'));
+app.get('/', (req, res) => res.redirect('/chat'));
 
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
 
-// Redirect old cached /chat to new path
-app.get('/chat', (req, res) => {
-  if (!req.isAuthenticated()) return res.redirect('/');
-  res.redirect('/c');
-});
+// Redirect old /c to canonical /chat
+app.get('/c', (req, res) => res.redirect('/chat'));
 
-app.get('/c', (req, res) => {
+app.get('/chat', (req, res) => {
   if (!req.isAuthenticated()) return res.redirect('/');
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.set('Pragma', 'no-cache');
@@ -1071,7 +1068,7 @@ app.get('/auth/google/callback',
       const token = jwt.sign({ userId: req.user.id, email: req.user.email }, JWT_SECRET, { expiresIn: '90d' });
       return res.redirect(`com.mapletree.agent-portal://auth/callback?token=${encodeURIComponent(token)}`);
     }
-    res.redirect('/c');
+    res.redirect('/chat');
   }
 );
 app.get('/auth/logout', (req, res) => { req.logout(() => res.redirect('/')); });
