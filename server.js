@@ -397,8 +397,9 @@ async function storeAgentMessageInChannel(normalizedMsg, sessionKey, channelId =
 
 function connectChatGateway() {
   if (chatGatewayWs && (chatGatewayWs.readyState === WebSocket.OPEN || chatGatewayWs.readyState === WebSocket.CONNECTING)) return;
-  const gwUrl = (process.env.GATEWAY_WS_URL || '').replace(/^https?/, 'ws').replace(/^(?!wss?:\/\/)/, 'wss://');
-  if (!gwUrl) return;
+  const rawGwUrl = (process.env.GATEWAY_WS_URL || '').trim();
+  if (!rawGwUrl) return;
+  const gwUrl = rawGwUrl.replace(/^https?/, 'ws').replace(/^(?!wss?:\/\/)/, 'wss://');
 
   chatGatewayWs = new WebSocket(gwUrl, { headers: { Origin: 'https://talos.mtree.io' } });
 
