@@ -166,10 +166,10 @@ gwProxy.on('connection', (clientWs, req) => {
 
 // ============ AGENTS REGISTRY ============
 const AGENTS = [
-  { id: 'lewis', name: 'Lewis', emoji: '📚', sessionKey: 'agent:main:main' },
-  { id: 'marty', name: 'Marty', emoji: '🎯', sessionKey: 'agent:marty:main' },
-  { id: 'pascal', name: 'Pascal', emoji: '⚙️', sessionKey: 'agent:pascal:main' },
-  { id: 'milton', name: 'Milton', emoji: '💰', sessionKey: 'agent:milton:main' }
+  { id: 'lewis', name: 'Lewis', emoji: '📚', sessionKey: 'agent:main:main', avatarUrl: '/assets/lewis-avatar.png' },
+  { id: 'marty', name: 'Marty', emoji: '🎯', sessionKey: 'agent:marty:main', avatarUrl: '/assets/marty-avatar.jpg' },
+  { id: 'pascal', name: 'Pascal', emoji: '⚙️', sessionKey: 'agent:pascal:main', avatarUrl: '/assets/pascal-avatar.jpg' },
+  { id: 'milton', name: 'Milton', emoji: '💰', sessionKey: 'agent:milton:main', avatarUrl: '/assets/milton-avatar.jpg' }
 ];
 
 // ============ CHAT GATEWAY ============
@@ -1254,7 +1254,7 @@ app.post('/api/bootstrap', async (req, res) => {
 // ============ AGENTS ============
 // Returns the hardcoded AGENTS registry (for @-mention autocomplete etc.)
 app.get('/api/agents', (req, res) => {
-  res.json(AGENTS.map(a => ({ id: a.id, name: a.name, emoji: a.emoji })));
+  res.json(AGENTS.map(a => ({ id: a.id, name: a.name, emoji: a.emoji, avatarUrl: a.avatarUrl })));
 });
 
 // DB agent management (for API key auth)
