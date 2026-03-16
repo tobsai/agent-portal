@@ -459,6 +459,14 @@ function connectChatGateway() {
         // Also persist agent messages to channels DB
         if (normalized.role === 'assistant') {
           storeAgentMessageInChannel(normalized, CHAT_SESSION_KEY).catch(() => {});
+          // Fire push notification to all registered devices
+          if (normalized.text) {
+            const agentForSession = AGENTS.find(a => a.sessionKey === CHAT_SESSION_KEY);
+            const agentName = agentForSession?.name || 'Agent Portal';
+            pushToAllDevices(normalized.text, agentName).catch(err =>
+              console.error('[chat-gateway] Push notification error:', err.message)
+            );
+          }
         }
       }
     }
@@ -1107,13 +1115,27 @@ app.get('/auth/google', (req, res, next) => {
   passport.authenticate('google', { scope: ['profile', 'email'], state })(req, res, next);
 });
 app.get('/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/' }),
-  (req, res) => {
-    if (req.query.state === 'mobile') {
-      const token = jwt.sign({ userId: req.user.id, email: req.user.email }, JWT_SECRET, { expiresIn: '90d' });
-      return res.redirect(`com.mapletree.agent-portal://auth/callback?token=${encodeURIComponent(token)}`);
-    }
-    res.redirect('/chat');
+  (req, res, next) => {
+    passport.authenticate('google', { failureRedirect: '/?auth=failed' }, (err, user) => {
+      if (err) {
+        console.error('[auth] Google callback error:', err);
+        return res.redirect('/?auth=error');
+      }
+      if (!user) {
+        return res.redirect('/?auth=failed');
+      }
+      req.logIn(user, (loginErr) => {
+        if (loginErr) {
+          console.error('[auth] Login error:', loginErr);
+          return res.redirect('/?auth=error');
+        }
+        if (req.query.state === 'mobile') {
+          const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '90d' });
+          return res.redirect(`com.mapletree.agent-portal://auth/callback?token=${encodeURIComponent(token)}`);
+        }
+        res.redirect('/chat');
+      });
+    })(req, res, next);
   }
 );
 app.get('/auth/logout', (req, res) => { req.logout(() => res.redirect('/')); });
@@ -1349,19 +1371,41 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
 
     broadcastChannelEvent(req.params.id, 'message', message);
 
-    // Route @-mentioned agents to the gateway
-    if (senderType === 'user' && mentions?.length > 0) {
-      for (const mention of mentions) {
-        const agent = AGENTS.find(a => a.id === mention);
-        if (agent?.sessionKey) {
+    // Route messages to agents
+    if (senderType === 'user') {
+      const routedAgentIds = new Set();
+
+      // Route to explicitly @-mentioned agents
+      if (mentions?.length > 0) {
+        for (const mention of mentions) {
+          const agent = AGENTS.find(a => a.id === mention);
+          if (agent?.sessionKey) {
+            routedAgentIds.add(agent.id);
+            try {
+              trackUserSend(content);
+              await chatGatewayRequest('chat.send', {
+                sessionKey: agent.sessionKey,
+                message: { role: 'user', content }
+              });
+            } catch (err) {
+              console.error('[channels] Failed to route to agent:', agent.id, err.message);
+            }
+          }
+        }
+      }
+
+      // If no agents were explicitly mentioned, route to Lewis (default agent)
+      if (routedAgentIds.size === 0) {
+        const defaultAgent = AGENTS.find(a => a.sessionKey === CHAT_SESSION_KEY);
+        if (defaultAgent?.sessionKey) {
           try {
             trackUserSend(content);
             await chatGatewayRequest('chat.send', {
-              sessionKey: agent.sessionKey,
+              sessionKey: defaultAgent.sessionKey,
               message: { role: 'user', content }
             });
           } catch (err) {
-            console.error('[channels] Failed to route to agent:', agent.id, err.message);
+            console.error('[channels] Failed to route to default agent:', err.message);
           }
         }
       }
