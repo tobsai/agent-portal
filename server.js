@@ -167,10 +167,9 @@ gwProxy.on('connection', (clientWs, req) => {
 // ============ AGENTS REGISTRY ============
 const AGENTS = [
   { id: 'lewis', name: 'Lewis', emoji: '📚', sessionKey: 'agent:main:main' },
-  { id: 'marty', name: 'Marty', emoji: '🔬' },
-  { id: 'echo', name: 'Echo', emoji: '🎮' },
-  { id: 'pascal', name: 'Pascal', emoji: '💻', sessionKey: 'agent:pascal:main' },
-  { id: 'milton', name: 'Milton', emoji: '📊', sessionKey: 'agent:milton:main' }
+  { id: 'marty', name: 'Marty', emoji: '🎯', sessionKey: 'agent:marty:main' },
+  { id: 'pascal', name: 'Pascal', emoji: '⚙️', sessionKey: 'agent:pascal:main' },
+  { id: 'milton', name: 'Milton', emoji: '💰', sessionKey: 'agent:milton:main' }
 ];
 
 // ============ CHAT GATEWAY ============
@@ -206,6 +205,7 @@ let chatGatewayWs = null;
 let chatGatewayAuthenticated = false;
 // Track last channel that sent a message so agent replies go back to the right channel
 let lastActiveChannelId = null;
+let lastActiveSessionKey = CHAT_SESSION_KEY; // tracks which agent session is currently active
 let chatGatewayReconnectTimer = null;
 let chatGatewayReqCounter = 0;
 
@@ -444,8 +444,11 @@ function connectChatGateway() {
     if (msg.event === 'chat') {
       const payload = msg.payload || msg.data || {};
       const state = payload.state;
+      // Determine which agent this event is from
+      const eventSessionKey = payload.sessionKey || lastActiveSessionKey;
+      const eventAgent = AGENTS.find(a => a.sessionKey === eventSessionKey);
       if (state === 'delta') {
-        broadcastChatEvent('typing', { active: true });
+        broadcastChatEvent('typing', { active: true, agentId: eventAgent?.id });
         return;
       }
       if (state === 'error') {
@@ -466,11 +469,10 @@ function connectChatGateway() {
         broadcastChatEvent('message', normalized);
         // Also persist agent messages to channels DB
         if (normalized.role === 'assistant') {
-          storeAgentMessageInChannel(normalized, CHAT_SESSION_KEY, lastActiveChannelId).catch(() => {});
+          storeAgentMessageInChannel(normalized, eventSessionKey, lastActiveChannelId).catch(() => {});
           // Fire push notification to all registered devices
           if (normalized.text) {
-            const agentForSession = AGENTS.find(a => a.sessionKey === CHAT_SESSION_KEY);
-            const agentName = agentForSession?.name || 'Agent Portal';
+            const agentName = eventAgent?.name || 'Agent Portal';
             pushToAllDevices(normalized.text, agentName).catch(err =>
               console.error('[chat-gateway] Push notification error:', err.message)
             );
@@ -1433,6 +1435,8 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
         // DM channel: always route exclusively to the dedicated agent
         const dmAgent = AGENTS.find(a => a.id === channel.dm_agent_id);
         if (dmAgent?.sessionKey) {
+          // Track the active DM session key so replies get attributed to the right agent
+          lastActiveSessionKey = dmAgent.sessionKey;
           try {
             trackUserSend(content);
             await chatGatewayRequest('chat.send', {
@@ -1445,6 +1449,8 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
           }
         }
       } else {
+        // Regular channel — session key reverts to default
+        lastActiveSessionKey = CHAT_SESSION_KEY;
         const routedAgentIds = new Set();
 
         // Route to explicitly @-mentioned agents
