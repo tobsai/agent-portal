@@ -12,6 +12,7 @@ if (process.env.SENTRY_DSN) {
 
 // PostHog analytics
 const { posthog, captureEvent, shutdown: shutdownPostHog } = require('./lib/posthog');
+const apns = require('./lib/apns');
 
 const express = require('express');
 const session = require('express-session');
@@ -117,6 +118,19 @@ gwProxy.on('connection', (clientWs, req) => {
           return;
         }
       } catch (e) { /* not JSON, pass through */ }
+    }
+
+    // Intercept finalized agent messages for push notifications
+    if (authenticated) {
+      try {
+        const msg = JSON.parse(text);
+        if (msg.event === 'chat.delta' && msg.payload?.state === 'final' && msg.payload?.text) {
+          // Fire push notification asynchronously (don't block the proxy)
+          pushToAllDevices(msg.payload.text).catch(err => {
+            console.error('[gw-proxy] Push notification error:', err.message);
+          });
+        }
+      } catch (e) { /* not JSON or parse error, ignore */ }
     }
 
     if (clientWs.readyState === WebSocket.OPEN) clientWs.send(text);
@@ -553,6 +567,17 @@ if (isProduction) {
           PRIMARY KEY (sid)
         );
         CREATE INDEX IF NOT EXISTS IDX_session_expire ON sessions (expire);
+
+        CREATE TABLE IF NOT EXISTS push_tokens (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT REFERENCES users(id),
+          platform TEXT NOT NULL DEFAULT 'ios',
+          token TEXT NOT NULL,
+          bundle_id TEXT DEFAULT 'com.mapletree.agent-portal',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(token)
+        );
       `);
     },
     async query(sql, params = []) {
@@ -639,6 +664,15 @@ if (isProduction) {
           created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, created_at DESC);
+        CREATE TABLE IF NOT EXISTS push_tokens (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT,
+          platform TEXT NOT NULL DEFAULT 'ios',
+          token TEXT NOT NULL UNIQUE,
+          bundle_id TEXT DEFAULT 'com.mapletree.agent-portal',
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
       `);
     },
     async query(sql, params = []) {
@@ -1078,6 +1112,76 @@ app.get('/api/me', (req, res) => {
     res.json({ id: req.user.id, name: req.user.name, email: req.user.email, picture: req.user.picture, isAdmin: req.user.is_admin });
   } else { res.json(null); }
 });
+
+// ============ PUSH NOTIFICATIONS ============
+app.post('/api/devices/register', requireAuth, async (req, res) => {
+  try {
+    const { platform, token, bundleId } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token required' });
+
+    const userId = req.user?.id || req.agent?.id;
+    if (!userId) return res.status(401).json({ error: 'User not identified' });
+
+    // Upsert: update user_id and timestamp if token already exists
+    const now = new Date().toISOString();
+    await db.run(`
+      INSERT INTO push_tokens (user_id, platform, token, bundle_id, updated_at)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (token) DO UPDATE SET
+        user_id = $1,
+        platform = $2,
+        bundle_id = $4,
+        updated_at = $5
+    `, [userId, platform || 'ios', token, bundleId || 'com.mapletree.agent-portal', now]);
+
+    console.log(`[push] Registered ${platform || 'ios'} token for user ${userId}: ${token.substring(0, 8)}...`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[push] Registration error:', err);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+app.delete('/api/devices/unregister', requireAuth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token required' });
+    await db.run('DELETE FROM push_tokens WHERE token = $1', [token]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Unregister failed' });
+  }
+});
+
+/**
+ * Send push notifications to all registered devices for a user.
+ * Called internally when an agent message is finalized.
+ */
+async function pushToAllDevices(message, senderName = 'Lewis') {
+  if (!apns.isConfigured()) return;
+  
+  try {
+    const tokens = await db.query('SELECT token, platform FROM push_tokens');
+    if (!tokens || tokens.length === 0) return;
+    
+    console.log(`[push] Sending to ${tokens.length} device(s)`);
+    
+    const results = await Promise.allSettled(
+      tokens.map(t => apns.sendChatNotification(t.token, message, senderName))
+    );
+    
+    // Clean up invalid tokens
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'fulfilled' && result.value.error === 'BadDeviceToken') {
+        console.log(`[push] Removing invalid token: ${tokens[i].token.substring(0, 8)}...`);
+        await db.run('DELETE FROM push_tokens WHERE token = $1', [tokens[i].token]);
+      }
+    }
+  } catch (err) {
+    console.error('[push] Error sending notifications:', err);
+  }
+}
 
 app.post('/api/bootstrap', async (req, res) => {
   if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login first' });
