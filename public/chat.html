@@ -1922,22 +1922,22 @@
       if (role === 'user') {
         avatar.textContent = currentUser?.name?.[0] || 'T';
       } else {
-        const img = document.createElement('img');
-        img.src = '/assets/support-agent-avatar.png';
-        img.alt = senderName || 'Agent';
-        img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;';
-        img.onerror = () => { avatar.removeChild(img); avatar.textContent = senderEmoji || '🤖'; };
-        avatar.appendChild(img);
+        // Use sender emoji as avatar — no generic image fallback
+        const resolvedEmoji = senderEmoji || (agents.find(a => (a.name || '').toLowerCase() === (senderName || '').toLowerCase())?.emoji) || '📚';
+        avatar.textContent = resolvedEmoji;
+        avatar.title = senderName || 'Lewis';
       }
 
       const contentDiv = document.createElement('div');
       contentDiv.className = 'message-content';
 
-      // Agent sender info
-      if (role === 'assistant' && (senderName || senderEmoji)) {
+      // Agent sender info — always shown for assistant messages
+      if (role === 'assistant') {
+        const resolvedName = senderName || 'Lewis';
+        const resolvedEmoji = senderEmoji || (agents.find(a => (a.name || '').toLowerCase() === resolvedName.toLowerCase())?.emoji) || '📚';
         const senderInfo = document.createElement('div');
         senderInfo.className = 'message-sender-info';
-        senderInfo.innerHTML = `<span class="sender-emoji">${senderEmoji || '📚'}</span>${senderName || 'Agent'}`;
+        senderInfo.innerHTML = `<span class="sender-emoji">${resolvedEmoji}</span>${resolvedName}`;
         contentDiv.appendChild(senderInfo);
       }
 
