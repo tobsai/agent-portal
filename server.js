@@ -424,11 +424,7 @@ function connectChatGateway() {
         broadcastChatEvent('error', { message: msg.error?.message || 'Gateway auth failed' });
         return;
       }
-      try {
-        await chatGatewayRequest('chat.subscribe', { sessionKey: CHAT_SESSION_KEY });
-      } catch (err) {
-        console.error('[chat-api] subscribe failed:', err.message);
-      }
+      // No chat.subscribe needed — gateway pushes chat/agent events automatically after connect
       await refreshChatHistoryFromGateway();
       return;
     }
@@ -1396,7 +1392,8 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
               trackUserSend(content);
               await chatGatewayRequest('chat.send', {
                 sessionKey: agent.sessionKey,
-                message: { role: 'user', content }
+                message: content,
+                idempotencyKey: id
               });
             } catch (err) {
               console.error('[channels] Failed to route to agent:', agent.id, err.message);
@@ -1413,7 +1410,8 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
             trackUserSend(content);
             await chatGatewayRequest('chat.send', {
               sessionKey: defaultAgent.sessionKey,
-              message: { role: 'user', content }
+              message: content,
+              idempotencyKey: id
             });
           } catch (err) {
             console.error('[channels] Failed to route to default agent:', err.message);
