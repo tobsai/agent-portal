@@ -1190,7 +1190,7 @@ app.delete('/api/devices/unregister', requireAuth, async (req, res) => {
  * Send push notifications to all registered devices for a user.
  * Called internally when an agent message is finalized.
  */
-async function pushToAllDevices(message, senderName = 'Lewis') {
+async function pushToAllDevices(message, senderName = 'Agent Portal') {
   if (!apns.isConfigured()) return;
   
   try {
@@ -1394,7 +1394,7 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
         }
       }
 
-      // If no agents were explicitly mentioned, route to Lewis (default agent)
+      // If no agents were explicitly mentioned, route to the default agent
       if (routedAgentIds.size === 0) {
         const defaultAgent = AGENTS.find(a => a.sessionKey === CHAT_SESSION_KEY);
         if (defaultAgent?.sessionKey) {

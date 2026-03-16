@@ -1269,6 +1269,15 @@
       <span class="close" onclick="hideError()">✕</span>
     </div>
 
+    <!-- Notification Permission Banner -->
+    <div id="notifBanner" style="display:none; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px 16px; margin:8px 16px; display:flex; align-items:center; justify-content:space-between; font-size:13px; color:rgba(255,255,255,0.7);">
+      <span>Enable notifications to get alerts when agents reply</span>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button id="notifEnableBtn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:6px; padding:4px 12px; color:white; cursor:pointer; font-size:12px;">Enable</button>
+        <button id="notifDismissBtn" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; font-size:16px; padding:0 4px;">✕</button>
+      </div>
+    </div>
+
     <!-- Chat Container -->
     <div class="chat-container">
       <div class="messages" id="messages">
@@ -1423,6 +1432,7 @@
       await loadChannels();
       connectEventStream();
       setupInputListeners();
+      setupNotifBanner();
     }
 
     // ─── User ────────────────────────────────────────────────────────────────
@@ -1633,6 +1643,7 @@
             removeLoadingIndicator();
             addMessage(role, content, msg.created_at || msg.timestamp, undefined, msg.id, msg.sender_name, msg.sender_emoji);
             if (role === 'assistant') {
+              maybeShowNotifBanner();
               fireWebNotification(content, msg.sender_name || 'Agent Portal');
               isWaitingForResponse = false;
               hideAgentTyping();
@@ -1883,6 +1894,7 @@
                 return;
               }
               addMessage('assistant', content, msg.timestamp, undefined, msg.id);
+              maybeShowNotifBanner();
               fireWebNotification(content, 'Agent Portal');
               isWaitingForResponse = false;
               processQueue();
@@ -1964,7 +1976,7 @@
       if (role === 'assistant' && (senderName || senderEmoji)) {
         const senderInfo = document.createElement('div');
         senderInfo.className = 'message-sender-info';
-        senderInfo.innerHTML = `<span class="sender-emoji">${senderEmoji || '📚'}</span>${senderName || 'Lewis'}`;
+        senderInfo.innerHTML = `<span class="sender-emoji">${senderEmoji || '📚'}</span>${senderName || 'Agent'}`;
         contentDiv.appendChild(senderInfo);
       }
 
@@ -2286,6 +2298,7 @@
 
     // ─── Web Notifications ───────────────────────────────────────────────────
     let notificationPermissionRequested = false;
+    let notifBannerShown = false;
 
     function fireWebNotification(text, senderName) {
       if (!('Notification' in window)) return;
@@ -2301,12 +2314,42 @@
       } catch (e) { /* non-fatal */ }
     }
 
+    function maybeShowNotifBanner() {
+      if (notifBannerShown) return;
+      if (!('Notification' in window)) return;
+      if (Notification.permission !== 'default') return;
+      if (localStorage.getItem('notifBannerDismissed') === '1') return;
+      notifBannerShown = true;
+      const banner = document.getElementById('notifBanner');
+      if (banner) banner.style.display = 'flex';
+    }
+
+    function setupNotifBanner() {
+      const enableBtn = document.getElementById('notifEnableBtn');
+      const dismissBtn = document.getElementById('notifDismissBtn');
+      const banner = document.getElementById('notifBanner');
+      if (enableBtn) {
+        enableBtn.onclick = () => {
+          Notification.requestPermission().catch(() => {});
+          if (banner) banner.style.display = 'none';
+          localStorage.setItem('notifBannerDismissed', '1');
+        };
+      }
+      if (dismissBtn) {
+        dismissBtn.onclick = () => {
+          if (banner) banner.style.display = 'none';
+          localStorage.setItem('notifBannerDismissed', '1');
+        };
+      }
+    }
+
     function maybeRequestNotificationPermission() {
       if (notificationPermissionRequested) return;
       if (!('Notification' in window)) return;
       if (Notification.permission !== 'default') return;
       notificationPermissionRequested = true;
-      Notification.requestPermission().catch(() => {});
+      // Show banner instead of requesting directly
+      maybeShowNotifBanner();
     }
 
     // ─── Input Listeners ─────────────────────────────────────────────────────
