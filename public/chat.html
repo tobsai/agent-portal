@@ -1255,7 +1255,7 @@
     </div>
 
     <!-- Notification Permission Banner -->
-    <div id="notifBanner" style="display:none; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px 16px; margin:8px 16px; display:flex; align-items:center; justify-content:space-between; font-size:13px; color:rgba(255,255,255,0.7);">
+    <div id="notifBanner" style="display:none; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px 16px; margin:8px 16px; align-items:center; justify-content:space-between; font-size:13px; color:rgba(255,255,255,0.7);">
       <span>Enable notifications to get alerts when agents reply</span>
       <div style="display:flex; align-items:center; gap:8px;">
         <button id="notifEnableBtn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:6px; padding:4px 12px; color:white; cursor:pointer; font-size:12px;">Enable</button>
@@ -2354,13 +2354,13 @@
     function fireWebNotification(text, senderName) {
       if (!('Notification' in window)) return;
       if (Notification.permission !== 'granted') return;
-      if (document.visibilityState === 'visible') return;
+      // Fire even when tab is visible — user wants to know which agent responded
       const body = text.length > 120 ? text.slice(0, 120) + '…' : text;
       try {
         new Notification(senderName || 'Agent Portal', {
           body,
-          icon: '/assets/support-agent-avatar.png',
-          tag: 'agent-message'
+          icon: '/assets/lewis-canonical.png',
+          tag: 'agent-' + Date.now() // unique tag so notifications don't collapse
         });
       } catch (e) { /* non-fatal */ }
     }
@@ -2380,8 +2380,15 @@
       const dismissBtn = document.getElementById('notifDismissBtn');
       const banner = document.getElementById('notifBanner');
       if (enableBtn) {
-        enableBtn.onclick = () => {
-          Notification.requestPermission().catch(() => {});
+        enableBtn.onclick = async () => {
+          try {
+            const perm = await Notification.requestPermission();
+            if (perm === 'granted') {
+              console.log('[Notifications] Permission granted');
+            } else {
+              console.log('[Notifications] Permission:', perm);
+            }
+          } catch (e) { console.error('[Notifications] Error:', e); }
           if (banner) banner.style.display = 'none';
           localStorage.setItem('notifBannerDismissed', '1');
         };
