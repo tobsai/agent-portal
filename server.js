@@ -802,6 +802,11 @@ function requireAdmin(req, res, next) {
 app.get('/', (req, res) => res.redirect('/chat'));
 
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
+app.use('/downloads', express.static(path.join(__dirname, 'public', 'downloads')));
+
+app.get('/download', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'download.html'));
+});
 
 // Redirect old /c to canonical /chat
 app.get('/c', (req, res) => res.redirect('/chat'));

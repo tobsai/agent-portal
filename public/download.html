@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lewis — Download</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      max-width: 560px;
+      width: 100%;
+      padding: 2rem;
+      text-align: center;
+    }
+    .icon {
+      width: 128px;
+      height: 128px;
+      border-radius: 28px;
+      margin: 0 auto 1.5rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      color: #fff;
+    }
+    .subtitle {
+      color: #888;
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+    .version {
+      display: inline-block;
+      background: rgba(129,140,248,0.15);
+      color: #818cf8;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 2rem;
+    }
+    .download-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: #14141c;
+      border: 1px solid #2a2a3a;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: #818cf8; }
+    .card-info { text-align: left; }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.2rem;
+    }
+    .card-meta {
+      font-size: 0.8rem;
+      color: #666;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: #818cf8;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.6rem 1.2rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: #6366f1; }
+    .btn svg { width: 16px; height: 16px; }
+    .requirements {
+      color: #666;
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+    .requirements strong { color: #888; }
+    .brew-section {
+      background: #14141c;
+      border: 1px solid #2a2a3a;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+      text-align: left;
+    }
+    .brew-section h3 {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.75rem;
+      font-weight: 500;
+    }
+    .brew-cmd {
+      background: #0a0a0f;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      color: #818cf8;
+      position: relative;
+      cursor: pointer;
+      user-select: all;
+    }
+    .brew-cmd:hover { border-color: #818cf8; }
+    .brew-cmd .copy-hint {
+      position: absolute;
+      right: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #555;
+      font-size: 0.75rem;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    @media (max-width: 480px) {
+      .card { flex-direction: column; gap: 0.75rem; text-align: center; }
+      .card-info { text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="/assets/icon-app.png" alt="Lewis" class="icon" />
+    <h1>Lewis Desktop</h1>
+    <p class="subtitle">Agent Portal for macOS</p>
+    <span class="version">v1.0.0 · arm64</span>
+
+    <div class="download-cards">
+      <div class="card">
+        <div class="card-info">
+          <div class="card-title">📦 macOS Installer</div>
+          <div class="card-meta">.dmg · 104 MB · Apple Silicon</div>
+        </div>
+        <a href="/downloads/Lewis-1.0.0.dmg" class="btn">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V3h3v5H12L8 12z"/><path d="M14 14H2v-2h12v2z"/></svg>
+          Download
+        </a>
+      </div>
+      <div class="card">
+        <div class="card-info">
+          <div class="card-title">🗜️ Portable</div>
+          <div class="card-meta">.zip · 94 MB · Apple Silicon</div>
+        </div>
+        <a href="/downloads/Lewis-darwin-arm64-1.0.0.zip" class="btn">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V3h3v5H12L8 12z"/><path d="M14 14H2v-2h12v2z"/></svg>
+          Download
+        </a>
+      </div>
+    </div>
+
+    <div class="brew-section">
+      <h3>Or install via Homebrew</h3>
+      <div class="brew-cmd" onclick="navigator.clipboard.writeText('brew install --cask tobsai/tap/lewis')">
+        brew install --cask tobsai/tap/lewis
+        <span class="copy-hint">click to copy</span>
+      </div>
+    </div>
+
+    <div class="requirements">
+      <strong>Requires:</strong> macOS 13+ · Apple Silicon (M1/M2/M3/M4)<br>
+      <strong>Note:</strong> On first launch, right-click → Open to bypass Gatekeeper.
+    </div>
+  </div>
+</body>
+</html>
