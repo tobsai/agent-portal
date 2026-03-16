@@ -168,7 +168,9 @@ gwProxy.on('connection', (clientWs, req) => {
 const AGENTS = [
   { id: 'lewis', name: 'Lewis', emoji: '📚', sessionKey: 'agent:main:main' },
   { id: 'marty', name: 'Marty', emoji: '🔬' },
-  { id: 'echo', name: 'Echo', emoji: '🎮' }
+  { id: 'echo', name: 'Echo', emoji: '🎮' },
+  { id: 'pascal', name: 'Pascal', emoji: '💻', sessionKey: 'agent:pascal:main' },
+  { id: 'milton', name: 'Milton', emoji: '📊', sessionKey: 'agent:milton:main' }
 ];
 
 // ============ CHAT GATEWAY ============

@@ -294,96 +294,70 @@
       min-width: 0;
     }
 
-    /* Floating model selector */
-    .model-selector-float {
-      position: fixed;
-      top: 8px;
-      right: 8px;
-      z-index: 100;
-      background: rgba(10,10,15,0.85);
-      border-radius: 8px;
-      padding: 4px 6px;
-      backdrop-filter: blur(8px);
+    /* ─── DM Sidebar Section ──────────────────────────────────────── */
+    .dm-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem 0.4rem;
+      flex-shrink: 0;
+      margin-top: 0.25rem;
     }
 
-    body.embed-mode .model-selector-float {
-      top: 4px;
-      right: 4px;
-      padding: 2px 4px;
-    }
-
-    body.embed-mode .model-pill {
-      font-size: 0.65rem;
-      padding: 0.2rem 0.4rem;
-    }
-
-    /* Model Selector */
-    .model-selector { position: relative; display: flex; align-items: center; }
-
-    .model-pill {
+    .dm-section-header span {
       font-size: 0.7rem;
-      padding: 0.25rem 0.5rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .dm-list {
+      padding: 0 0.5rem 0.5rem;
+      flex-shrink: 0;
+    }
+
+    .dm-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.6rem;
       border-radius: 6px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-muted);
       cursor: pointer;
-      font-family: 'JetBrains Mono', monospace;
-      transition: all 0.15s;
-      max-width: 180px;
-      white-space: nowrap;
+      transition: all 0.12s;
+      margin-bottom: 1px;
+    }
+
+    .dm-item:hover { background: var(--surface-hover); }
+
+    .dm-avatar {
+      font-size: 1rem;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .dm-name {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
-    }
-
-    .model-pill:hover:not(:disabled) {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: var(--accent-dim);
-    }
-
-    .model-pill:disabled { opacity: 0.5; cursor: default; }
-
-    .model-pill.switching {
-      color: var(--yellow);
-      border-color: var(--yellow);
-      opacity: 0.8;
-    }
-
-    .model-dropdown {
-      display: none;
-      position: absolute;
-      top: calc(100% + 6px);
-      right: 0;
-      background: #13131a;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.25rem;
-      z-index: 100;
-      min-width: 240px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    }
-
-    .model-dropdown.open { display: block; }
-
-    .model-option {
-      display: block;
-      width: 100%;
-      padding: 0.4rem 0.6rem;
-      font-size: 0.75rem;
-      font-family: 'JetBrains Mono', monospace;
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      text-align: left;
-      border-radius: 5px;
-      transition: all 0.1s;
       white-space: nowrap;
     }
 
-    .model-option:hover { background: var(--surface-hover); color: var(--text); }
-    .model-option.active { color: var(--accent); background: var(--accent-dim); }
+    .dm-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 5px var(--green);
+      flex-shrink: 0;
+    }
 
     /* ─── Chat Container ──────────────────────────────────────────── */
     .chat-container {
@@ -489,16 +463,31 @@
       padding: 0 0.5rem;
     }
 
-    /* Mention highlighting */
+    /* Mention highlighting — Slack/Discord-style pill */
     .mention-highlight {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      background: rgba(129,140,248,0.2);
+      border: 1px solid rgba(129,140,248,0.35);
       color: var(--accent);
       font-weight: 600;
+      border-radius: 4px;
+      padding: 0 5px;
+      font-size: 0.88em;
       cursor: default;
+      white-space: nowrap;
+      line-height: 1.5;
+    }
+
+    .mention-highlight .mention-emoji {
+      font-size: 0.9em;
     }
 
     .message.user .mention-highlight {
-      color: rgba(0,0,0,0.7);
-      text-decoration: underline;
+      background: rgba(0,0,0,0.15);
+      border-color: rgba(0,0,0,0.25);
+      color: rgba(0,0,0,0.8);
     }
 
     /* Message status badges */
@@ -1237,6 +1226,14 @@
       <!-- Channels populated via JS -->
     </div>
 
+    <!-- Direct Messages section -->
+    <div class="dm-section-header">
+      <span>Direct Messages</span>
+    </div>
+    <div class="dm-list" id="dm-list">
+      <!-- DM items populated via JS -->
+    </div>
+
     <div class="sidebar-footer">
       <div class="sidebar-user" id="sidebar-user-info">
         <img src="" alt="" id="user-avatar" style="display: none;">
@@ -1248,20 +1245,6 @@
 
   <!-- Main Chat Area -->
   <div class="main-chat-area">
-    <!-- Floating model selector -->
-    <div class="model-selector-float">
-      <div class="model-selector" id="model-selector">
-        <button class="model-pill" id="model-pill" onclick="toggleModelDropdown(event)" title="Switch model">…</button>
-        <div class="model-dropdown" id="model-dropdown">
-          <button class="model-option" data-model="anthropic/claude-opus-4-6" onclick="selectModel(this)">anthropic/claude-opus-4-6</button>
-          <button class="model-option" data-model="anthropic/claude-sonnet-4-6" onclick="selectModel(this)">anthropic/claude-sonnet-4-6</button>
-          <button class="model-option" data-model="xai/grok-4-1-fast-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-reasoning</button>
-          <button class="model-option" data-model="xai/grok-4-1-fast-non-reasoning" onclick="selectModel(this)">xai/grok-4-1-fast-non-reasoning</button>
-          <button class="model-option" data-model="xai/grok-3" onclick="selectModel(this)">xai/grok-3</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Error Banner -->
     <div class="error-banner" id="error-banner">
       <span class="icon">⚠️</span>
@@ -1427,9 +1410,9 @@
     // ─── Init ────────────────────────────────────────────────────────────────
     async function init() {
       await loadUser();
-      await loadCurrentModel();
       await loadAgents();
       await loadChannels();
+      renderDmList();
       connectEventStream();
       setupInputListeners();
       setupNotifBanner();
@@ -1762,68 +1745,46 @@
       document.getElementById('sidebar-overlay').classList.remove('open');
     }
 
-    // ─── Model Selector ──────────────────────────────────────────────────────
-    const MODEL_PILL = document.getElementById('model-pill');
-    const MODEL_DROPDOWN = document.getElementById('model-dropdown');
+    // ─── DM Sidebar ──────────────────────────────────────────────────────────
+    // DM list is driven by /api/agents (the `agents` array loaded at init)
 
-    function shortModelName(model) {
-      if (!model) return '…';
-      const parts = model.split('/');
-      return parts[parts.length - 1];
-    }
+    function renderDmList() {
+      const list = document.getElementById('dm-list');
+      if (!list) return;
+      list.innerHTML = '';
+      agents.forEach(agent => {
+        const item = document.createElement('div');
+        item.className = 'dm-item';
+        item.title = 'DM ' + agent.name;
+        item.onclick = () => {
+          const input = document.getElementById('message-input');
+          if (input) {
+            input.value = '@' + agent.name + ' ';
+            input.focus();
+            // Move cursor to end
+            const len = input.value.length;
+            input.setSelectionRange(len, len);
+          }
+          closeSidebar();
+        };
 
-    function setActivePillModel(model) {
-      MODEL_PILL.textContent = shortModelName(model);
-      MODEL_PILL.title = model || 'Switch model';
-      MODEL_DROPDOWN.querySelectorAll('.model-option').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.model === model);
+        const avatar = document.createElement('span');
+        avatar.className = 'dm-avatar';
+        avatar.textContent = agent.emoji;
+
+        const name = document.createElement('span');
+        name.className = 'dm-name';
+        name.textContent = agent.name;
+
+        const dot = document.createElement('span');
+        dot.className = 'dm-status-dot';
+        dot.title = 'Online';
+
+        item.appendChild(avatar);
+        item.appendChild(name);
+        item.appendChild(dot);
+        list.appendChild(item);
       });
-    }
-
-    async function loadCurrentModel() {
-      try {
-        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
-        const res = await fetch('/api/model', { headers });
-        const data = await res.json();
-        setActivePillModel(data.model || null);
-      } catch (e) { console.warn('model load failed', e); }
-    }
-
-    function toggleModelDropdown(e) {
-      e.stopPropagation();
-      MODEL_DROPDOWN.classList.toggle('open');
-    }
-
-    document.addEventListener('click', (e) => {
-      if (!document.getElementById('model-selector').contains(e.target)) {
-        MODEL_DROPDOWN.classList.remove('open');
-      }
-    });
-
-    async function selectModel(btn) {
-      const model = btn.dataset.model;
-      MODEL_DROPDOWN.classList.remove('open');
-      if (btn.classList.contains('active')) return;
-      MODEL_PILL.textContent = 'Switching…';
-      MODEL_PILL.classList.add('switching');
-      MODEL_PILL.disabled = true;
-      try {
-        const headers = { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) };
-        const res = await fetch('/api/model', { method: 'POST', headers, body: JSON.stringify({ model }) });
-        const data = await res.json();
-        if (data.success) {
-          setActivePillModel(data.model);
-        } else {
-          MODEL_PILL.textContent = 'Error';
-          setTimeout(() => loadCurrentModel(), 2000);
-        }
-      } catch (e) {
-        MODEL_PILL.textContent = 'Error';
-        setTimeout(() => loadCurrentModel(), 2000);
-      } finally {
-        MODEL_PILL.classList.remove('switching');
-        MODEL_PILL.disabled = false;
-      }
     }
 
     // ─── Gateway SSE (existing) ──────────────────────────────────────────────
@@ -2270,30 +2231,58 @@
       }
     }
 
+    // ─── Lightweight Markdown Renderer ───────────────────────────────────────
+    function renderMarkdown(text) {
+      // 1. Escape HTML to prevent XSS
+      let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      // 2. Triple-backtick code blocks (``` ... ```)
+      html = html.replace(/```([\s\S]*?)```/g, (_, code) => {
+        return '<pre style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:0.6rem 0.8rem;margin:4px 0;overflow-x:auto;white-space:pre-wrap;font-family:\'JetBrains Mono\',monospace;font-size:0.8rem;line-height:1.5;">' + code.trim() + '</pre>';
+      });
+
+      // 3. Inline backtick code (`code`)
+      html = html.replace(/`([^`\n]+)`/g, (_, code) => {
+        return '<code style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:3px;padding:1px 5px;font-family:\'JetBrains Mono\',monospace;font-size:0.82em;">' + code + '</code>';
+      });
+
+      // 4. Bold (**text**)
+      html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+
+      // 5. Italic (*text*) — only single asterisk, not already consumed by bold
+      html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+      return html;
+    }
+
+    // All known agents for mention pill lookup (driven by loaded agents array)
+
+    function getAgentEmojiForMention(name) {
+      const match = agents.find(a => (a.name || '').toLowerCase() === name.toLowerCase());
+      return match?.emoji || null;
+    }
+
     function renderTextWithMentions(el, text, role) {
-      // Parse @mentions and highlight them
+      // First apply markdown (returns HTML string), then parse mentions in the result
+      const mdHtml = renderMarkdown(text);
+
+      // We need to process mentions in text nodes only (not inside HTML tags).
+      // Strategy: split the HTML on @word patterns that appear outside tags.
+      // Simple approach: render markdown HTML, then replace @mentions in text-only portions.
       const mentionRe = /@(\w+)/g;
-      let lastIdx = 0;
-      let m;
-      let hasMentions = false;
-
-      while ((m = mentionRe.exec(text)) !== null) {
-        hasMentions = true;
-        if (m.index > lastIdx) {
-          el.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+      const finalHtml = mdHtml.replace(mentionRe, (match, name) => {
+        const emoji = getAgentEmojiForMention(name);
+        if (emoji) {
+          return `<span class="mention-highlight"><span class="mention-emoji">${emoji}</span>@${name}</span>`;
         }
-        const span = document.createElement('span');
-        span.className = 'mention-highlight';
-        span.textContent = m[0];
-        el.appendChild(span);
-        lastIdx = m.index + m[0].length;
-      }
+        // Unknown @mention — still pill but no emoji
+        return `<span class="mention-highlight">@${name}</span>`;
+      });
 
-      if (!hasMentions) {
-        el.textContent = text;
-      } else if (lastIdx < text.length) {
-        el.appendChild(document.createTextNode(text.slice(lastIdx)));
-      }
+      el.innerHTML = finalHtml;
     }
 
     // ─── Web Notifications ───────────────────────────────────────────────────
