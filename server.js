@@ -799,7 +799,13 @@ function requireAdmin(req, res, next) {
 }
 
 // ============ STATIC ============
-app.get('/', (req, res) => res.redirect('/chat'));
+app.get('/', (req, res) => {
+  if (req.isAuthenticated()) return res.redirect('/chat');
+  // Show login page if it exists, otherwise redirect to Google OAuth
+  const loginPath = path.join(__dirname, 'public', 'login.html');
+  if (require('fs').existsSync(loginPath)) return res.sendFile(loginPath);
+  res.redirect('/auth/google');
+});
 
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
 app.use('/downloads', express.static(path.join(__dirname, 'public', 'downloads')));
@@ -812,7 +818,7 @@ app.get('/download', (req, res) => {
 app.get('/c', (req, res) => res.redirect('/chat'));
 
 app.get('/chat', (req, res) => {
-  if (!req.isAuthenticated()) return res.redirect('/');
+  if (!req.isAuthenticated()) return res.redirect('/auth/google');
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
