@@ -202,6 +202,8 @@ function isRecentUserSend(text) {
 
 let chatGatewayWs = null;
 let chatGatewayAuthenticated = false;
+// Track last channel that sent a message so agent replies go back to the right channel
+let lastActiveChannelId = null;
 let chatGatewayReconnectTimer = null;
 let chatGatewayReqCounter = 0;
 
@@ -366,13 +368,19 @@ async function refreshChatHistoryFromGateway() {
 // Stores an agent message from the gateway into the channels DB and broadcasts to channel SSE
 let dbReady = false;
 
-async function storeAgentMessageInChannel(normalizedMsg, sessionKey) {
+async function storeAgentMessageInChannel(normalizedMsg, sessionKey, channelId = null) {
   if (!dbReady) return;
   try {
     const agent = AGENTS.find(a => a.sessionKey === sessionKey);
     if (!agent) return;
 
-    const channel = await db.get("SELECT id FROM channels WHERE name = 'general'");
+    let channel;
+    if (channelId) {
+      channel = await db.get('SELECT id FROM channels WHERE id = $1', [channelId]);
+    }
+    if (!channel) {
+      channel = await db.get("SELECT id FROM channels WHERE name = 'general'");
+    }
     if (!channel) return;
 
     const id = uuidv4();
@@ -458,7 +466,7 @@ function connectChatGateway() {
         broadcastChatEvent('message', normalized);
         // Also persist agent messages to channels DB
         if (normalized.role === 'assistant') {
-          storeAgentMessageInChannel(normalized, CHAT_SESSION_KEY).catch(() => {});
+          storeAgentMessageInChannel(normalized, CHAT_SESSION_KEY, lastActiveChannelId).catch(() => {});
           // Fire push notification to all registered devices
           if (normalized.text) {
             const agentForSession = AGENTS.find(a => a.sessionKey === CHAT_SESSION_KEY);
@@ -1373,6 +1381,9 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
 
     // Route messages to agents
     if (senderType === 'user') {
+      // Track which channel is active so agent replies route back here
+      lastActiveChannelId = req.params.id;
+
       const routedAgentIds = new Set();
 
       // Route to explicitly @-mentioned agents
