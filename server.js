@@ -380,6 +380,7 @@ async function storeAgentMessageInChannel(normalizedMsg, sessionKey, channelId =
     if (channelId) {
       channel = await db.get('SELECT id FROM channels WHERE id = $1', [channelId]);
     }
+    // For DM channels: if channelId is a DM channel for this agent, use it; otherwise fall back to general
     if (!channel) {
       channel = await db.get("SELECT id FROM channels WHERE name = 'general'");
     }
@@ -551,8 +552,14 @@ if (isProduction) {
           description TEXT DEFAULT '',
           created_by TEXT,
           is_default BOOLEAN DEFAULT false,
+          is_dm BOOLEAN DEFAULT false,
+          dm_agent_id TEXT,
+          dm_user_id TEXT,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
+        ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_dm BOOLEAN DEFAULT false;
+        ALTER TABLE channels ADD COLUMN IF NOT EXISTS dm_agent_id TEXT;
+        ALTER TABLE channels ADD COLUMN IF NOT EXISTS dm_user_id TEXT;
 
         CREATE TABLE IF NOT EXISTS channel_members (
           channel_id TEXT,
@@ -658,6 +665,9 @@ if (isProduction) {
           description TEXT DEFAULT '',
           created_by TEXT,
           is_default INTEGER DEFAULT 0,
+          is_dm INTEGER DEFAULT 0,
+          dm_agent_id TEXT,
+          dm_user_id TEXT,
           created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS channel_members (
@@ -1279,6 +1289,38 @@ app.get('/api/agents/:id/key', requireAuth, requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ============ DM CHANNELS ============
+// Find or create a DM channel between the current user and an agent
+app.get('/api/dm/:agentId', requireAuth, async (req, res) => {
+  try {
+    const agent = AGENTS.find(a => a.id === req.params.agentId);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+    const userId = req.user.id;
+
+    // Look for an existing DM channel for this user+agent pair
+    let channel = await db.get(
+      'SELECT * FROM channels WHERE is_dm = true AND dm_agent_id = $1 AND dm_user_id = $2',
+      [agent.id, userId]
+    );
+
+    if (!channel) {
+      // Create the DM channel
+      const id = uuidv4();
+      const safeName = `dm-${agent.id}-${userId.slice(0, 8)}`;
+      await db.run(
+        'INSERT INTO channels (id, name, description, created_by, is_dm, dm_agent_id, dm_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [id, safeName, `DM with ${agent.name}`, userId, true, agent.id, userId]
+      );
+      await db.run('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)', [id, userId]);
+      channel = await db.get('SELECT * FROM channels WHERE id = $1', [id]);
+    }
+
+    // Augment with agent info for the client
+    res.json({ ...channel, agent: { id: agent.id, name: agent.name, emoji: agent.emoji } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ============ CHANNELS ============
 app.get('/api/channels', requireAuth, async (req, res) => {
   try {
@@ -1383,41 +1425,62 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
       // Track which channel is active so agent replies route back here
       lastActiveChannelId = req.params.id;
 
-      const routedAgentIds = new Set();
+      // Fetch channel to check if it's a DM
+      const channel = await db.get('SELECT * FROM channels WHERE id = $1', [req.params.id]);
+      const isDm = channel?.is_dm && channel?.dm_agent_id;
 
-      // Route to explicitly @-mentioned agents
-      if (mentions?.length > 0) {
-        for (const mention of mentions) {
-          const agent = AGENTS.find(a => a.id === mention);
-          if (agent?.sessionKey) {
-            routedAgentIds.add(agent.id);
-            try {
-              trackUserSend(content);
-              await chatGatewayRequest('chat.send', {
-                sessionKey: agent.sessionKey,
-                message: content,
-                idempotencyKey: id
-              });
-            } catch (err) {
-              console.error('[channels] Failed to route to agent:', agent.id, err.message);
-            }
-          }
-        }
-      }
-
-      // If no agents were explicitly mentioned, route to the default agent
-      if (routedAgentIds.size === 0) {
-        const defaultAgent = AGENTS.find(a => a.sessionKey === CHAT_SESSION_KEY);
-        if (defaultAgent?.sessionKey) {
+      if (isDm) {
+        // DM channel: always route exclusively to the dedicated agent
+        const dmAgent = AGENTS.find(a => a.id === channel.dm_agent_id);
+        if (dmAgent?.sessionKey) {
           try {
             trackUserSend(content);
             await chatGatewayRequest('chat.send', {
-              sessionKey: defaultAgent.sessionKey,
+              sessionKey: dmAgent.sessionKey,
               message: content,
               idempotencyKey: id
             });
           } catch (err) {
-            console.error('[channels] Failed to route to default agent:', err.message);
+            console.error('[channels] Failed to route DM to agent:', dmAgent.id, err.message);
+          }
+        }
+      } else {
+        const routedAgentIds = new Set();
+
+        // Route to explicitly @-mentioned agents
+        if (mentions?.length > 0) {
+          for (const mention of mentions) {
+            const agent = AGENTS.find(a => a.id === mention);
+            if (agent?.sessionKey) {
+              routedAgentIds.add(agent.id);
+              try {
+                trackUserSend(content);
+                await chatGatewayRequest('chat.send', {
+                  sessionKey: agent.sessionKey,
+                  message: content,
+                  idempotencyKey: id
+                });
+              } catch (err) {
+                console.error('[channels] Failed to route to agent:', agent.id, err.message);
+              }
+            }
+          }
+        }
+
+        // If no agents were explicitly mentioned, route to the default agent
+        if (routedAgentIds.size === 0) {
+          const defaultAgent = AGENTS.find(a => a.sessionKey === CHAT_SESSION_KEY);
+          if (defaultAgent?.sessionKey) {
+            try {
+              trackUserSend(content);
+              await chatGatewayRequest('chat.send', {
+                sessionKey: defaultAgent.sessionKey,
+                message: content,
+                idempotencyKey: id
+              });
+            } catch (err) {
+              console.error('[channels] Failed to route to default agent:', err.message);
+            }
           }
         }
       }
