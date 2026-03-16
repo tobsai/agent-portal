@@ -759,7 +759,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 }
 
 // ============ MIDDLEWARE ============
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 const wsClients = new Set();
 wss.on('connection', (ws) => {
