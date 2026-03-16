@@ -1540,6 +1540,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/gateway-status', (req, res) => {
+  const gwUrl = (process.env.GATEWAY_WS_URL || '');
+  res.json({
+    gatewayAuthenticated: chatGatewayAuthenticated,
+    gatewayWsState: chatGatewayWs ? chatGatewayWs.readyState : null,
+    gatewayUrlConfigured: !!gwUrl,
+    gatewayUrlPrefix: gwUrl ? gwUrl.substring(0, 20) + '...' : null,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // ============ ERROR HANDLING ============
 if (process.env.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);
