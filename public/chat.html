@@ -3039,7 +3039,7 @@
         if (recognition && (voiceState === 'listening' || voiceState === 'activating')) {
           // Pause for review instead of auto-sending
           recognition.stop();
-          const transcript = (finalTranscript || messageInput.value).trim();
+          const transcript = (finalTranscript || getValue()).trim();
           if (transcript) {
             silencePausedTranscript = true; // flag so onend doesn't auto-send
             setVoiceState('paused');
@@ -3054,7 +3054,7 @@
       voiceSupported = true;
       console.log('[voice] Using native speech bridge (iOS)');
       window.nativeSpeechTranscript = function(text) {
-        if (text) { setVoiceState('thinking'); messageInput.value = text; sendMessage(); }
+        if (text) { setVoiceState('thinking'); setValue(text); sendMessage(); }
       };
       window.nativeSpeechStateChanged = function(isListening) {
         setVoiceState(isListening ? 'listening' : 'idle');
@@ -3079,7 +3079,7 @@
             else interim += t;
           }
           const display = (finalTranscript + interim).trim();
-          if (display) messageInput.value = display;
+          if (display) setValue(display);
           resetSilenceTimer();
         };
 
@@ -3096,11 +3096,11 @@
             silencePausedTranscript = false;
             return; // state already set to 'paused' with review controls
           }
-          const transcript = (finalTranscript || messageInput.value).trim();
+          const transcript = (finalTranscript || getValue()).trim();
           if ((voiceState === 'listening' || voiceState === 'activating') && transcript) {
             // User explicitly stopped (double-tap) — send it
             setVoiceState('thinking');
-            messageInput.value = transcript;
+            setValue(transcript);
             sendMessage();
           } else if (voiceState === 'listening' || voiceState === 'activating') {
             setVoiceState('idle');
@@ -3153,7 +3153,7 @@
           inputArea.parentElement.insertBefore(bar, inputArea);
           document.getElementById('voice-send-btn').onclick = () => {
             showVoiceReviewControls(false);
-            const transcript = messageInput.value.trim();
+            const transcript = getValue().trim();
             if (transcript) { setVoiceState('thinking'); sendMessage(); }
             else { setVoiceState('idle'); }
           };
@@ -3164,7 +3164,7 @@
           };
           document.getElementById('voice-cancel-btn').onclick = () => {
             showVoiceReviewControls(false);
-            messageInput.value = '';
+            setValue('');
             finalTranscript = '';
             setVoiceState('idle');
           };
@@ -3192,10 +3192,10 @@
 
       if (isDoubleTap && (voiceState === 'listening' || voiceState === 'paused')) {
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-        const transcript = (finalTranscript || messageInput.value).trim();
+        const transcript = (finalTranscript || getValue()).trim();
         recognition.abort();
-        if (transcript) { setVoiceState('thinking'); messageInput.value = transcript; sendMessage(); }
-        else { finalTranscript = ''; messageInput.value = ''; setVoiceState('idle'); }
+        if (transcript) { setVoiceState('thinking'); setValue(transcript); sendMessage(); }
+        else { finalTranscript = ''; setValue(''); setVoiceState('idle'); }
         return;
       }
 
@@ -3209,7 +3209,7 @@
 
       if (voiceState === 'activating') {
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-        recognition.abort(); finalTranscript = ''; messageInput.value = ''; setVoiceState('idle');
+        recognition.abort(); finalTranscript = ''; setValue(''); setVoiceState('idle');
         return;
       }
 
@@ -3221,7 +3221,7 @@
       if (voiceState !== 'idle') return;
 
       finalTranscript = '';
-      messageInput.value = '';
+      setValue('');
       setVoiceState('activating');
       try {
         const preferredMic = localStorage.getItem('voicePreferredMic');
