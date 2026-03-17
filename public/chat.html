@@ -18,7 +18,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Agent Portal — Chat</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='0' y='0' width='100' height='100' fill='%23312e81' rx='15'/%3E%3Ctext x='50%25' y='60%25' font-family='sans-serif' font-size='60' fill='%23818cf8' text-anchor='middle' dominant-baseline='middle'%3EAP%3C/text%3E%3C/svg%3E">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="apple-touch-icon" href="/favicon-192.png">
   <link rel="manifest" href="/manifest.json">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
@@ -644,14 +646,14 @@
       font-family: inherit;
       font-size: 0.9rem;
       color: var(--text);
-      min-height: 42px;
+      resize: none;
       max-height: 120px;
       overflow-y: auto;
       transition: all 0.15s;
+      min-height: 44px;
+      line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
-      cursor: text;
-      line-height: 1.5;
     }
 
     .input-box:focus {
@@ -660,34 +662,42 @@
       background: var(--surface-hover);
     }
 
-    /* Empty state placeholder via CSS attr() on data-placeholder */
-    .input-box:empty::before {
+    /* Placeholder for contenteditable */
+    .input-box:empty:before {
       content: attr(data-placeholder);
       color: var(--text-dim);
       pointer-events: none;
     }
 
-    /* @-mention pill inside the compose box */
-    .input-mention-pill {
+    /* @-mention pill chip */
+    .mention-pill {
       display: inline-flex;
       align-items: center;
-      gap: 2px;
       background: rgba(129,140,248,0.2);
-      border: 1px solid rgba(129,140,248,0.35);
       color: var(--accent);
-      font-weight: 600;
-      border-radius: 4px;
-      padding: 0 5px;
-      font-size: 0.88em;
-      cursor: default;
+      border: 1px solid rgba(129,140,248,0.35);
+      border-radius: 12px;
+      padding: 1px 8px;
+      font-size: 0.85em;
+      font-weight: 500;
+      margin: 0 1px;
       white-space: nowrap;
-      line-height: 1.5;
+      cursor: default;
       user-select: all;
-      -webkit-user-select: all;
+      vertical-align: middle;
+      line-height: 1.4;
     }
 
-    .input-mention-pill .pill-emoji {
-      font-size: 0.9em;
+    .mention-pill[data-type="agent"] {
+      background: rgba(96,165,250,0.18);
+      color: var(--blue);
+      border-color: rgba(96,165,250,0.35);
+    }
+
+    .mention-pill[data-type="user"] {
+      background: rgba(52,211,153,0.15);
+      color: var(--green);
+      border-color: rgba(52,211,153,0.3);
     }
 
     .send-btn {
@@ -1414,10 +1424,10 @@
             class="input-box"
             id="message-input"
             contenteditable="true"
-            data-placeholder="Type a message..."
             role="textbox"
             aria-multiline="true"
             aria-label="Message input"
+            data-placeholder="Type a message..."
             spellcheck="true"></div>
           <div style="position:relative; display:flex; align-items:center; gap:4px; flex-shrink:0;">
             <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Voice input" aria-label="Voice input">🎙️</button>
@@ -1506,108 +1516,68 @@
     let collectedMentions = [];
 
     const messagesContainer = document.getElementById('messages');
+    const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
 
-    // ─── MessageInput Abstraction (contenteditable → value/focus API) ─────────
-    // Wraps the contenteditable #message-input div to expose a textarea-compatible
-    // interface (.value, .focus(), .style.height) used throughout the codebase.
-    const messageInput = (() => {
-      const el = document.getElementById('message-input');
-
-      /** Extract plain-text content; pill spans → '@Name' */
-      function getPlainText() {
-        let text = '';
-        el.childNodes.forEach(node => {
-          if (node.nodeType === Node.TEXT_NODE) {
-            text += node.textContent;
-          } else if (node.nodeType === Node.ELEMENT_NODE) {
-            if (node.classList.contains('input-mention-pill')) {
-              text += node.dataset.mentionText || node.textContent;
-            } else if (node.nodeName === 'BR') {
-              text += '\n';
-            } else {
-              text += node.textContent;
-            }
+    // ─── ContentEditable Input Helpers ───────────────────────────────────────
+    /**
+     * Extract plain text from the contenteditable div, converting .mention-pill
+     * elements back to "@name" text (as if they were never styled).
+     */
+    function getValue() {
+      let text = '';
+      messageInput.childNodes.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          text += node.textContent;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.classList && node.classList.contains('mention-pill')) {
+            // Restore as plain @mention text
+            text += '@' + node.dataset.name;
+          } else if (node.tagName === 'BR') {
+            text += '\n';
+          } else {
+            // Recurse for any nested elements (e.g., spans from browser paste normalisation)
+            text += node.innerText || node.textContent || '';
           }
-        });
-        return text;
-      }
+        }
+      });
+      return text;
+    }
 
-      /** Set plain text content (clears pills) — used by voice input */
-      function setPlainText(text) {
-        el.innerHTML = '';
-        if (text) el.appendChild(document.createTextNode(text));
-        // Move cursor to end
-        const range = document.createRange();
-        const sel = window.getSelection();
-        range.selectNodeContents(el);
-        range.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(range);
+    /**
+     * Set plain text into the contenteditable div, clearing all existing content.
+     * Used by voice path and programmatic message injection.
+     */
+    function setValue(text) {
+      messageInput.innerHTML = '';
+      if (text) {
+        messageInput.appendChild(document.createTextNode(text));
       }
+      autoResizeInput();
+    }
 
-      /** Place cursor at end of content */
-      function moveCursorToEnd() {
-        const range = document.createRange();
-        const sel = window.getSelection();
-        range.selectNodeContents(el);
-        range.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
+    /**
+     * Auto-resize the contenteditable div to fit its content (mirrors the old
+     * textarea scrollHeight approach).
+     */
+    function autoResizeInput() {
+      // Reset to minimum to get accurate scrollHeight
+      messageInput.style.height = 'auto';
+      // Cap at max-height: 120px (enforced by CSS overflow-y: auto)
+      messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
+    }
 
-      return {
-        get el() { return el; },
-        // Textarea-compatible value property
-        get value() { return getPlainText(); },
-        set value(text) {
-          setPlainText(text);
-        },
-        // Textarea-compatible focus/blur
-        focus() { el.focus(); moveCursorToEnd(); },
-        blur() { el.blur(); },
-        // style.height shim — contenteditable grows naturally; these are no-ops
-        get style() { return el.style; },
-        // selectionStart — approximation (used only in insertMention)
-        get selectionStart() {
-          const sel = window.getSelection();
-          if (!sel || !sel.rangeCount) return getPlainText().length;
-          const range = sel.getRangeAt(0);
-          const preRange = range.cloneRange();
-          preRange.selectNodeContents(el);
-          preRange.setEnd(range.startContainer, range.startOffset);
-          return preRange.toString().length;
-        },
-        // setSelectionRange — move cursor to pos
-        setSelectionRange(start, end) {
-          // Simplified: just move cursor to character offset `end` in plain text
-          const text = getPlainText();
-          let offset = Math.min(end, text.length);
-          try {
-            const sel = window.getSelection();
-            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-            let node = walker.nextNode();
-            while (node) {
-              if (offset <= node.textContent.length) {
-                const r = document.createRange();
-                r.setStart(node, offset);
-                r.collapse(true);
-                sel.removeAllRanges();
-                sel.addRange(r);
-                return;
-              }
-              offset -= node.textContent.length;
-              node = walker.nextNode();
-            }
-            moveCursorToEnd();
-          } catch (_) { /* ignore */ }
-        },
-        addEventListener(type, fn, opts) { el.addEventListener(type, fn, opts); },
-        dispatchEvent(event) { return el.dispatchEvent(event); },
-        // For paste handling: refers to the underlying element
-        contains(node) { return el.contains(node); },
-      };
-    })();
+    /**
+     * Place the caret at the end of the contenteditable div.
+     */
+    function setCaretToEnd() {
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(messageInput);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
     const connectionStatus = document.getElementById('connection-status');
     const errorBanner = document.getElementById('error-banner');
     const errorMessage = document.getElementById('error-message');
@@ -1725,8 +1695,7 @@
       const list = document.getElementById('channel-list');
       list.innerHTML = '';
       // Filter out DM channels — they belong in the Direct Messages section
-      // Coerce to boolean to handle SQLite (integer 0/1) vs Postgres (boolean) differences
-      const publicChannels = channels.filter(ch => !ch.is_dm && ch.is_dm !== 1);
+      const publicChannels = channels.filter(ch => !ch.is_dm);
       publicChannels.forEach(ch => {
         const item = document.createElement('div');
         item.className = 'channel-item' + (ch.id === activeChannelId ? ' active' : '');
@@ -2397,71 +2366,72 @@
     }
 
     function insertMention(candidate) {
-      const el = messageInput.el;
-
-      // Delete the partial "@query" text before the cursor (from mentionStartPos)
+      // Remove the partial "@query" text that was typed and replace with a pill
       const sel = window.getSelection();
-      if (sel && sel.rangeCount) {
-        const range = sel.getRangeAt(0);
-        // Walk backwards through text nodes to delete typed "@query"
-        try {
-          const startNode = range.startContainer;
-          const startOffset = range.startOffset;
-          if (startNode.nodeType === Node.TEXT_NODE) {
-            const textBefore = startNode.textContent.slice(0, startOffset);
-            // Find the @ in the text before cursor
-            const atIdx = textBefore.lastIndexOf('@');
-            if (atIdx >= 0) {
-              startNode.textContent = startNode.textContent.slice(0, atIdx) + startNode.textContent.slice(startOffset);
-              range.setStart(startNode, atIdx);
-              range.collapse(true);
-              sel.removeAllRanges();
-              sel.addRange(range);
-            }
+      if (!sel || sel.rangeCount === 0) return;
+
+      // Find and remove text from mentionStartPos up to cursor in the DOM
+      // We walk backward from the current cursor to find the "@" character node
+      const range = sel.getRangeAt(0);
+      const cursorNode = range.startContainer;
+      const cursorOffset = range.startOffset;
+
+      // Helper: find the text node and offset for mentionStartPos in the plain text
+      // We need to delete from mentionStartPos to current cursor position
+      let charsToDelete = 0;
+      let deleteStartNode = null;
+      let deleteStartOffset = 0;
+      let counted = 0;
+
+      // Walk all child nodes to find the mention start offset in the DOM
+      for (const node of messageInput.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const len = node.textContent.length;
+          if (counted + len > mentionStartPos && deleteStartNode === null) {
+            deleteStartNode = node;
+            deleteStartOffset = mentionStartPos - counted;
           }
-        } catch (_) { /* ignore cursor manipulation errors */ }
+          counted += len;
+        } else if (node.classList && node.classList.contains('mention-pill')) {
+          counted += 1 + node.dataset.name.length; // "@name" length equivalent
+        } else if (node.tagName === 'BR') {
+          counted += 1;
+        }
       }
 
-      // Build and insert pill span
-      const pill = document.createElement('span');
-      pill.className = 'input-mention-pill';
-      pill.contentEditable = 'false';
-      pill.dataset.mentionId = candidate.id;
-      pill.dataset.mentionText = `@${candidate.name}`;
-      pill.dataset.mentionType = candidate.type || 'agent';
-      if (candidate.emoji) {
-        const emojiSpan = document.createElement('span');
-        emojiSpan.className = 'pill-emoji';
-        emojiSpan.textContent = candidate.emoji;
-        pill.appendChild(emojiSpan);
+      if (deleteStartNode) {
+        // Create a range from "@" start to current cursor
+        const deleteRange = document.createRange();
+        deleteRange.setStart(deleteStartNode, deleteStartOffset);
+        deleteRange.setEnd(cursorNode, cursorOffset);
+        deleteRange.deleteContents();
       }
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = '@' + candidate.name;
-      pill.appendChild(nameSpan);
+
+      // Create the pill element
+      const pill = document.createElement('span');
+      pill.className = 'mention-pill';
+      pill.contentEditable = 'false';
+      pill.dataset.id = candidate.id;
+      pill.dataset.name = candidate.name;
+      pill.dataset.type = candidate.type;
+      pill.textContent = '@' + candidate.name;
 
       // Insert pill at current cursor position
-      const insertSel = window.getSelection();
-      if (insertSel && insertSel.rangeCount) {
-        const insertRange = insertSel.getRangeAt(0);
-        insertRange.insertNode(pill);
-        insertRange.setStartAfter(pill);
-        insertRange.collapse(true);
-        insertSel.removeAllRanges();
-        insertSel.addRange(insertRange);
-      } else {
-        el.appendChild(pill);
-      }
+      const insertRange = window.getSelection().getRangeAt(0);
+      insertRange.collapse(true);
+      insertRange.insertNode(pill);
 
-      // Insert a trailing space text node for continued typing
-      const space = document.createTextNode('\u00A0');
-      const afterRange = window.getSelection()?.getRangeAt(0);
-      if (afterRange) {
-        afterRange.insertNode(space);
-        afterRange.setStartAfter(space);
-        afterRange.collapse(true);
-        window.getSelection().removeAllRanges();
-        window.getSelection().addRange(afterRange);
-      }
+      // Insert a space text node after the pill so caret lands after it
+      const space = document.createTextNode('\u00a0');
+      pill.after(space);
+
+      // Move caret after the space
+      const afterRange = document.createRange();
+      afterRange.setStartAfter(space);
+      afterRange.collapse(true);
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(afterRange);
 
       messageInput.focus();
 
@@ -2471,40 +2441,67 @@
       }
 
       hideMentionPopup();
+      autoResizeInput();
     }
 
     function handleMentionInput() {
-      // For contenteditable: read text from cursor position backwards to find @
+      // For contenteditable, get cursor position via Selection API
       const sel = window.getSelection();
-      if (!sel || !sel.rangeCount) { hideMentionPopup(); return; }
+      if (!sel || sel.rangeCount === 0) { hideMentionPopup(); return; }
+
       const range = sel.getRangeAt(0);
-      if (!range.collapsed) { hideMentionPopup(); return; }
+      if (!messageInput.contains(range.startContainer)) { hideMentionPopup(); return; }
 
-      // Extract text content before cursor (up to 80 chars) from text nodes
-      let textBefore = '';
-      try {
-        const startNode = range.startContainer;
-        if (startNode.nodeType === Node.TEXT_NODE) {
-          textBefore = startNode.textContent.slice(0, range.startOffset);
+      // Build a plain-text snapshot up to the cursor by walking child nodes
+      let textBeforeCursor = '';
+      let cursorNode = range.startContainer;
+      let cursorOffset = range.startOffset;
+      let foundCursor = false;
+
+      for (const node of messageInput.childNodes) {
+        if (foundCursor) break;
+        if (node === cursorNode) {
+          // Text node — take only up to cursor offset
+          textBeforeCursor += node.textContent.slice(0, cursorOffset);
+          foundCursor = true;
+        } else if (node.nodeType === Node.TEXT_NODE) {
+          if (node.contains && false) {
+            // never
+          } else {
+            textBeforeCursor += node.textContent;
+          }
+        } else if (node.classList && node.classList.contains('mention-pill')) {
+          // Count pill as its @name equivalent
+          textBeforeCursor += '@' + node.dataset.name;
+        } else if (node.tagName === 'BR') {
+          textBeforeCursor += '\n';
+        } else {
+          textBeforeCursor += node.innerText || node.textContent || '';
         }
-      } catch (_) {}
+      }
 
-      // Find the last @ that triggers a mention
+      // If cursor is inside a text node that's nested (shouldn't normally happen), handle it
+      if (!foundCursor && cursorNode.nodeType === Node.TEXT_NODE) {
+        textBeforeCursor = cursorNode.textContent.slice(0, cursorOffset);
+        foundCursor = true;
+      }
+
+      // Search backward through textBeforeCursor for an @ trigger
       let atPos = -1;
-      for (let i = textBefore.length - 1; i >= 0; i--) {
-        if (textBefore[i] === '@') {
-          if (i === 0 || /[\s\u00A0]/.test(textBefore[i - 1])) {
+      for (let i = textBeforeCursor.length - 1; i >= 0; i--) {
+        if (textBeforeCursor[i] === '@') {
+          if (i === 0 || /[\s\u00a0]/.test(textBeforeCursor[i - 1])) {
             atPos = i;
           }
           break;
         }
-        if (/[\s\u00A0]/.test(textBefore[i])) break;
+        if (/[\s\u00a0]/.test(textBeforeCursor[i])) break;
       }
 
       if (atPos >= 0) {
         mentionActive = true;
         mentionStartPos = atPos;
-        mentionQuery = textBefore.slice(atPos + 1);
+        mentionQuery = textBeforeCursor.slice(atPos + 1);
         const filtered = filterMentionCandidates(mentionQuery);
         showMentionPopup(filtered);
       } else {
@@ -2735,56 +2732,40 @@
         // Check mention popup first
         if (handleMentionKeydown(e)) return;
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-        // Backspace on a pill: delete the whole pill
-        if (e.key === 'Backspace') {
-          const sel = window.getSelection();
-          if (sel && sel.rangeCount) {
-            const range = sel.getRangeAt(0);
-            if (range.collapsed) {
-              const prev = range.startContainer.nodeType === Node.ELEMENT_NODE
-                ? range.startContainer.childNodes[range.startOffset - 1]
-                : null;
-              if (prev && prev.classList && prev.classList.contains('input-mention-pill')) {
-                e.preventDefault();
-                prev.remove();
-              }
-            }
-          }
-        }
       });
       messageInput.addEventListener('input', () => {
+        autoResizeInput();
         handleMentionInput();
       });
       messageInput.addEventListener('paste', (e) => {
+        // Always check for image paste first
         const items = e.clipboardData?.items;
-        if (!items) return;
-
-        // Check for image paste first
-        for (const item of items) {
-          if (item.type.startsWith('image/')) {
-            e.preventDefault();
-            const file = item.getAsFile();
-            if (!file) continue;
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              pendingImage = { dataUrl: ev.target.result, mimeType: file.type };
-              showImagePreview(ev.target.result);
-            };
-            reader.readAsDataURL(file);
-            return;
+        if (items) {
+          for (const item of items) {
+            if (item.type.startsWith('image/')) {
+              e.preventDefault();
+              const file = item.getAsFile();
+              if (!file) continue;
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                pendingImage = { dataUrl: ev.target.result, mimeType: file.type };
+                showImagePreview(ev.target.result);
+              };
+              reader.readAsDataURL(file);
+              return;
+            }
           }
         }
-
-        // Plain text paste: prevent rich HTML from being pasted into contenteditable
+        // For text paste: strip HTML formatting, insert as plain text only
         e.preventDefault();
-        const text = e.clipboardData.getData('text/plain');
+        const text = e.clipboardData?.getData('text/plain');
         if (text) {
           document.execCommand('insertText', false, text);
         }
       });
       // Close mention popup on click outside
       document.addEventListener('click', (e) => {
-        if (!mentionPopup.contains(e.target) && !messageInput.el.contains(e.target)) {
+        if (!mentionPopup.contains(e.target) && !messageInput.contains(e.target)) {
           hideMentionPopup();
         }
       });
@@ -2834,12 +2815,12 @@
     let queuedUserMsgs = [];
 
     function sendMessage() {
-      const text = messageInput.value.trim();
+      const text = getValue().trim();
       const image = pendingImage;
       if (!text && !image) return;
       if (!eventSource || eventSource.readyState === EventSource.CLOSED) { showError('Not connected'); return; }
 
-      messageInput.value = '';
+      setValue('');
       hideMentionPopup();
 
       let fullContent = text;
@@ -3472,23 +3453,25 @@
       } catch { /* silent fail — widget is optional */ }
     }
 
-    // Hook into the existing SSE event source to receive live work events
-    // We patch connectEventStream to listen for work:* events on the SSE.
-    const _origConnectEventStream = connectEventStream;
-    function connectEventStream() {
-      _origConnectEventStream.apply(this, arguments);
-      // Wait a tick for eventSource to be set
-      setTimeout(() => {
-        if (!eventSource) return;
-        eventSource.addEventListener('work:signal', () => {
-          // Signals don't affect task list; no reload needed
-        });
-        eventSource.addEventListener('work:task:created', () => loadWorkWidget());
-        eventSource.addEventListener('work:task:updated', () => loadWorkWidget());
-        eventSource.addEventListener('work:initiative:created', () => loadWorkWidget());
-        eventSource.addEventListener('work:initiative:updated', () => loadWorkWidget());
-      }, 100);
-    }
+    // Hook into the existing SSE event source to receive live work events.
+    // Listen for work:* events on the channel SSE after it connects.
+    // We use a MutationObserver-style approach: poll for eventSource readiness.
+    (function attachWorkEvents() {
+      let attached = false;
+      setInterval(() => {
+        if (attached || !eventSource) return;
+        attached = true;
+        const src = eventSource;
+        src.addEventListener('work:task:created', () => loadWorkWidget());
+        src.addEventListener('work:task:updated', () => loadWorkWidget());
+        src.addEventListener('work:initiative:created', () => loadWorkWidget());
+        src.addEventListener('work:initiative:updated', () => loadWorkWidget());
+        // Reset if eventSource changes (reconnect)
+        const check = setInterval(() => {
+          if (eventSource !== src) { attached = false; clearInterval(check); }
+        }, 2000);
+      }, 500);
+    })();
 
     // Load on page init — defer slightly to not block critical path
     setTimeout(loadWorkWidget, 1500);
