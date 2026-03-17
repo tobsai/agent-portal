@@ -27,6 +27,9 @@ const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.SESSION_SECRET || 'agent-portal-dev-secret';
 
+// ── Native Gateway Client (Phase 1: OpenClaw channel integration) ──────────
+const { gatewayClient, sessionKeyForAgent, agentIdForSessionKey } = require('./lib/gateway-client');
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ noServer: true });
@@ -496,6 +499,70 @@ function connectChatGateway() {
 }
 
 connectChatGateway();
+
+// ── Phase 1: Wire native gateway client events ─────────────────────────────
+// The native client (lib/gateway-client.js) connects directly to ws://127.0.0.1:18789.
+// It supplements the existing proxy path; both can run in parallel during rollout.
+// Once Phase 2 is complete the proxy path (gwProxy) and connectChatGateway will be removed.
+
+function wireGatewayClientEvents() {
+  // chat.delta → typing indicator to all SSE clients
+  gatewayClient.on('delta', ({ agentId, sessionKey }) => {
+    broadcastChatEvent('typing', { active: true, agentId });
+    // Also broadcast to channel SSE clients watching this session's DM channel
+    // (channel lookup deferred to Phase 2)
+  });
+
+  // final agent message → push to chat buffer + channel DB + push notifications
+  gatewayClient.on('message', async (event) => {
+    const { agentId, sessionKey, text, message } = event;
+    broadcastChatEvent('typing', { active: false });
+
+    // Build a normalized message compatible with the existing chat buffer
+    const normalized = normalizeChatMessage({
+      role: 'assistant',
+      content: text || message?.content || '',
+      id: `gw-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+    });
+    if (!normalized) return;
+
+    const added = pushChatMessage(normalized);
+    if (added) broadcastChatEvent('message', normalized);
+
+    // Persist to channel DB and push notify
+    const agent = AGENTS.find(a => a.sessionKey === sessionKey || a.id === agentId);
+    if (agent && normalized.text) {
+      storeAgentMessageInChannel(normalized, sessionKey, lastActiveChannelId).catch(() => {});
+      pushToAllDevices(normalized.text, agent.name).catch(err =>
+        console.error('[gateway-client] push notification error:', err.message)
+      );
+    }
+  });
+
+  gatewayClient.on('agentError', ({ agentId, errorMessage }) => {
+    broadcastChatEvent('typing', { active: false });
+    broadcastChatEvent('error', { message: errorMessage || 'Agent error' });
+  });
+
+  gatewayClient.on('connected', () => {
+    console.log('[gateway-client] native connection ready');
+    broadcastChatEvent('status', { connected: true, native: true });
+  });
+
+  gatewayClient.on('disconnected', () => {
+    console.log('[gateway-client] native connection lost, reconnecting...');
+    broadcastChatEvent('status', { connected: false, native: true });
+  });
+}
+
+// Start native gateway client (connects to ws://127.0.0.1:18789)
+// Only if GATEWAY_TOKEN is set (same guard as the existing proxy path)
+if (process.env.GATEWAY_TOKEN) {
+  wireGatewayClientEvents();
+  gatewayClient.connect();
+  console.log('[gateway-client] native client starting');
+}
 
 const PORT = process.env.PORT || 3847;
 
@@ -1493,18 +1560,35 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
       if (isDm) {
         // DM channel: always route exclusively to the dedicated agent
         const dmAgent = AGENTS.find(a => a.id === channel.dm_agent_id);
-        if (dmAgent?.sessionKey) {
-          // Track the active DM session key so replies get attributed to the right agent
-          lastActiveSessionKey = dmAgent.sessionKey;
-          try {
-            trackUserSend(content);
-            await chatGatewayRequest('chat.send', {
-              sessionKey: dmAgent.sessionKey,
-              message: content,
-              idempotencyKey: id
-            });
-          } catch (err) {
-            console.error('[channels] Failed to route DM to agent:', dmAgent.id, err.message);
+        if (dmAgent) {
+          // Phase 1: use native gateway client (portal:dm-<agentId> session keys)
+          // Falls back to legacy chatGatewayRequest if native client is not ready.
+          lastActiveSessionKey = sessionKeyForAgent(dmAgent.id);
+
+          if (gatewayClient.isReady) {
+            try {
+              trackUserSend(content);
+              await gatewayClient.send(dmAgent.id, content, id);
+              console.log('[channels] DM routed via native gateway client to', dmAgent.id);
+            } catch (err) {
+              console.error('[channels] Native client DM failed, falling back:', err.message);
+              // fallback to legacy path
+              if (dmAgent.sessionKey) {
+                try {
+                  await chatGatewayRequest('chat.send', { sessionKey: dmAgent.sessionKey, message: content, idempotencyKey: id });
+                } catch (e2) {
+                  console.error('[channels] Legacy DM fallback also failed:', e2.message);
+                }
+              }
+            }
+          } else if (dmAgent.sessionKey) {
+            lastActiveSessionKey = dmAgent.sessionKey;
+            try {
+              trackUserSend(content);
+              await chatGatewayRequest('chat.send', { sessionKey: dmAgent.sessionKey, message: content, idempotencyKey: id });
+            } catch (err) {
+              console.error('[channels] Failed to route DM to agent:', dmAgent.id, err.message);
+            }
           }
         }
       } else {
@@ -1740,10 +1824,16 @@ app.get('/api/health', (req, res) => {
 app.get('/api/gateway-status', (req, res) => {
   const gwUrl = (process.env.GATEWAY_WS_URL || '');
   res.json({
+    // Legacy proxy path
     gatewayAuthenticated: chatGatewayAuthenticated,
     gatewayWsState: chatGatewayWs ? chatGatewayWs.readyState : null,
     gatewayUrlConfigured: !!gwUrl,
     gatewayUrlPrefix: gwUrl ? gwUrl.substring(0, 20) + '...' : null,
+    // Phase 1: native gateway client
+    nativeClient: {
+      ready: gatewayClient.isReady,
+      wsState: gatewayClient.ws ? gatewayClient.ws.readyState : null,
+    },
     timestamp: new Date().toISOString()
   });
 });

@@ -21,6 +21,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <link rel="apple-touch-icon" href="/favicon-192.png">
+  <link rel="manifest" href="/manifest.json">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -2463,7 +2464,8 @@
       try {
         new Notification(senderName || 'Agent Portal', {
           body,
-          icon: '/assets/lewis-canonical.png',
+          icon: '/favicon-192.png',
+          badge: '/favicon-192.png',
           tag: 'agent-' + Date.now() // unique tag so notifications don't collapse
         });
       } catch (e) { /* non-fatal */ }
@@ -2731,7 +2733,7 @@
     function logout() { window.location.href = '/auth/logout'; }
 
     // ─── Voice Settings ──────────────────────────────────────────────────────
-    const voiceSettings = { silenceTimeout: 2500, autoplay: true };
+    const voiceSettings = { silenceTimeout: 3500, autoplay: true };
 
     function loadVoiceSettings() {
       const t = parseFloat(localStorage.getItem('voiceSilenceTimeout'));
@@ -2812,13 +2814,21 @@
     let silenceTimer = null;
     let finalTranscript = '';
     let lastTapTime = 0;
+    let silencePausedTranscript = false; // true when silence paused for review
 
     function resetSilenceTimer() {
       if (silenceTimer) clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
         silenceTimer = null;
         if (recognition && (voiceState === 'listening' || voiceState === 'activating')) {
+          // Pause for review instead of auto-sending
           recognition.stop();
+          const transcript = (finalTranscript || messageInput.value).trim();
+          if (transcript) {
+            silencePausedTranscript = true; // flag so onend doesn't auto-send
+            setVoiceState('paused');
+            showVoiceReviewControls(true);
+          }
         }
       }, voiceSettings.silenceTimeout);
     }
@@ -2865,15 +2875,21 @@
 
         recognition.onend = () => {
           if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+          // If silence timer paused us for review, don't auto-send
+          if (silencePausedTranscript) {
+            silencePausedTranscript = false;
+            return; // state already set to 'paused' with review controls
+          }
           const transcript = (finalTranscript || messageInput.value).trim();
           if ((voiceState === 'listening' || voiceState === 'activating') && transcript) {
+            // User explicitly stopped (double-tap) — send it
             setVoiceState('thinking');
             messageInput.value = transcript;
             sendMessage();
           } else if (voiceState === 'listening' || voiceState === 'activating') {
             setVoiceState('idle');
           } else if (voiceState === 'paused') {
-            setVoiceState('idle');
+            // Don't auto-dismiss paused state
           }
           finalTranscript = '';
         };
@@ -2892,6 +2908,8 @@
       if (!voiceBtn) return;
       voiceBtn.className = 'voice-btn' + (state !== 'idle' ? ' ' + state : '');
       if (!voiceSupported) voiceBtn.classList.add('unsupported');
+      // Hide review controls on any state except paused
+      if (state !== 'paused') showVoiceReviewControls(false);
       switch (state) {
         case 'idle': voiceBtn.innerHTML = '🎤'; break;
         case 'activating': voiceBtn.innerHTML = '🎤'; break;
@@ -2899,6 +2917,47 @@
         case 'paused': voiceBtn.innerHTML = '⏸️'; break;
         case 'thinking': voiceBtn.innerHTML = '<div class="spinner"></div>'; break;
         case 'speaking': voiceBtn.innerHTML = '<div class="waveform"><span></span><span></span><span></span><span></span></div>'; break;
+      }
+    }
+
+    function showVoiceReviewControls(show) {
+      let bar = document.getElementById('voice-review-bar');
+      if (show) {
+        if (!bar) {
+          bar = document.createElement('div');
+          bar.id = 'voice-review-bar';
+          bar.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 16px; background:rgba(59,130,246,0.15); border-top:1px solid var(--border); justify-content:center;';
+          bar.innerHTML = `
+            <span style="color:var(--text-muted); font-size:13px;">Review your message, then:</span>
+            <button id="voice-send-btn" style="padding:4px 14px; border-radius:6px; border:1px solid #818cf8; background:#818cf8; color:#fff; cursor:pointer; font-size:13px;">Send ✓</button>
+            <button id="voice-resume-btn" style="padding:4px 14px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text); cursor:pointer; font-size:13px;">Keep talking 🎤</button>
+            <button id="voice-cancel-btn" style="padding:4px 14px; border-radius:6px; border:1px solid var(--border); background:transparent; color:#ef4444; cursor:pointer; font-size:13px;">Cancel ✕</button>
+          `;
+          const inputArea = document.querySelector('.chat-input-area') || messageInput.parentElement;
+          inputArea.parentElement.insertBefore(bar, inputArea);
+          document.getElementById('voice-send-btn').onclick = () => {
+            showVoiceReviewControls(false);
+            const transcript = messageInput.value.trim();
+            if (transcript) { setVoiceState('thinking'); sendMessage(); }
+            else { setVoiceState('idle'); }
+          };
+          document.getElementById('voice-resume-btn').onclick = () => {
+            showVoiceReviewControls(false);
+            setVoiceState('activating');
+            try { recognition.start(); resetSilenceTimer(); } catch(e) { setVoiceState('idle'); }
+          };
+          document.getElementById('voice-cancel-btn').onclick = () => {
+            showVoiceReviewControls(false);
+            messageInput.value = '';
+            finalTranscript = '';
+            setVoiceState('idle');
+          };
+        }
+        bar.style.display = 'flex';
+        // Focus input so user can edit the transcript
+        messageInput.focus();
+      } else {
+        if (bar) bar.style.display = 'none';
       }
     }
 
