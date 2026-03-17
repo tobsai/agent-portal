@@ -1298,6 +1298,15 @@
         <span class="channel-name">Work</span>
       </a>
     </div>
+
+    <!-- ─── Active Work Widget ─── -->
+    <div id="work-widget" style="display:none; padding:0.5rem 0.75rem; flex-shrink:0;">
+      <div style="font-size:0.65rem; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; padding:0.4rem 0.25rem 0.3rem;">Active Work</div>
+      <div id="work-widget-items" style="display:flex; flex-direction:column; gap:2px;"></div>
+      <a href="/work" style="display:block; font-size:0.7rem; color:var(--text-dim); text-align:center; padding:0.4rem 0; text-decoration:none; margin-top:2px;" onmouseover="this.style.color='var(--text-muted)'" onmouseout="this.style.color='var(--text-dim)'">View all →</a>
+    </div>
+    <div style="border-top:1px solid var(--border); flex-shrink:0;"></div>
+
     <div class="sidebar-footer">
       <div class="sidebar-user" id="sidebar-user-info">
         <img src="" alt="" id="user-avatar" style="display: none;">
@@ -3175,6 +3184,88 @@
     };
 
     init();
+  </script>
+
+  <!-- ─── Work Widget (MT-180) ─── -->
+  <script>
+    // Polls /api/work on load, then listens on SSE for live updates.
+    // Shows active/in-progress tasks in the sidebar.
+
+    const WORK_WIDGET_MAX = 5; // max tasks shown in sidebar
+
+    function escW(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function workStatusDot(status) {
+      const colors = {
+        active: '#60a5fa', 'in-progress': '#818cf8',
+        blocked: '#f87171', done: '#34d399', complete: '#34d399',
+        paused: '#fbbf24', backlog: '#52525b', planned: '#52525b'
+      };
+      const c = colors[status] || '#52525b';
+      return `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${c};flex-shrink:0;margin-top:2px;"></span>`;
+    }
+
+    function renderWorkWidget(initiatives, tasks) {
+      const widget = document.getElementById('work-widget');
+      const items  = document.getElementById('work-widget-items');
+      if (!widget || !items) return;
+
+      // Show active tasks first, then in-progress, then backlog
+      const priority = ['active', 'in-progress'];
+      const active = tasks.filter(t => priority.includes(t.status));
+      const shown  = active.length > 0 ? active : tasks.filter(t => t.status !== 'done' && t.status !== 'complete' && t.status !== 'cancelled');
+      const display = shown.slice(0, WORK_WIDGET_MAX);
+
+      if (display.length === 0) {
+        widget.style.display = 'none';
+        return;
+      }
+
+      widget.style.display = 'block';
+      items.innerHTML = display.map(t => {
+        const ini = initiatives.find(i => i.id === t.initiative_id);
+        return `
+          <a href="/work" style="display:flex;align-items:flex-start;gap:0.4rem;padding:0.3rem 0.25rem;border-radius:5px;text-decoration:none;transition:background 0.1s;" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background='transparent'">
+            ${workStatusDot(t.status)}
+            <div style="min-width:0;flex:1;">
+              <div style="font-size:0.78rem;color:var(--text-muted);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escW(t.title)}">${escW(t.title)}</div>
+              ${ini ? `<div style="font-size:0.65rem;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escW(ini.title)}</div>` : ''}
+            </div>
+          </a>`;
+      }).join('');
+    }
+
+    async function loadWorkWidget() {
+      try {
+        const res = await fetch('/api/work');
+        if (!res.ok) return;
+        const data = await res.json();
+        renderWorkWidget(data.initiatives || [], data.tasks || []);
+      } catch { /* silent fail — widget is optional */ }
+    }
+
+    // Hook into the existing SSE event source to receive live work events
+    // We patch connectEventStream to listen for work:* events on the SSE.
+    const _origConnectEventStream = connectEventStream;
+    function connectEventStream() {
+      _origConnectEventStream.apply(this, arguments);
+      // Wait a tick for eventSource to be set
+      setTimeout(() => {
+        if (!eventSource) return;
+        eventSource.addEventListener('work:signal', () => {
+          // Signals don't affect task list; no reload needed
+        });
+        eventSource.addEventListener('work:task:created', () => loadWorkWidget());
+        eventSource.addEventListener('work:task:updated', () => loadWorkWidget());
+        eventSource.addEventListener('work:initiative:created', () => loadWorkWidget());
+        eventSource.addEventListener('work:initiative:updated', () => loadWorkWidget());
+      }, 100);
+    }
+
+    // Load on page init — defer slightly to not block critical path
+    setTimeout(loadWorkWidget, 1500);
   </script>
 </body>
 </html>

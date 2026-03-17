@@ -76,7 +76,30 @@
       margin-left: auto;
       display: flex;
       gap: 0.5rem;
+      align-items: center;
     }
+
+    .nav-conn {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.65rem;
+      color: var(--text-dim);
+    }
+
+    .nav-conn-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: all 0.2s;
+    }
+
+    .nav-conn.live .nav-conn-dot {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    .nav-conn.live { color: var(--text-muted); }
 
     .btn-sm {
       font-size: 0.75rem;
@@ -91,31 +114,71 @@
     }
 
     .btn-sm:hover { background: var(--surface-hover); color: var(--text); }
+    .btn-sm.primary {
+      background: var(--accent-dim);
+      border-color: rgba(129,140,248,0.3);
+      color: var(--accent);
+    }
+    .btn-sm.primary:hover { background: rgba(129,140,248,0.25); }
 
-    /* ─── Main content ─── */
-    .content {
-      max-width: 960px;
+    /* ─── Layout ─── */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 1.5rem;
+      max-width: 1200px;
       margin: 0 auto;
-      padding: 2rem 1.5rem;
+      padding: 1.5rem;
     }
 
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    /* ─── Page Header ─── */
     .page-header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
+      grid-column: 1 / -1;
     }
 
     .page-header h1 {
       font-size: 1.4rem;
       font-weight: 700;
-      color: var(--text);
     }
 
     .page-header p {
       font-size: 0.82rem;
       color: var(--text-dim);
       margin-top: 0.2rem;
+    }
+
+    /* ─── Stats row ─── */
+    .stats-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      grid-column: 1 / -1;
+    }
+
+    .stat-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      min-width: 80px;
+    }
+
+    .stat-chip span {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+      display: block;
     }
 
     /* ─── Status Badges ─── */
@@ -156,7 +219,7 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
-      margin-bottom: 1.25rem;
+      margin-bottom: 1rem;
       overflow: hidden;
       transition: border-color 0.15s;
     }
@@ -230,23 +293,9 @@
       border-top: 1px solid rgba(255,255,255,0.04);
     }
 
-    .task-title {
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    .task-owner {
-      color: var(--text-dim);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.75rem;
-    }
-
-    .task-age {
-      color: var(--text-dim);
-      font-size: 0.72rem;
-      font-family: 'JetBrains Mono', monospace;
-      white-space: nowrap;
-    }
+    .task-title { color: var(--text-muted); font-weight: 500; }
+    .task-owner { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+    .task-age { color: var(--text-dim); font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
 
     .tasks-table tr:hover td { background: rgba(255,255,255,0.02); }
 
@@ -267,7 +316,6 @@
     .empty-state h2 { font-size: 1.1rem; font-weight: 600; color: var(--text-muted); }
     .empty-state p { font-size: 0.85rem; color: var(--text-dim); margin-top: 0.5rem; line-height: 1.5; }
 
-    /* ─── Loading ─── */
     .loading {
       text-align: center;
       padding: 3rem;
@@ -275,7 +323,6 @@
       font-size: 0.85rem;
     }
 
-    /* ─── Error ─── */
     .error-msg {
       background: rgba(248,113,113,0.08);
       border: 1px solid rgba(248,113,113,0.25);
@@ -286,27 +333,125 @@
       margin-bottom: 1.5rem;
     }
 
-    /* ─── Stats row ─── */
-    .stats-row {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 2rem;
-    }
-
-    .stat-chip {
+    /* ─── Signals Panel ─── */
+    .signals-panel {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.6rem 1rem;
-      font-size: 0.78rem;
-      color: var(--text-muted);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      height: fit-content;
+      max-height: calc(100vh - 120px);
+      position: sticky;
+      top: 64px;
     }
 
-    .stat-chip span {
-      font-size: 1.2rem;
-      font-weight: 700;
+    .signals-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.875rem 1rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .signals-header h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
       color: var(--text);
-      display: block;
+    }
+
+    .signals-live-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: all 0.3s;
+    }
+
+    .signals-live-dot.live {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .signals-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 0.5rem 0;
+      min-height: 200px;
+    }
+
+    .signals-list::-webkit-scrollbar { width: 4px; }
+    .signals-list::-webkit-scrollbar-track { background: transparent; }
+    .signals-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .signal-item {
+      display: flex;
+      gap: 0.6rem;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      transition: background 0.1s;
+    }
+
+    .signal-item:hover { background: rgba(255,255,255,0.02); }
+
+    .signal-item.new {
+      animation: flashIn 0.4s ease-out;
+    }
+
+    @keyframes flashIn {
+      0% { background: rgba(129,140,248,0.12); }
+      100% { background: transparent; }
+    }
+
+    .signal-icon {
+      font-size: 0.85rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .signal-body { flex: 1; min-width: 0; }
+
+    .signal-msg {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
+    .signal-meta {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.2rem;
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .signal-level-info    { color: var(--text-dim); }
+    .signal-level-success { color: var(--green); }
+    .signal-level-warning { color: var(--yellow); }
+    .signal-level-error   { color: var(--red); }
+    .signal-level-progress { color: var(--accent); }
+
+    .signal-empty {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.8rem;
+    }
+
+    .signals-footer {
+      padding: 0.5rem 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      flex-shrink: 0;
     }
   </style>
 </head>
@@ -319,46 +464,47 @@
     <span class="nav-sep">/</span>
     <span class="nav-title">Work</span>
     <div class="nav-right">
+      <div class="nav-conn" id="nav-conn">
+        <span class="nav-conn-dot"></span>
+        <span id="nav-conn-text">Connecting</span>
+      </div>
       <a href="/chat" class="btn-sm">Chat</a>
     </div>
   </nav>
 
-  <div class="content">
+  <div class="layout">
+    <!-- Page Header -->
     <div class="page-header">
       <div>
         <h1>Work Tracking</h1>
-        <p>Initiatives, tasks, and what every agent is working on.</p>
+        <p>Initiatives, tasks, and live agent signals.</p>
       </div>
     </div>
 
-    <div id="error-area"></div>
-    <div id="stats-area"></div>
-    <div id="work-area"><div class="loading">Loading...</div></div>
+    <!-- Stats -->
+    <div id="stats-area" style="grid-column:1/-1;"></div>
+    <div id="error-area" style="grid-column:1/-1;"></div>
+
+    <!-- Main: Initiatives + Tasks -->
+    <div id="work-area"><div class="loading">Loading…</div></div>
+
+    <!-- Right: Live Signals -->
+    <div class="signals-panel">
+      <div class="signals-header">
+        <h2>Live Signals</h2>
+        <span class="signals-live-dot" id="signals-dot"></span>
+      </div>
+      <div class="signals-list" id="signals-list">
+        <div class="signal-empty">Waiting for agent signals…</div>
+      </div>
+      <div class="signals-footer" id="signals-footer">No signals yet</div>
+    </div>
   </div>
 
   <script>
-    function statusBadge(status) {
-      const map = {
-        active: 'badge-active',
-        'in-progress': 'badge-in-progress',
-        complete: 'badge-complete',
-        blocked: 'badge-blocked',
-        planned: 'badge-planned',
-        paused: 'badge-paused',
-        backlog: 'badge-backlog',
-        done: 'badge-done',
-        cancelled: 'badge-cancelled',
-        draft: 'badge-planned',
-      };
-      const cls = map[status] || 'badge-planned';
-      const label = status ? status.replace(/-/g, ' ') : 'unknown';
-      return `<span class="badge ${cls}">${label}</span>`;
-    }
-
-    function priorityDot(priority) {
-      if (!priority) return '';
-      const cls = priority.toLowerCase();
-      return `<span class="priority-dot ${cls}" title="${priority}"></span>`;
+    // ─── Utilities ─────────────────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     function timeAgo(dateStr) {
@@ -369,17 +515,84 @@
       if (mins < 60) return `${mins}m ago`;
       const hrs = Math.floor(mins / 60);
       if (hrs < 24) return `${hrs}h ago`;
-      const days = Math.floor(hrs / 24);
-      return `${days}d ago`;
+      return `${Math.floor(hrs / 24)}d ago`;
     }
 
-    function toggleInitiative(card) {
-      card.classList.toggle('open');
+    function statusBadge(status) {
+      const map = {
+        active: 'badge-active', 'in-progress': 'badge-in-progress',
+        complete: 'badge-complete', blocked: 'badge-blocked',
+        planned: 'badge-planned', paused: 'badge-paused',
+        backlog: 'badge-backlog', done: 'badge-done', cancelled: 'badge-cancelled',
+      };
+      const cls = map[status] || 'badge-planned';
+      return `<span class="badge ${cls}">${escHtml(status?.replace(/-/g,' ') ?? 'unknown')}</span>`;
     }
 
+    function priorityDot(priority) {
+      if (!priority) return '';
+      return `<span class="priority-dot ${priority.toLowerCase()}" title="${priority}"></span>`;
+    }
+
+    function signalIcon(level) {
+      return { info: '💬', success: '✅', warning: '⚠️', error: '🔴', progress: '⏳' }[level] || '•';
+    }
+
+    // ─── State ─────────────────────────────────────────────────────────────
+    let signalCount = 0;
+    const MAX_SIGNALS = 80;
+
+    // ─── Signals rendering ─────────────────────────────────────────────────
+    function renderSignal(sig, isNew = false) {
+      const list = document.getElementById('signals-list');
+
+      // Remove empty placeholder
+      const empty = list.querySelector('.signal-empty');
+      if (empty) empty.remove();
+
+      const item = document.createElement('div');
+      item.className = 'signal-item' + (isNew ? ' new' : '');
+      item.innerHTML = `
+        <span class="signal-icon">${signalIcon(sig.level)}</span>
+        <div class="signal-body">
+          <div class="signal-msg signal-level-${escHtml(sig.level || 'info')}">${escHtml(sig.message)}</div>
+          <div class="signal-meta">
+            ${sig.agent_id ? `<span>${escHtml(sig.agent_id.slice(0,8))}</span>` : ''}
+            ${sig.session_key ? `<span>${escHtml(sig.session_key.slice(0,12))}…</span>` : ''}
+            <span>${timeAgo(sig.created_at)}</span>
+          </div>
+        </div>`;
+
+      if (isNew) {
+        list.insertBefore(item, list.firstChild);
+        // Trim old signals
+        while (list.children.length > MAX_SIGNALS) {
+          list.removeChild(list.lastChild);
+        }
+      } else {
+        list.appendChild(item);
+      }
+
+      signalCount++;
+      document.getElementById('signals-footer').textContent =
+        `${signalCount} signal${signalCount !== 1 ? 's' : ''} — refreshes live`;
+    }
+
+    function loadSignals(signals) {
+      const list = document.getElementById('signals-list');
+      list.innerHTML = '';
+      if (!signals || signals.length === 0) {
+        list.innerHTML = '<div class="signal-empty">No signals yet. Agents will push updates here.</div>';
+        return;
+      }
+      // signals are already sorted newest-first from API
+      signals.slice(0, MAX_SIGNALS).forEach(s => renderSignal(s, false));
+    }
+
+    // ─── Initiatives + Tasks rendering ─────────────────────────────────────
     function renderTasks(tasks) {
       if (!tasks || tasks.length === 0) {
-        return `<div class="empty-tasks">No tasks yet.</div>`;
+        return '<div class="empty-tasks">No tasks yet.</div>';
       }
       const rows = tasks.map(t => `
         <tr>
@@ -390,15 +603,9 @@
         </tr>`).join('');
       return `
         <table class="tasks-table">
-          <thead><tr>
-            <th>Task</th><th>Status</th><th>Owner</th><th>Age</th>
-          </tr></thead>
+          <thead><tr><th>Task</th><th>Status</th><th>Owner</th><th>Age</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
-    }
-
-    function escHtml(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     function renderInitiatives(initiatives, tasks) {
@@ -408,8 +615,8 @@
           <div class="empty-state">
             <div class="icon">📋</div>
             <h2>No initiatives yet</h2>
-            <p>Initiatives, tasks, and signals will appear here once work is tracked.<br>
-               Agents can POST to <code>/api/work/initiatives</code> to add work items.</p>
+            <p>Initiatives and tasks will appear here as agents track work.<br>
+               POST to <code>/api/work</code> with <code>{ type: "initiative", title: "…" }</code>.</p>
           </div>`;
         return;
       }
@@ -418,26 +625,23 @@
         const iniTasks = tasks.filter(t => t.initiative_id === ini.id);
         return `
           <div class="initiative-card open">
-            <div class="initiative-header" onclick="toggleInitiative(this.parentElement)">
+            <div class="initiative-header" onclick="this.parentElement.classList.toggle('open')">
               <span class="initiative-toggle">▶</span>
               <span class="initiative-title">${escHtml(ini.title)}</span>
               <div class="initiative-meta">
-                ${ini.priority ? `<span>${priorityDot(ini.priority)} ${ini.priority}</span>` : ''}
+                ${ini.priority ? `${priorityDot(ini.priority)} <small style="font-size:0.72rem;color:var(--text-dim)">${ini.priority}</small>` : ''}
                 ${statusBadge(ini.status || 'planned')}
                 ${ini.owner ? `<span class="initiative-owner">${escHtml(ini.owner)}</span>` : ''}
               </div>
             </div>
-            <div class="tasks-section">
-              ${renderTasks(iniTasks)}
-            </div>
+            <div class="tasks-section">${renderTasks(iniTasks)}</div>
           </div>`;
       }).join('');
 
-      // Orphan tasks (no initiative)
       const orphans = tasks.filter(t => !t.initiative_id);
       const orphanHtml = orphans.length > 0 ? `
         <div class="initiative-card open">
-          <div class="initiative-header" onclick="toggleInitiative(this.parentElement)">
+          <div class="initiative-header" onclick="this.parentElement.classList.toggle('open')">
             <span class="initiative-toggle">▶</span>
             <span class="initiative-title" style="color:var(--text-dim)">Unassigned Tasks</span>
             <div class="initiative-meta">${statusBadge('backlog')}</div>
@@ -448,34 +652,34 @@
       area.innerHTML = html + orphanHtml;
     }
 
-    function renderStats(initiatives, tasks) {
-      const statsArea = document.getElementById('stats-area');
+    function renderStats(initiatives, tasks, signals) {
       const active = initiatives.filter(i => i.status === 'active').length;
-      const inProg = tasks.filter(t => t.status === 'in-progress').length;
+      const inProg = tasks.filter(t => t.status === 'in-progress' || t.status === 'active').length;
       const done = tasks.filter(t => t.status === 'done' || t.status === 'complete').length;
-      statsArea.innerHTML = `
+      document.getElementById('stats-area').innerHTML = `
         <div class="stats-row">
           <div class="stat-chip"><span>${initiatives.length}</span>Initiatives</div>
           <div class="stat-chip"><span>${active}</span>Active</div>
           <div class="stat-chip"><span>${tasks.length}</span>Tasks</div>
           <div class="stat-chip"><span>${inProg}</span>In Progress</div>
           <div class="stat-chip"><span>${done}</span>Done</div>
+          <div class="stat-chip"><span>${signals.length}</span>Signals</div>
         </div>`;
     }
 
+    // ─── Data load ─────────────────────────────────────────────────────────
     async function load() {
       try {
         const res = await fetch('/api/work');
-        if (res.status === 401) {
-          window.location.href = '/auth/google';
-          return;
-        }
+        if (res.status === 401) { window.location.href = '/auth/google'; return; }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const initiatives = data.initiatives || [];
         const tasks = data.tasks || [];
-        renderStats(initiatives, tasks);
+        const signals = data.signals || [];
+        renderStats(initiatives, tasks, signals);
         renderInitiatives(initiatives, tasks);
+        loadSignals(signals);
       } catch (err) {
         document.getElementById('error-area').innerHTML =
           `<div class="error-msg">Failed to load work data: ${escHtml(err.message)}</div>`;
@@ -483,7 +687,54 @@
       }
     }
 
+    // ─── WebSocket for live updates ─────────────────────────────────────────
+    let ws = null;
+    let wsReconnectTimer = null;
+
+    function setNavConn(state) {
+      const el = document.getElementById('nav-conn');
+      const txt = document.getElementById('nav-conn-text');
+      const dot = document.getElementById('signals-dot');
+      el.className = 'nav-conn' + (state === 'live' ? ' live' : '');
+      txt.textContent = state === 'live' ? 'Live' : state === 'reconnecting' ? 'Reconnecting…' : 'Connecting…';
+      dot.className = 'signals-live-dot' + (state === 'live' ? ' live' : '');
+    }
+
+    function connectWs() {
+      if (ws) return;
+      const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        setNavConn('live');
+        if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+      };
+
+      ws.onmessage = (evt) => {
+        let msg;
+        try { msg = JSON.parse(evt.data); } catch { return; }
+
+        if (msg.event === 'work:signal') {
+          renderSignal(msg.data, true);
+        } else if (msg.event === 'work:task:created' || msg.event === 'work:task:updated' ||
+                   msg.event === 'work:initiative:created' || msg.event === 'work:initiative:updated') {
+          // Reload full state on structural changes
+          load();
+        }
+      };
+
+      ws.onclose = () => {
+        ws = null;
+        setNavConn('reconnecting');
+        wsReconnectTimer = setTimeout(connectWs, 3000);
+      };
+
+      ws.onerror = () => { ws?.close(); };
+    }
+
+    // ─── Init ───────────────────────────────────────────────────────────────
     load();
+    connectWs();
   </script>
 </body>
 </html>

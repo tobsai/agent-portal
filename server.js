@@ -725,6 +725,20 @@ if (isProduction) {
           completed_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
+
+        CREATE TABLE IF NOT EXISTS signals (
+          id TEXT PRIMARY KEY,
+          task_id TEXT REFERENCES work_tasks(id) ON DELETE SET NULL,
+          initiative_id TEXT REFERENCES initiatives(id) ON DELETE SET NULL,
+          agent_id TEXT,
+          session_key TEXT,
+          level TEXT NOT NULL DEFAULT 'info',
+          message TEXT NOT NULL,
+          metadata TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_signals_task ON signals(task_id) WHERE task_id IS NOT NULL;
       `);
     },
     async query(sql, params = []) {
@@ -847,6 +861,19 @@ if (isProduction) {
           completed_at TEXT,
           created_at TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS signals (
+          id TEXT PRIMARY KEY,
+          task_id TEXT REFERENCES work_tasks(id) ON DELETE SET NULL,
+          initiative_id TEXT REFERENCES initiatives(id) ON DELETE SET NULL,
+          agent_id TEXT,
+          session_key TEXT,
+          level TEXT NOT NULL DEFAULT 'info',
+          message TEXT NOT NULL,
+          metadata TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at DESC);
       `);
     },
     async query(sql, params = []) {
@@ -928,8 +955,13 @@ wss.on('connection', (ws) => {
 });
 
 function broadcast(event, data) {
+  // WebSocket broadcast (used by work.html)
   const msg = JSON.stringify({ event, data });
   wsClients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(msg); });
+  // SSE broadcast for work events (picked up by chat.html work widget)
+  if (event.startsWith('work:')) {
+    broadcastChatEvent(event, data);
+  }
 }
 
 // JWT auth middleware for mobile app — runs before API routes
@@ -1793,7 +1825,8 @@ app.get('/api/work', requireAuth, async (req, res) => {
   try {
     const initiatives = await db.query('SELECT * FROM initiatives ORDER BY priority, created_at');
     const tasks = await db.query('SELECT * FROM work_tasks ORDER BY created_at DESC');
-    res.json({ initiatives, tasks });
+    const signals = await db.query('SELECT * FROM signals ORDER BY created_at DESC LIMIT 100');
+    res.json({ initiatives, tasks, signals });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1807,6 +1840,7 @@ app.post('/api/work/initiatives', requireAuth, async (req, res) => {
       [id, title, description || null, status || 'planned', priority || 'P2', owner || null, target_date || null]
     );
     const row = await db.get('SELECT * FROM initiatives WHERE id = $1', [id]);
+    broadcast('work:initiative:created', row);
     res.status(201).json(row);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1821,25 +1855,174 @@ app.post('/api/work/tasks', requireAuth, async (req, res) => {
       [id, title, description || null, initiative_id || null, status || 'backlog', assigned_to || null, requested_by || null, session_key || null]
     );
     const row = await db.get('SELECT * FROM work_tasks WHERE id = $1', [id]);
+    broadcast('work:task:created', row);
     res.status(201).json(row);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.put('/api/work/tasks/:id', requireAuth, async (req, res) => {
   try {
-    const { status, assigned_to } = req.body;
-    if (status) {
+    const { status, assigned_to, title, description } = req.body;
+    const updates = [];
+    const params = [];
+    let idx = 1;
+
+    if (title !== undefined) { updates.push(`title = $${idx++}`); params.push(title); }
+    if (description !== undefined) { updates.push(`description = $${idx++}`); params.push(description); }
+    if (assigned_to !== undefined) { updates.push(`assigned_to = $${idx++}`); params.push(assigned_to); }
+    if (status !== undefined) {
+      updates.push(`status = $${idx++}`); params.push(status);
       const completed_at = (status === 'done' || status === 'complete') ? new Date().toISOString() : null;
-      await db.run('UPDATE work_tasks SET status = $1, completed_at = $2 WHERE id = $3', [status, completed_at, req.params.id]);
+      const started_at_sql = status === 'active' ? `started_at = COALESCE(started_at, $${idx++})` : null;
+      updates.push(`completed_at = $${idx++}`); params.push(completed_at);
+      if (started_at_sql) { updates.push(started_at_sql); params.push(new Date().toISOString()); }
     }
-    if (assigned_to !== undefined) {
-      await db.run('UPDATE work_tasks SET assigned_to = $1 WHERE id = $2', [assigned_to, req.params.id]);
-    }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    params.push(req.params.id);
+    await db.run(`UPDATE work_tasks SET ${updates.join(', ')} WHERE id = $${idx}`, params);
+
     const row = await db.get('SELECT * FROM work_tasks WHERE id = $1', [req.params.id]);
     if (!row) return res.status(404).json({ error: 'not found' });
+    broadcast('work:task:updated', row);
     res.json(row);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// PUT /api/work/initiatives/:id — update initiative
+app.put('/api/work/initiatives/:id', requireAuth, async (req, res) => {
+  try {
+    const { title, description, status, priority, owner, target_date } = req.body;
+    const updates = [];
+    const params = [];
+    let idx = 1;
+    if (title !== undefined) { updates.push(`title = $${idx++}`); params.push(title); }
+    if (description !== undefined) { updates.push(`description = $${idx++}`); params.push(description); }
+    if (status !== undefined) { updates.push(`status = $${idx++}`); params.push(status); }
+    if (priority !== undefined) { updates.push(`priority = $${idx++}`); params.push(priority); }
+    if (owner !== undefined) { updates.push(`owner = $${idx++}`); params.push(owner); }
+    if (target_date !== undefined) { updates.push(`target_date = $${idx++}`); params.push(target_date); }
+    if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    params.push(req.params.id);
+    await db.run(`UPDATE initiatives SET ${updates.join(', ')} WHERE id = $${idx}`, params);
+    const row = await db.get('SELECT * FROM initiatives WHERE id = $1', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'not found' });
+    broadcast('work:initiative:updated', row);
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============ SIGNALS (MT-180) ============
+// GET /api/signals — fetch recent signals (auth required: user session OR agent key)
+app.get('/api/signals', requireAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+    const task_id = req.query.task_id || null;
+    const initiative_id = req.query.initiative_id || null;
+    const level = req.query.level || null;
+
+    let sql = 'SELECT * FROM signals';
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+
+    if (task_id) { conditions.push(`task_id = $${idx++}`); params.push(task_id); }
+    if (initiative_id) { conditions.push(`initiative_id = $${idx++}`); params.push(initiative_id); }
+    if (level) { conditions.push(`level = $${idx++}`); params.push(level); }
+
+    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+    sql += ` ORDER BY created_at DESC LIMIT $${idx}`;
+    params.push(limit);
+
+    const rows = await db.query(sql, params);
+    res.json({ signals: rows, total: rows.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/signals — agents post real-time status signals
+app.post('/api/signals', requireAgentKey, async (req, res) => {
+  try {
+    const { task_id, initiative_id, session_key, level, message, metadata } = req.body;
+    if (!message) return res.status(400).json({ error: 'message required' });
+
+    const validLevels = ['info', 'success', 'warning', 'error', 'progress'];
+    const sigLevel = validLevels.includes(level) ? level : 'info';
+
+    const id = uuidv4();
+    const agentId = req.agent?.id || null;
+    const metaStr = metadata ? JSON.stringify(metadata) : null;
+
+    await db.run(
+      'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, task_id || null, initiative_id || null, agentId, session_key || null, sigLevel, message, metaStr]
+    );
+
+    const row = await db.get('SELECT * FROM signals WHERE id = $1', [id]);
+
+    // Broadcast to WebSocket subscribers
+    broadcast('work:signal', row);
+
+    res.status(201).json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/work (agent-friendly combined endpoint)
+// Accepts { type: 'initiative'|'task'|'signal', ...fields }
+// This is the unified write endpoint documented in TOOLS.md
+app.post('/api/work', requireAgentKey, async (req, res) => {
+  try {
+    const { type } = req.body;
+    if (!type) return res.status(400).json({ error: 'type required: initiative | task | signal' });
+
+    if (type === 'signal') {
+      const { task_id, initiative_id, session_key, level, message, metadata } = req.body;
+      if (!message) return res.status(400).json({ error: 'message required' });
+      const validLevels = ['info', 'success', 'warning', 'error', 'progress'];
+      const sigLevel = validLevels.includes(level) ? level : 'info';
+      const id = uuidv4();
+      const metaStr = metadata ? JSON.stringify(metadata) : null;
+      await db.run(
+        'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [id, task_id || null, initiative_id || null, req.agent?.id || null, session_key || null, sigLevel, message, metaStr]
+      );
+      const row = await db.get('SELECT * FROM signals WHERE id = $1', [id]);
+      broadcast('work:signal', row);
+      return res.status(201).json(row);
+    }
+
+    if (type === 'task') {
+      const { title, description, initiative_id, status, assigned_to, requested_by, session_key } = req.body;
+      if (!title) return res.status(400).json({ error: 'title required' });
+      const id = uuidv4();
+      await db.run(
+        'INSERT INTO work_tasks (id, title, description, initiative_id, status, assigned_to, requested_by, session_key) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [id, title, description || null, initiative_id || null, status || 'active', assigned_to || null, requested_by || null, session_key || null]
+      );
+      const row = await db.get('SELECT * FROM work_tasks WHERE id = $1', [id]);
+      broadcast('work:task:created', row);
+      return res.status(201).json(row);
+    }
+
+    if (type === 'initiative') {
+      const { title, description, status, priority, owner, target_date } = req.body;
+      if (!title) return res.status(400).json({ error: 'title required' });
+      const id = uuidv4();
+      await db.run(
+        'INSERT INTO initiatives (id, title, description, status, priority, owner, target_date) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [id, title, description || null, status || 'active', priority || 'P2', owner || null, target_date || null]
+      );
+      const row = await db.get('SELECT * FROM initiatives WHERE id = $1', [id]);
+      broadcast('work:initiative:created', row);
+      return res.status(201).json(row);
+    }
+
+    res.status(400).json({ error: 'Unknown type. Use: initiative | task | signal' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Enhanced GET /api/work — returns initiatives, tasks, and recent signals together
+// Re-register to replace the earlier definition (Express uses last-match for duplicate routes,
+// but since we're replacing in-place this is the canonical one)
 
 app.get('/work', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'work.html'));

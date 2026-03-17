@@ -64,6 +64,31 @@ agent-portal/
     └── portal.db       # SQLite DB (local dev only — not used in production)
 ```
 
+## ⚠️ Tech Debt & Architectural Problems
+
+### 🔴 Critical: God Object — `server.js` (1,924 lines)
+All routes, WebSocket logic, auth, DB access, and business logic live in a single file. This is the most serious structural problem in the codebase. It makes the code nearly impossible to test, difficult to reason about, and risky to change.
+- **Suggested refactor**: Split into `routes/`, `lib/db.js`, `lib/auth.js`, `lib/websocket.js`, `lib/gateway-proxy.js`, `middleware/`. Each module should have a single responsibility.
+
+### 🔴 No Test Suite
+Zero tests. No devDependencies whatsoever. A 1,924-line monolith with no tests is a liability — every change is a leap of faith.
+- `test-activity-endpoints.sh` is a manual curl script, not an automated test suite.
+- **Suggested fix**: Add Vitest or Jest; start with integration tests for the API routes (at minimum: `/api/health`, `/api/work`, `/api/subagents`). Use `supertest` for HTTP-level tests.
+
+### 🟡 CI Workflow Is Wrong
+`.github/workflows/deploy.yml` uses a Railway GraphQL mutation to force a deploy on push. This is unnecessary — Railway already auto-deploys via GitHub integration. Worse, if both run simultaneously, you risk duplicate deploys.
+- **Fix**: Replace with `echo "Railway deploys via GitHub integration"` (no-op, like family-os) or delete the workflow entirely.
+
+### 🟡 No Linting or Formatting Config
+No ESLint config, no Prettier, no `devDependencies`. Code style is uncontrolled.
+- **Suggested fix**: Add `eslint` + `eslint-config-node` minimal config. Single devDependency cost for significant long-term maintainability gain.
+
+### 🟡 Dual Auth Concern: Session + JWT
+The app uses both `express-session` (for browser OAuth flows) and JWT (for API key validation). This is common but the boundary is blurry — audit that every route uses the correct auth mechanism and neither is accidentally bypassed.
+
+### 🟢 Minor: CommonJS in 2026
+`server.js` uses `require()` throughout. Not wrong, but if this is ever split into modules, adopting ESM would align it with the rest of the stack (InkSight, newer Next.js projects all use ESM).
+
 ## Agent Rules
 - **NEVER use `railway up` directly** — always `git push` to trigger Railway's GitHub-connected auto-deploy. Direct `railway up` breaks routing and causes outages.
 - The gateway proxy (`/ws/gateway`) forwards WebSocket connections to `GATEWAY_WS_URL`. If chat is broken, check that env var and the cloudflared tunnel (`gw.mtree.io`).
