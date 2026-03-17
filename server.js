@@ -1054,6 +1054,20 @@ async function pushToAllDevices(message, senderName = 'Agent Portal') {
   }
 }
 
+// ============ WORK, STATUS, SIGNALS ============
+app.use('/api', require('./routes/work')({
+  db,
+  requireAuth,
+  requireAgentKey,
+  uuidv4,
+  broadcast,
+  publicDir: path.join(__dirname, 'public'),
+}));
+
+app.get('/work', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'work.html'));
+});
+
 // ============ AGENTS, DM, SUBAGENTS ============
 app.use('/api', require('./routes/agents')({
   db,
