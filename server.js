@@ -836,6 +836,8 @@ app.get('/', (req, res) => {
 
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
 app.use('/downloads', express.static(path.join(__dirname, 'public', 'downloads')));
+app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.ico')));
+app.get('/favicon.svg', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.svg')));
 
 app.get('/download', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'download.html'));

@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat - Agent Portal</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -1210,13 +1212,8 @@
     <div class="sidebar-header">
       <a href="/" class="sidebar-logo">
         <img src="/assets/support-agent-avatar.png" alt="Agent">
-        <span class="dot"></span>
         Agent Portal
       </a>
-      <div class="sidebar-conn" id="connection-status">
-        <span class="status-dot"></span>
-        <span class="status-text">Connecting...</span>
-      </div>
     </div>
 
     <div class="sidebar-section-header">
@@ -1268,6 +1265,12 @@
       <span id="chat-header-emoji" style="font-size:1.3rem;"></span>
       <span id="chat-header-title" style="font-weight:600; font-size:0.95rem; color:var(--text);"></span>
       <span id="chat-header-sub" style="font-size:0.8rem; color:var(--text-muted); margin-left:4px;"></span>
+      <div style="margin-left:auto;">
+        <div class="sidebar-conn" id="connection-status">
+          <span class="status-dot"></span>
+          <span class="status-text">Connecting...</span>
+        </div>
+      </div>
     </div>
 
     <!-- Chat Container -->
@@ -1513,7 +1516,9 @@
     function renderChannelList() {
       const list = document.getElementById('channel-list');
       list.innerHTML = '';
-      channels.forEach(ch => {
+      // Filter out DM channels — they belong in the Direct Messages section
+      const publicChannels = channels.filter(ch => !ch.is_dm);
+      publicChannels.forEach(ch => {
         const item = document.createElement('div');
         item.className = 'channel-item' + (ch.id === activeChannelId ? ' active' : '');
         item.dataset.channelId = ch.id;
