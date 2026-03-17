@@ -602,6 +602,32 @@ if (isProduction) {
           updated_at TIMESTAMPTZ DEFAULT NOW(),
           UNIQUE(token)
         );
+
+        CREATE TABLE IF NOT EXISTS initiatives (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT,
+          status TEXT NOT NULL DEFAULT 'planned',
+          priority TEXT NOT NULL DEFAULT 'P2',
+          owner TEXT,
+          target_date TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS work_tasks (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT,
+          initiative_id TEXT REFERENCES initiatives(id),
+          status TEXT NOT NULL DEFAULT 'backlog',
+          assigned_to TEXT,
+          requested_by TEXT,
+          session_key TEXT,
+          parent_task_id TEXT,
+          started_at TIMESTAMPTZ,
+          completed_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
       `);
     },
     async query(sql, params = []) {
@@ -699,6 +725,30 @@ if (isProduction) {
           bundle_id TEXT DEFAULT 'com.mapletree.agent-portal',
           created_at TEXT DEFAULT (datetime('now')),
           updated_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS initiatives (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT,
+          status TEXT NOT NULL DEFAULT 'planned',
+          priority TEXT NOT NULL DEFAULT 'P2',
+          owner TEXT,
+          target_date TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS work_tasks (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT,
+          initiative_id TEXT REFERENCES initiatives(id),
+          status TEXT NOT NULL DEFAULT 'backlog',
+          assigned_to TEXT,
+          requested_by TEXT,
+          session_key TEXT,
+          parent_task_id TEXT,
+          started_at TEXT,
+          completed_at TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
         );
       `);
     },
@@ -1424,6 +1474,13 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
 
     broadcastChannelEvent(req.params.id, 'message', message);
 
+    // Push notify devices when an agent posts to a channel via the REST API
+    if (senderType === 'agent' && content) {
+      pushToAllDevices(content, senderName).catch(err =>
+        console.error('[channels] Push notification error:', err.message)
+      );
+    }
+
     // Route messages to agents
     if (senderType === 'user') {
       // Track which channel is active so agent replies route back here
@@ -1616,6 +1673,63 @@ app.get('/api/agent-health', requireAuth, (req, res) => {
     console.error('Error fetching agent health:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ============ WORK TRACKING (MT-180) ============
+app.get('/api/work', requireAuth, async (req, res) => {
+  try {
+    const initiatives = await db.query('SELECT * FROM initiatives ORDER BY priority, created_at');
+    const tasks = await db.query('SELECT * FROM work_tasks ORDER BY created_at DESC');
+    res.json({ initiatives, tasks });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/work/initiatives', requireAuth, async (req, res) => {
+  try {
+    const { title, description, status, priority, owner, target_date } = req.body;
+    if (!title) return res.status(400).json({ error: 'title required' });
+    const id = uuidv4();
+    await db.run(
+      'INSERT INTO initiatives (id, title, description, status, priority, owner, target_date) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, title, description || null, status || 'planned', priority || 'P2', owner || null, target_date || null]
+    );
+    const row = await db.get('SELECT * FROM initiatives WHERE id = $1', [id]);
+    res.status(201).json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/work/tasks', requireAuth, async (req, res) => {
+  try {
+    const { title, description, initiative_id, status, assigned_to, requested_by, session_key } = req.body;
+    if (!title) return res.status(400).json({ error: 'title required' });
+    const id = uuidv4();
+    await db.run(
+      'INSERT INTO work_tasks (id, title, description, initiative_id, status, assigned_to, requested_by, session_key) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, title, description || null, initiative_id || null, status || 'backlog', assigned_to || null, requested_by || null, session_key || null]
+    );
+    const row = await db.get('SELECT * FROM work_tasks WHERE id = $1', [id]);
+    res.status(201).json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/work/tasks/:id', requireAuth, async (req, res) => {
+  try {
+    const { status, assigned_to } = req.body;
+    if (status) {
+      const completed_at = (status === 'done' || status === 'complete') ? new Date().toISOString() : null;
+      await db.run('UPDATE work_tasks SET status = $1, completed_at = $2 WHERE id = $3', [status, completed_at, req.params.id]);
+    }
+    if (assigned_to !== undefined) {
+      await db.run('UPDATE work_tasks SET assigned_to = $1 WHERE id = $2', [assigned_to, req.params.id]);
+    }
+    const row = await db.get('SELECT * FROM work_tasks WHERE id = $1', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'not found' });
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/work', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'work.html'));
 });
 
 // ============ HEALTH CHECK ============

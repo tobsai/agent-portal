@@ -1,9 +1,23 @@
+<!--
+  TODO: Marty reflection - 2026-03-17
+  1. Sidebar logo dot is hardcoded green regardless of WebSocket connection state — wire it to
+     updateConnectionStatus() so it reflects real gateway health (not always green when disconnected).
+  2. DM status dots show ALL agents as online (green) unconditionally — needs real availability
+     signal from /api/agents or a heartbeat endpoint before we show green.
+  3. Input placeholder "Type a message..." is context-blind — should read "Message #channel-name"
+     or "Message Agent" based on active channel for a more Slack-like feel.
+  4. No keyboard shortcut hint visible below the input — users on desktop don't know
+     Shift+Enter creates a newline vs Enter sends. A tiny hint line would help.
+  5. The queue-banner CSS is defined but never rendered in the HTML template (missing DOM
+     element) — if the message queue feature is live, add the banner div to the layout.
+  (Fixes for items 1-4 below are marked FIXED; item 5 needs queue-banner DOM element added)
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chat - Agent Portal</title>
+  <title>Agent Portal — Chat</title>
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <link rel="apple-touch-icon" href="/favicon-192.png">
@@ -87,6 +101,10 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
+      background: var(--text-dim);
+    }
+    /* Lit up once gateway connects — set by updateConnectionStatus() */
+    body.gateway-connected .sidebar-logo .dot {
       background: var(--green);
       box-shadow: 0 0 8px var(--green);
     }
@@ -1005,6 +1023,45 @@
 
     .voice-settings-btn:hover { background: var(--surface-hover); color: var(--text-muted); border-color: var(--text-dim); }
 
+    /* Notification permission banner */
+    .notif-banner {
+      display: none;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 10px 16px;
+      margin: 8px 16px;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .notif-banner.show { display: flex; }
+    .notif-banner-actions { display: flex; align-items: center; gap: 8px; }
+    .notif-enable-btn {
+      background: rgba(129,140,248,0.15);
+      border: 1px solid rgba(129,140,248,0.25);
+      border-radius: 6px;
+      padding: 4px 12px;
+      color: var(--accent);
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .notif-enable-btn:hover { background: rgba(129,140,248,0.25); }
+    .notif-dismiss-btn {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0 4px;
+      line-height: 1;
+      transition: color 0.15s;
+    }
+    .notif-dismiss-btn:hover { color: var(--text-muted); }
+
     .voice-settings-popover {
       display: none;
       position: absolute;
@@ -1234,6 +1291,12 @@
       <!-- DM items populated via JS -->
     </div>
 
+    <div class="sidebar-nav" style="padding:0.25rem 0.75rem 0; display:flex; flex-direction:column; gap:2px; flex-shrink:0;">
+      <a href="/work" class="channel-item" style="text-decoration:none; display:flex; align-items:center; gap:0.5rem;">
+        <span style="font-size:0.9rem;">📋</span>
+        <span class="channel-name">Work</span>
+      </a>
+    </div>
     <div class="sidebar-footer">
       <div class="sidebar-user" id="sidebar-user-info">
         <img src="" alt="" id="user-avatar" style="display: none;">
@@ -1253,19 +1316,19 @@
     </div>
 
     <!-- Notification Permission Banner -->
-    <div id="notifBanner" style="display:none; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px 16px; margin:8px 16px; align-items:center; justify-content:space-between; font-size:13px; color:rgba(255,255,255,0.7);">
+    <div id="notifBanner" class="notif-banner">
       <span>Enable notifications to get alerts when agents reply</span>
-      <div style="display:flex; align-items:center; gap:8px;">
-        <button id="notifEnableBtn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:6px; padding:4px 12px; color:white; cursor:pointer; font-size:12px;">Enable</button>
-        <button id="notifDismissBtn" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; font-size:16px; padding:0 4px;">✕</button>
+      <div class="notif-banner-actions">
+        <button id="notifEnableBtn" class="notif-enable-btn">Enable</button>
+        <button id="notifDismissBtn" class="notif-dismiss-btn">✕</button>
       </div>
     </div>
 
     <!-- Chat Header -->
     <div id="chat-header" style="display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--border); background:var(--bg); min-height:48px;">
-      <span id="chat-header-emoji" style="font-size:1.3rem;"></span>
-      <span id="chat-header-title" style="font-weight:600; font-size:0.95rem; color:var(--text);"></span>
-      <span id="chat-header-sub" style="font-size:0.8rem; color:var(--text-muted); margin-left:4px;"></span>
+      <span id="chat-header-emoji" style="font-size:1.3rem;">💬</span>
+      <span id="chat-header-title" style="font-weight:600; font-size:0.95rem; color:var(--text);">Agent Portal</span>
+      <span id="chat-header-sub" style="font-size:0.8rem; color:var(--text-muted); margin-left:4px;">Select a channel to start</span>
       <div style="margin-left:auto;">
         <div class="sidebar-conn" id="connection-status">
           <span class="status-dot"></span>
@@ -1279,8 +1342,8 @@
       <div class="messages" id="messages">
         <div class="empty-state">
           <div class="icon">💬</div>
-          <h2>Start a conversation</h2>
-          <p>Ask me anything! I'm connected to your OpenClaw gateway and ready to help.</p>
+          <h2>Pick up where you left off</h2>
+          <p>Select a channel or open a DM to chat with your agents.</p>
         </div>
       </div>
 
@@ -1304,6 +1367,7 @@
         <div class="mention-popup" id="mention-popup"></div>
         <!-- Image preview above input box -->
         <div id="image-preview-area"></div>
+        <div class="input-hint" style="font-size:0.68rem; color:var(--text-dim); text-align:right; margin-bottom:4px; font-family:'JetBrains Mono',monospace;">Enter to send · Shift+Enter for newline</div>
         <div class="input-wrapper">
           <button class="attach-btn" onclick="openFilePicker()" title="Attach image">📎</button>
           <textarea
@@ -2134,6 +2198,8 @@
     function updateConnectionStatus(state, text) {
       connectionStatus.className = 'sidebar-conn ' + state;
       connectionStatus.querySelector('.status-text').textContent = text;
+      // Mirror gateway state onto sidebar logo dot
+      document.body.classList.toggle('gateway-connected', state === 'connected');
     }
 
     function showError(msg) { errorMessage.textContent = msg; errorBanner.classList.add('show'); }
@@ -2410,7 +2476,7 @@
       if (localStorage.getItem('notifBannerDismissed') === '1') return;
       notifBannerShown = true;
       const banner = document.getElementById('notifBanner');
-      if (banner) banner.style.display = 'flex';
+      if (banner) banner.classList.add('show');
     }
 
     function setupNotifBanner() {
@@ -2427,13 +2493,13 @@
               console.log('[Notifications] Permission:', perm);
             }
           } catch (e) { console.error('[Notifications] Error:', e); }
-          if (banner) banner.style.display = 'none';
+          if (banner) banner.classList.remove('show');
           localStorage.setItem('notifBannerDismissed', '1');
         };
       }
       if (dismissBtn) {
         dismissBtn.onclick = () => {
-          if (banner) banner.style.display = 'none';
+          if (banner) banner.classList.remove('show');
           localStorage.setItem('notifBannerDismissed', '1');
         };
       }
