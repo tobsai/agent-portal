@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Portal — Sub-Agent Tree</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='0' y='0' width='100' height='100' fill='%23312e81' rx='15'/%3E%3Ctext x='50%25' y='60%25' font-family='sans-serif' font-size='60' fill='%23818cf8' text-anchor='middle' dominant-baseline='middle'%3EAP%3C/text%3E%3C/svg%3E">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: rgba(255,255,255,0.04);
+      --surface-hover: rgba(255,255,255,0.07);
+      --border: rgba(255,255,255,0.08);
+      --text: #e4e4e7;
+      --text-muted: #71717a;
+      --text-dim: #52525b;
+      --accent: #818cf8;
+      --accent-dim: rgba(129,140,248,0.15);
+      --green: #34d399;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --blue: #60a5fa;
+      --orange: #fb923c;
+      --purple: #c084fc;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ─── Top Nav ─── */
+    .top-nav {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10,10,15,0.95);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .nav-logo img {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .nav-sep { color: var(--text-dim); font-size: 0.8rem; }
+
+    .nav-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 0.25rem;
+      margin-left: 0.5rem;
+    }
+
+    .nav-right {
+      margin-left: auto;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .nav-conn {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.65rem;
+      color: var(--text-dim);
+    }
+
+    .nav-conn-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: all 0.2s;
+    }
+
+    .nav-conn.live .nav-conn-dot {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    .nav-conn.live { color: var(--text-muted); }
+
+    .btn-sm {
+      font-size: 0.75rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+
+    .btn-sm:hover { background: var(--surface-hover); color: var(--text); }
+    .btn-sm.active {
+      background: var(--accent-dim);
+      border-color: rgba(129,140,248,0.3);
+      color: var(--accent);
+    }
+
+    /* ─── Layout ─── */
+    .layout {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+
+    /* ─── Page Header ─── */
+    .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+
+    .page-header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+
+    .page-header p {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      margin-top: 0.2rem;
+    }
+
+    .page-header-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    /* ─── Stats row ─── */
+    .stats-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .stat-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      min-width: 80px;
+    }
+
+    .stat-chip span {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+      display: block;
+    }
+
+    /* ─── Error / Loading ─── */
+    .error-msg {
+      background: rgba(248,113,113,0.08);
+      border: 1px solid rgba(248,113,113,0.2);
+      border-radius: 8px;
+      padding: 1rem;
+      color: var(--red);
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+      padding: 2rem 0;
+    }
+
+    .loading-spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Empty state ─── */
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .empty-state .icon {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .empty-state h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      max-width: 420px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    .empty-state code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(255,255,255,0.06);
+      padding: 0.1em 0.4em;
+      border-radius: 3px;
+      font-size: 0.85em;
+    }
+
+    /* ─── Tree ─── */
+    .tree-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .tree-node-wrapper {
+      position: relative;
+    }
+
+    /* Connector lines */
+    .tree-node-wrapper.has-parent::before {
+      content: '';
+      position: absolute;
+      left: calc(var(--depth, 0) * 2rem - 0.75rem);
+      top: 0;
+      bottom: 50%;
+      width: 1px;
+      background: var(--border);
+    }
+
+    .tree-node-wrapper.has-parent::after {
+      content: '';
+      position: absolute;
+      left: calc(var(--depth, 0) * 2rem - 0.75rem);
+      top: 50%;
+      width: 0.75rem;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .tree-node {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      position: relative;
+      margin-left: calc(var(--depth, 0) * 2rem);
+    }
+
+    .tree-node:hover {
+      background: var(--surface-hover);
+      border-color: rgba(255,255,255,0.12);
+    }
+
+    .tree-node.expanded {
+      border-color: rgba(129,140,248,0.2);
+    }
+
+    .tree-node.depth-0 {
+      border-left: 3px solid var(--accent);
+    }
+
+    .tree-node.depth-1 {
+      border-left: 3px solid var(--blue);
+    }
+
+    .tree-node.depth-2 {
+      border-left: 3px solid var(--purple);
+    }
+
+    .tree-node.depth-3 {
+      border-left: 3px solid var(--orange);
+    }
+
+    .node-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      min-height: 1.4rem;
+    }
+
+    .node-toggle {
+      font-size: 0.6rem;
+      color: var(--text-dim);
+      transition: transform 0.15s;
+      flex-shrink: 0;
+      width: 12px;
+    }
+
+    .tree-node.expanded .node-toggle {
+      transform: rotate(90deg);
+    }
+
+    .tree-node.no-children .node-toggle {
+      visibility: hidden;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot.active    { background: var(--blue); box-shadow: 0 0 6px var(--blue); animation: pulse 2s infinite; }
+    .status-dot.done      { background: var(--green); }
+    .status-dot.complete  { background: var(--green); }
+    .status-dot.error     { background: var(--red); }
+    .status-dot.cancelled { background: var(--text-dim); }
+    .status-dot.unknown   { background: var(--text-dim); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .node-label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .node-model {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      background: rgba(255,255,255,0.04);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      font-size: 0.62rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .badge-active    { background: rgba(96,165,250,0.15); color: var(--blue); border: 1px solid rgba(96,165,250,0.25); }
+    .badge-done      { background: rgba(52,211,153,0.12); color: var(--green); border: 1px solid rgba(52,211,153,0.25); }
+    .badge-complete  { background: rgba(52,211,153,0.12); color: var(--green); border: 1px solid rgba(52,211,153,0.25); }
+    .badge-error     { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
+    .badge-cancelled { background: rgba(255,255,255,0.05); color: var(--text-dim); border: 1px solid var(--border); }
+    .badge-unknown   { background: rgba(255,255,255,0.05); color: var(--text-dim); border: 1px solid var(--border); }
+
+    .node-meta {
+      display: flex;
+      gap: 1rem;
+      margin-top: 0.4rem;
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      padding-left: 1.2rem;
+    }
+
+    .node-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+    }
+
+    .node-meta-item .value {
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+    }
+
+    /* ─── Signals panel (inside expanded node) ─── */
+    .node-signals {
+      margin-top: 0.6rem;
+      margin-left: 1.2rem;
+      border-top: 1px solid var(--border);
+      padding-top: 0.6rem;
+      display: none;
+    }
+
+    .tree-node.expanded .node-signals {
+      display: block;
+    }
+
+    .node-signals-title {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.4rem;
+    }
+
+    .signal-item {
+      display: flex;
+      gap: 0.5rem;
+      align-items: flex-start;
+      padding: 0.3rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      font-size: 0.75rem;
+    }
+
+    .signal-item:last-child { border-bottom: none; }
+
+    .signal-icon { flex-shrink: 0; font-size: 0.7rem; margin-top: 0.1rem; }
+
+    .signal-msg { color: var(--text-muted); flex: 1; line-height: 1.4; }
+
+    .signal-time {
+      color: var(--text-dim);
+      font-size: 0.65rem;
+      flex-shrink: 0;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .signal-level-error   { color: var(--red); }
+    .signal-level-success { color: var(--green); }
+    .signal-level-warning { color: var(--yellow); }
+
+    /* ─── Children container ─── */
+    .node-children {
+      display: none;
+      padding-left: 0;
+      margin-top: 0.5rem;
+      flex-direction: column;
+      gap: 0.5rem;
+      position: relative;
+    }
+
+    .node-children::before {
+      content: '';
+      position: absolute;
+      left: calc(var(--depth, 0) * 2rem + 1rem);
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--border);
+    }
+
+    .tree-node.expanded ~ .node-children {
+      display: flex;
+    }
+
+    /* ─── Filter bar ─── */
+    .filter-bar {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .filter-label {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+    }
+
+    .filter-btn {
+      font-size: 0.7rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .filter-btn:hover { background: var(--surface-hover); color: var(--text-muted); }
+    .filter-btn.on {
+      background: var(--accent-dim);
+      border-color: rgba(129,140,248,0.3);
+      color: var(--accent);
+    }
+
+    .filter-sep { color: var(--text-dim); font-size: 0.65rem; }
+
+    .auto-refresh-label {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      cursor: pointer;
+      margin-left: auto;
+    }
+
+    .auto-refresh-label input { cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <nav class="top-nav">
+    <a href="/chat" class="nav-logo">
+      <img src="/assets/support-agent-avatar.png" alt="Agent Portal">
+      Agent Portal
+    </a>
+    <span class="nav-sep">/</span>
+    <span class="nav-title">Sub-Agents</span>
+    <div class="nav-links">
+      <a href="/work" class="btn-sm">Work</a>
+      <a href="/chat" class="btn-sm">Chat</a>
+    </div>
+    <div class="nav-right">
+      <div class="nav-conn" id="nav-conn">
+        <span class="nav-conn-dot"></span>
+        <span id="nav-conn-text">Connecting</span>
+      </div>
+    </div>
+  </nav>
+
+  <div class="layout">
+
+    <div class="page-header">
+      <div>
+        <h1>Sub-Agent Tree</h1>
+        <p>Live spawn hierarchy — who started what, current status, and runtime.</p>
+      </div>
+      <div class="page-header-actions">
+        <button class="btn-sm" id="expand-all-btn">Expand All</button>
+        <button class="btn-sm" id="refresh-btn">Refresh</button>
+      </div>
+    </div>
+
+    <div id="stats-area"></div>
+    <div id="error-area"></div>
+
+    <div class="filter-bar">
+      <span class="filter-label">Filter:</span>
+      <button class="filter-btn on" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="active">Active</button>
+      <button class="filter-btn" data-filter="done">Done</button>
+      <button class="filter-btn" data-filter="error">Errors</button>
+      <span class="filter-sep">|</span>
+      <label class="auto-refresh-label">
+        <input type="checkbox" id="auto-refresh" checked>
+        Auto-refresh
+      </label>
+    </div>
+
+    <div id="tree-area">
+      <div class="loading">
+        <div class="loading-spinner"></div>
+        Loading sub-agent tree…
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ─── Utilities ──────────────────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return '—';
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const secs = Math.floor(diff / 1000);
+      if (secs < 60) return `${secs}s ago`;
+      const mins = Math.floor(secs / 60);
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      return `${Math.floor(hrs / 24)}d ago`;
+    }
+
+    function formatRuntime(seconds) {
+      if (!seconds && seconds !== 0) return '—';
+      if (seconds < 60) return `${seconds}s`;
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      if (mins < 60) return `${mins}m ${secs}s`;
+      return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+    }
+
+    function formatTokens(count) {
+      if (!count && count !== 0) return null;
+      if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+      return String(count);
+    }
+
+    function signalIcon(level) {
+      return { info: '💬', success: '✅', warning: '⚠️', error: '🔴', progress: '⏳' }[level] || '•';
+    }
+
+    function labelFromKey(key) {
+      if (!key) return '?';
+      // agent:main:subagent:uuid → extract label or truncate
+      const subagentMatch = key.match(/^agent:([^:]+):subagent:([a-f0-9-]{8})/);
+      if (subagentMatch) return `subagent:${subagentMatch[2]}`;
+      const cronMatch = key.match(/^agent:main:cron:([a-f0-9-]{8})/);
+      if (cronMatch) return `cron:${cronMatch[1]}`;
+      const mainMatch = key.match(/^agent:main$/);
+      if (mainMatch) return 'main';
+      // named agents like "marty", "pascal"
+      if (key.length <= 20) return key;
+      return key.slice(0, 18) + '…';
+    }
+
+    // ─── State ──────────────────────────────────────────────────────────────
+    /** @type {{ tree: AgentNode[], total: number, generatedAt: string } | null} */
+    let treeData = null;
+    let activeFilter = 'all';
+    let allExpanded = false;
+    let refreshTimer = null;
+    const REFRESH_INTERVAL_MS = 15000;
+
+    // ─── Stats ──────────────────────────────────────────────────────────────
+    function countNodes(nodes) {
+      let total = 0, active = 0, done = 0, errors = 0;
+      function walk(list) {
+        for (const n of list) {
+          total++;
+          if (n.status === 'active') active++;
+          else if (n.status === 'done' || n.status === 'complete') done++;
+          else if (n.status === 'error') errors++;
+          if (n.children) walk(n.children);
+        }
+      }
+      walk(nodes);
+      return { total, active, done, errors };
+    }
+
+    function renderStats(tree) {
+      const { total, active, done, errors } = countNodes(tree);
+      document.getElementById('stats-area').innerHTML = `
+        <div class="stats-row">
+          <div class="stat-chip"><span>${total}</span>Agents</div>
+          <div class="stat-chip"><span>${active}</span>Active</div>
+          <div class="stat-chip"><span>${done}</span>Done</div>
+          <div class="stat-chip"><span>${errors}</span>Errors</div>
+        </div>`;
+    }
+
+    // ─── Tree rendering ─────────────────────────────────────────────────────
+
+    /**
+     * Render a single agent node and its children.
+     * @param {object} node - Agent node from API
+     * @param {number} depth - Current nesting depth
+     * @param {boolean} expanded - Whether to start expanded
+     * @returns {HTMLElement}
+     */
+    function renderNode(node, depth = 0, expanded = false) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'tree-node-wrapper' + (depth > 0 ? ' has-parent' : '');
+      wrapper.style.setProperty('--depth', String(depth));
+
+      const label = node.label && node.label !== node.id
+        ? node.label
+        : labelFromKey(node.id);
+
+      const hasChildren = node.children && node.children.length > 0;
+      const hasSignals = node.signals && node.signals.length > 0;
+      const canExpand = hasChildren || hasSignals;
+
+      const nodeEl = document.createElement('div');
+      nodeEl.className = [
+        'tree-node',
+        `depth-${Math.min(depth, 3)}`,
+        canExpand ? '' : 'no-children',
+        (expanded || allExpanded) && canExpand ? 'expanded' : '',
+      ].filter(Boolean).join(' ');
+      nodeEl.style.setProperty('--depth', String(depth));
+      nodeEl.setAttribute('data-node-id', node.id);
+      nodeEl.setAttribute('data-status', node.status || 'unknown');
+
+      const statusCls = node.status || 'unknown';
+      const badgeCls = `badge-${statusCls}`;
+      const model = node.model ? `<span class="node-model">${escHtml(node.model.replace('anthropic/', '').replace('openai/', ''))}</span>` : '';
+      const tokens = formatTokens(node.tokenCount);
+      const runtime = formatRuntime(node.runtime);
+
+      // Header row
+      const headerEl = document.createElement('div');
+      headerEl.className = 'node-header';
+      headerEl.innerHTML = `
+        <span class="node-toggle">▶</span>
+        <span class="status-dot ${escHtml(statusCls)}"></span>
+        <span class="node-label" title="${escHtml(node.id)}">${escHtml(label)}</span>
+        ${model}
+        <span class="badge ${badgeCls}">${escHtml(statusCls)}</span>`;
+      nodeEl.appendChild(headerEl);
+
+      // Meta row
+      const metaEl = document.createElement('div');
+      metaEl.className = 'node-meta';
+      const metaItems = [
+        { label: 'started', value: node.startedAt ? timeAgo(node.startedAt) : '—' },
+        { label: 'runtime', value: runtime },
+        tokens ? { label: 'tokens', value: tokens } : null,
+        { label: 'signals', value: String(node._signalCount || node.signals?.length || 0) },
+        hasChildren ? { label: 'children', value: String(node.children.length) } : null,
+      ].filter(Boolean);
+      metaEl.innerHTML = metaItems.map(m =>
+        `<span class="node-meta-item">${escHtml(m.label)}: <span class="value">${escHtml(m.value)}</span></span>`
+      ).join('');
+      nodeEl.appendChild(metaEl);
+
+      // Signals (shown when expanded)
+      if (hasSignals) {
+        const signalsEl = document.createElement('div');
+        signalsEl.className = 'node-signals';
+        signalsEl.innerHTML = `<div class="node-signals-title">Recent signals</div>`;
+        const shown = node.signals.slice(0, 8);
+        for (const sig of shown) {
+          const sigEl = document.createElement('div');
+          sigEl.className = 'signal-item';
+          sigEl.innerHTML = `
+            <span class="signal-icon">${signalIcon(sig.level)}</span>
+            <span class="signal-msg signal-level-${escHtml(sig.level || 'info')}">${escHtml(sig.message)}</span>
+            <span class="signal-time">${timeAgo(sig.createdAt)}</span>`;
+          signalsEl.appendChild(sigEl);
+        }
+        if (node.signals.length > 8) {
+          const more = document.createElement('div');
+          more.style.cssText = 'font-size:0.65rem;color:var(--text-dim);padding:0.2rem 0';
+          more.textContent = `+${node.signals.length - 8} more signals`;
+          signalsEl.appendChild(more);
+        }
+        nodeEl.appendChild(signalsEl);
+      }
+
+      // Toggle expand on click
+      if (canExpand) {
+        nodeEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          nodeEl.classList.toggle('expanded');
+          // Show/hide children container
+          const childrenEl = wrapper.querySelector(':scope > .node-children');
+          if (childrenEl) {
+            childrenEl.style.display = nodeEl.classList.contains('expanded') ? 'flex' : 'none';
+          }
+        });
+      }
+
+      wrapper.appendChild(nodeEl);
+
+      // Children
+      if (hasChildren) {
+        const childrenEl = document.createElement('div');
+        childrenEl.className = 'node-children';
+        childrenEl.style.setProperty('--depth', String(depth));
+        childrenEl.style.display = (expanded || allExpanded) ? 'flex' : 'none';
+
+        for (const child of node.children) {
+          childrenEl.appendChild(renderNode(child, depth + 1, expanded || allExpanded));
+        }
+        wrapper.appendChild(childrenEl);
+      }
+
+      return wrapper;
+    }
+
+    /**
+     * Filter tree nodes by status.
+     * Returns a new tree with only matching branches.
+     */
+    function filterTree(nodes, filter) {
+      if (filter === 'all') return nodes;
+
+      function matchNode(node) {
+        const selfMatch = node.status === filter || (filter === 'done' && node.status === 'complete');
+        const childMatch = node.children && node.children.some(c => matchNode(c));
+        return selfMatch || childMatch;
+      }
+
+      function filterNodes(list) {
+        return list
+          .filter(matchNode)
+          .map(n => ({
+            ...n,
+            children: n.children ? filterNodes(n.children) : [],
+          }));
+      }
+
+      return filterNodes(nodes);
+    }
+
+    /**
+     * Main render function — renders filtered tree into #tree-area.
+     */
+    function renderTree(data) {
+      const area = document.getElementById('tree-area');
+
+      const filtered = filterTree(data.tree, activeFilter);
+
+      if (!filtered || filtered.length === 0) {
+        if (activeFilter !== 'all') {
+          area.innerHTML = `
+            <div class="empty-state">
+              <div class="icon">🔍</div>
+              <h2>No agents match this filter</h2>
+              <p>Try "All" to see the full tree.</p>
+            </div>`;
+        } else {
+          area.innerHTML = `
+            <div class="empty-state">
+              <div class="icon">🌲</div>
+              <h2>No sub-agent activity yet</h2>
+              <p>The tree builds from agent signals. Sub-agents appear here when they POST
+                 to <code>/api/signals</code> with <code>metadata.parent_session</code>
+                 or <code>metadata.type = "spawn"</code>.</p>
+            </div>`;
+        }
+        return;
+      }
+
+      const treeContainer = document.createElement('div');
+      treeContainer.className = 'tree-container';
+
+      for (const rootNode of filtered) {
+        treeContainer.appendChild(renderNode(rootNode, 0, allExpanded));
+      }
+
+      area.innerHTML = '';
+      area.appendChild(treeContainer);
+    }
+
+    // ─── Data load ───────────────────────────────────────────────────────────
+    async function load(silent = false) {
+      if (!silent) {
+        document.getElementById('tree-area').innerHTML = `
+          <div class="loading">
+            <div class="loading-spinner"></div>
+            Loading sub-agent tree…
+          </div>`;
+      }
+
+      try {
+        const res = await fetch('/api/subagents');
+        if (res.status === 401) { window.location.href = '/auth/google'; return; }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        treeData = await res.json();
+
+        document.getElementById('error-area').innerHTML = '';
+        renderStats(treeData.tree);
+        renderTree(treeData);
+      } catch (err) {
+        document.getElementById('error-area').innerHTML =
+          `<div class="error-msg">Failed to load sub-agent data: ${escHtml(err.message)}</div>`;
+        if (!treeData) {
+          document.getElementById('tree-area').innerHTML = '';
+        }
+      }
+    }
+
+    // ─── WebSocket for live push ─────────────────────────────────────────────
+    let ws = null;
+    let wsReconnectTimer = null;
+
+    function setNavConn(state) {
+      const el = document.getElementById('nav-conn');
+      const txt = document.getElementById('nav-conn-text');
+      el.className = 'nav-conn' + (state === 'live' ? ' live' : '');
+      txt.textContent = state === 'live' ? 'Live' : state === 'reconnecting' ? 'Reconnecting…' : 'Connecting…';
+    }
+
+    function connectWs() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${protocol}//${location.host}/ws`;
+
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        setNavConn('live');
+        if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+      };
+
+      ws.onclose = () => {
+        setNavConn('reconnecting');
+        wsReconnectTimer = setTimeout(connectWs, 4000);
+      };
+
+      ws.onerror = () => ws.close();
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          // Any new signal might affect the tree — trigger a silent reload
+          if (msg.event === 'work:signal' || msg.event === 'agent:status' || msg.event === 'agent-health') {
+            load(true); // silent reload
+          }
+        } catch (_) {}
+      };
+    }
+
+    // ─── Auto-refresh ────────────────────────────────────────────────────────
+    function startAutoRefresh() {
+      stopAutoRefresh();
+      refreshTimer = setInterval(() => load(true), REFRESH_INTERVAL_MS);
+    }
+
+    function stopAutoRefresh() {
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    }
+
+    document.getElementById('auto-refresh').addEventListener('change', (e) => {
+      e.target.checked ? startAutoRefresh() : stopAutoRefresh();
+    });
+
+    // ─── Filter buttons ──────────────────────────────────────────────────────
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        activeFilter = btn.dataset.filter;
+        if (treeData) renderTree(treeData);
+      });
+    });
+
+    // ─── Expand / Refresh buttons ────────────────────────────────────────────
+    document.getElementById('expand-all-btn').addEventListener('click', () => {
+      allExpanded = !allExpanded;
+      document.getElementById('expand-all-btn').textContent = allExpanded ? 'Collapse All' : 'Expand All';
+      if (treeData) renderTree(treeData);
+    });
+
+    document.getElementById('refresh-btn').addEventListener('click', () => load(false));
+
+    // ─── Boot ────────────────────────────────────────────────────────────────
+    load();
+    connectWs();
+    startAutoRefresh();
+  </script>
+
+</body>
+</html>
