@@ -1860,26 +1860,10 @@ app.get('/subagents', requireAuth, (req, res) => {
 });
 
 // ============ HEALTH CHECK ============
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-app.get('/api/gateway-status', (req, res) => {
-  const gwUrl = (process.env.GATEWAY_WS_URL || '');
-  res.json({
-    // Legacy proxy path
-    gatewayAuthenticated: chatGatewayAuthenticated,
-    gatewayWsState: chatGatewayWs ? chatGatewayWs.readyState : null,
-    gatewayUrlConfigured: !!gwUrl,
-    gatewayUrlPrefix: gwUrl ? gwUrl.substring(0, 20) + '...' : null,
-    // Phase 1: native gateway client
-    nativeClient: {
-      ready: gatewayClient.isReady,
-      wsState: gatewayClient.ws ? gatewayClient.ws.readyState : null,
-    },
-    timestamp: new Date().toISOString()
-  });
-});
+app.use('/api', require('./routes/health')({
+  gatewayClient,
+  getChatState: () => ({ authenticated: chatGatewayAuthenticated, ws: chatGatewayWs }),
+}));
 
 // ============ ERROR HANDLING ============
 if (process.env.SENTRY_DSN) {
