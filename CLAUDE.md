@@ -21,6 +21,7 @@ Agent Portal is Talos's personal AI agent dashboard — a real-time web interfac
 - **URL**: https://talos.mtree.io
 - **Railway project**: `9d7b61b4-c326-4571-873f-cefa31e5ea7f`
 - **Deploy**: Auto-deploy on `git push` to `main` via Railway GitHub integration
+- **⛔ NEVER run `railway up`** — it creates a new orphan service every time. Push to `main` and Railway handles the rest.
 - **Health check**: `GET /api/health`
 - **Key env vars**:
   - `DATABASE_URL` — PostgreSQL connection string (Railway-injected)
