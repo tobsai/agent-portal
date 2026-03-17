@@ -370,6 +370,43 @@ async function refreshChatHistoryFromGateway() {
   }
 }
 
+// ── Unified agent→user message pipeline ────────────────────────────────────
+// All agent message deliveries must flow through this function to guarantee
+// DB persistence, SSE broadcast, and push notification all happen together.
+async function sendAgentMessage(channelId, content, senderName, senderEmoji, senderId) {
+  if (!dbReady || !content) return null;
+  try {
+    let channel;
+    if (channelId) {
+      channel = await db.get('SELECT id FROM channels WHERE id = $1', [channelId]);
+    }
+    if (!channel) {
+      channel = await db.get("SELECT id FROM channels WHERE name = 'general'");
+    }
+    if (!channel) return null;
+
+    const id = uuidv4();
+    await db.run(
+      'INSERT INTO messages (id, channel_id, sender_type, sender_id, sender_name, sender_emoji, content, mentions) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, channel.id, 'agent', senderId, senderName, senderEmoji, content, '[]']
+    );
+    const message = await db.get('SELECT * FROM messages WHERE id = $1', [id]);
+    if (message) broadcastChannelEvent(channel.id, 'message', message);
+
+    // Push notification — errors must not block message delivery
+    try {
+      await pushToAllDevices(content, senderName);
+    } catch (err) {
+      console.error('[sendAgentMessage] Push notification error:', err.message);
+    }
+
+    return message || null;
+  } catch (err) {
+    console.error('[sendAgentMessage] Failed:', err.message);
+    return null;
+  }
+}
+
 // Stores an agent message from the gateway into the channels DB and broadcasts to channel SSE
 let dbReady = false;
 
@@ -470,16 +507,12 @@ function connectChatGateway() {
         const added = pushChatMessage(normalized);
         if (!added) return;
         broadcastChatEvent('message', normalized);
-        // Also persist agent messages to channels DB
-        if (normalized.role === 'assistant') {
-          storeAgentMessageInChannel(normalized, eventSessionKey, lastActiveChannelId).catch(() => {});
-          // Fire push notification to all registered devices
-          if (normalized.text) {
-            const agentName = eventAgent?.name || 'Agent Portal';
-            pushToAllDevices(normalized.text, agentName).catch(err =>
-              console.error('[chat-gateway] Push notification error:', err.message)
-            );
-          }
+        // Persist + broadcast + push via unified pipeline for agent messages
+        if (normalized.role === 'assistant' && normalized.text) {
+          const agentName = eventAgent?.name || 'Agent Portal';
+          const agentEmoji = eventAgent?.emoji || '';
+          const agentId = eventAgent?.id || null;
+          sendAgentMessage(lastActiveChannelId, normalized.text, agentName, agentEmoji, agentId).catch(() => {});
         }
       }
     }
@@ -530,13 +563,10 @@ function wireGatewayClientEvents() {
     const added = pushChatMessage(normalized);
     if (added) broadcastChatEvent('message', normalized);
 
-    // Persist to channel DB and push notify
-    const agent = AGENTS.find(a => a.sessionKey === sessionKey || a.id === agentId);
-    if (agent && normalized.text) {
-      storeAgentMessageInChannel(normalized, sessionKey, lastActiveChannelId).catch(() => {});
-      pushToAllDevices(normalized.text, agent.name).catch(err =>
-        console.error('[gateway-client] push notification error:', err.message)
-      );
+    // Persist + broadcast + push via unified pipeline
+    if (normalized.text) {
+      const agent = AGENTS.find(a => a.sessionKey === sessionKey || a.id === agentId);
+      sendAgentMessage(lastActiveChannelId, normalized.text, agent?.name || 'Agent Portal', agent?.emoji || '', agent?.id || null).catch(() => {});
     }
   });
 
@@ -1526,26 +1556,25 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
     const { content, mentions } = req.body;
     if (!content) return res.status(400).json({ error: 'Content required' });
 
-    const id = uuidv4();
     const senderType = req.agent ? 'agent' : 'user';
     const senderId = req.agent?.id || req.user?.id;
     const senderName = req.agent?.name || req.user?.name || 'Unknown';
     const senderEmoji = req.agent ? (AGENTS.find(a => a.id === req.agent.id)?.emoji || '') : '';
 
-    await db.run(
-      'INSERT INTO messages (id, channel_id, sender_type, sender_id, sender_name, sender_emoji, content, mentions) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [id, req.params.id, senderType, senderId, senderName, senderEmoji, content, JSON.stringify(mentions || [])]
-    );
-
-    const message = await db.get('SELECT * FROM messages WHERE id = $1', [id]);
-
-    broadcastChannelEvent(req.params.id, 'message', message);
-
-    // Push notify devices when an agent posts to a channel via the REST API
-    if (senderType === 'agent' && content) {
-      pushToAllDevices(content, senderName).catch(err =>
-        console.error('[channels] Push notification error:', err.message)
+    let message;
+    if (senderType === 'agent') {
+      // Unified pipeline: persist + broadcast + push notification
+      message = await sendAgentMessage(req.params.id, content, senderName, senderEmoji, senderId);
+      if (!message) return res.status(500).json({ error: 'Failed to store message' });
+    } else {
+      // User message: persist + broadcast only (no push notification)
+      const id = uuidv4();
+      await db.run(
+        'INSERT INTO messages (id, channel_id, sender_type, sender_id, sender_name, sender_emoji, content, mentions) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [id, req.params.id, senderType, senderId, senderName, senderEmoji, content, JSON.stringify(mentions || [])]
       );
+      message = await db.get('SELECT * FROM messages WHERE id = $1', [id]);
+      broadcastChannelEvent(req.params.id, 'message', message);
     }
 
     // Route messages to agents
