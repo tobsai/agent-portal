@@ -1,4 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <rect width="32" height="32" rx="8" fill="#0a0a0f"/>
-  <text x="16" y="24" text-anchor="middle" font-size="22" font-family="system-ui, -apple-system, sans-serif">📚</text>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <clipPath id="rr"><rect width="32" height="32" rx="8"/></clipPath>
+  </defs>
+  <image width="32" height="32" href="/assets/support-agent-avatar.png" clip-path="url(#rr)"/>
 </svg>
