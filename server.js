@@ -1507,7 +1507,7 @@ app.get('/api/dm/:agentId', requireAuth, async (req, res) => {
 // ============ CHANNELS ============
 app.get('/api/channels', requireAuth, async (req, res) => {
   try {
-    const channels = await db.query('SELECT * FROM channels ORDER BY created_at');
+    const channels = await db.query('SELECT * FROM channels WHERE is_dm IS NOT TRUE AND is_dm != 1 ORDER BY created_at');
     res.json(channels);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
