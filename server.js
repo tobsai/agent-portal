@@ -208,6 +208,23 @@ function writeSseEvent(res, event, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+/** Helper: expose mutable chat state to route modules */
+function getChatState() {
+  return {
+    authenticated: chatGatewayAuthenticated,
+    ws: chatGatewayWs,
+    buffer: chatMessageBuffer,
+    sseClients: chatSseClients,
+    channelSseClients,
+    lastActiveChannelId,
+    lastActiveSessionKey,
+  };
+}
+function setChatState(updates) {
+  if ('lastActiveChannelId' in updates) lastActiveChannelId = updates.lastActiveChannelId;
+  if ('lastActiveSessionKey' in updates) lastActiveSessionKey = updates.lastActiveSessionKey;
+}
+
 function broadcastChatEvent(event, data) {
   for (const client of chatSseClients) {
     writeSseEvent(client.res, event, data);
@@ -671,281 +688,32 @@ app.get('/chat', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'chat.html'));
 });
 
-// ============ CHAT DEBUG ============
-const chatDebugLog = [];
-app.post('/api/chat-debug', (req, res) => {
-  chatDebugLog.push({ ...req.body, ip: req.ip, at: new Date().toISOString() });
-  if (chatDebugLog.length > 50) chatDebugLog.shift();
-  res.json({ ok: true });
-});
-app.get('/api/chat-debug', (req, res) => {
-  if (!req.isAuthenticated()) return res.status(401).json({ error: 'unauthorized' });
-  res.json(chatDebugLog);
-});
-
-// ============ CHAT ENDPOINTS ============
-app.get('/api/chat/messages', requireAuth, (req, res) => {
-  connectChatGateway();
-  const rawLimit = parseInt(req.query.limit, 10);
-  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, CHAT_BUFFER_LIMIT)) : 50;
-  const before = req.query.before;
-  let end = chatMessageBuffer.length;
-  if (before) {
-    const beforeIndex = chatMessageBuffer.findIndex(m => m.id === before);
-    if (beforeIndex >= 0) end = beforeIndex;
-  }
-  const start = Math.max(0, end - limit);
-  res.json({
-    messages: chatMessageBuffer.slice(start, end),
-    hasMore: start > 0
-  });
-});
-
-app.post('/api/chat/send', requireAuth, async (req, res) => {
-  connectChatGateway();
-  const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
-  if (!message) return res.status(400).json({ error: 'message is required' });
-  if (!chatGatewayAuthenticated) return res.status(503).json({ error: 'Gateway unavailable' });
-
-  const idempotencyKey = req.body?.idempotencyKey || `idemp-${uuidv4()}`;
-  try {
-    await chatGatewayRequest('chat.send', { sessionKey: CHAT_SESSION_KEY, message, idempotencyKey });
-    const entry = { id: `msg-${uuidv4()}`, role: 'user', text: message, timestamp: new Date().toISOString(), status: 'delivered' };
-    trackUserSend(message);
-    const added = pushChatMessage(entry);
-    if (added) broadcastChatEvent('message', entry);
-    res.json({ id: entry.id, status: 'delivered' });
-  } catch (err) {
-    res.status(502).json({ error: err.message || 'Failed to send message' });
-  }
-});
-
-app.get('/api/chat/stream', async (req, res) => {
-  if (!req.isAuthenticated()) {
-    const queryToken = typeof req.query?.token === 'string' ? req.query.token : '';
-    if (queryToken && !queryToken.startsWith('ak_')) {
-      try {
-        const decoded = jwt.verify(queryToken, JWT_SECRET);
-        const user = await db.get('SELECT * FROM users WHERE id = $1', [decoded.userId]);
-        if (user) {
-          // Use req.logIn with session:false to satisfy Passport contract
-          await new Promise((resolve, reject) => req.logIn(user, { session: false }, err => err ? reject(err) : resolve()));
-        }
-      } catch (err) {}
-    }
-  }
-  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Authentication required' });
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  if (typeof res.flushHeaders === 'function') res.flushHeaders();
-  connectChatGateway();
-
-  const client = {
-    res,
-    keepalive: setInterval(() => res.write(': keepalive\n\n'), 25000)
-  };
-  chatSseClients.add(client);
-  writeSseEvent(res, 'status', { connected: chatGatewayAuthenticated });
-
-  req.on('close', () => {
-    clearInterval(client.keepalive);
-    chatSseClients.delete(client);
-  });
-});
-
-// Chat config (returns proxy WS URL)
-app.get('/api/chat/config', requireAuth, (req, res) => {
-  const proxyWsUrl = (req.protocol === 'https' ? 'wss' : 'ws') + '://' + req.get('host') + '/ws/gateway';
-  res.json({
-    gatewayWsUrl: proxyWsUrl,
-    gatewayToken: '',
-    hasDeviceIdentity: false,
-    proxyMode: true
-  });
-});
-
-// ============ TTS ============
-app.post('/api/tts', requireAuth, async (req, res) => {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'TTS not configured' });
-
-  const { text, voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM' } = req.body || {};
-  if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text is required' });
-  if (text.length > 5000) return res.status(400).json({ error: 'text too long (max 5000 chars)' });
-
-  try {
-    const elevenRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        text,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-      }),
-    });
-
-    if (!elevenRes.ok) {
-      const errBody = await elevenRes.text().catch(() => '');
-      console.error('[tts] ElevenLabs error:', elevenRes.status, errBody);
-      return res.status(502).json({ error: 'TTS generation failed' });
-    }
-
-    res.set('Content-Type', 'audio/mpeg');
-    res.set('Cache-Control', 'no-store');
-    const reader = elevenRes.body.getReader();
-    const pump = async () => {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
-      }
-      res.end();
-    };
-    await pump();
-  } catch (err) {
-    console.error('[tts] Error:', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'TTS request failed' });
-  }
-});
-
-app.post('/api/tts/stream', requireAuth, async (req, res) => {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'TTS not configured' });
-
-  const { text, voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM' } = req.body || {};
-  if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text is required' });
-  if (text.length > 8000) return res.status(400).json({ error: 'text too long' });
-
-  const sentences = text.match(/[^.!?]+[.!?]+[\s]*/g) || [text];
-
-  res.set('Content-Type', 'audio/mpeg');
-  res.set('Cache-Control', 'no-store');
-  res.set('Transfer-Encoding', 'chunked');
-
-  try {
-    for (let i = 0; i < sentences.length; i++) {
-      const sentence = sentences[i].trim();
-      if (!sentence) continue;
-
-      const elevenRes = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
-          body: JSON.stringify({
-            text: sentence,
-            model_id: 'eleven_flash_v2_5',
-            voice_settings: { stability: 0.4, similarity_boost: 0.75, speed: 1.1 },
-          }),
-        }
-      );
-
-      if (!elevenRes.ok) {
-        console.error('[tts/stream] ElevenLabs error chunk', i, elevenRes.status);
-        continue;
-      }
-
-      const reader = elevenRes.body.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (!res.writableEnded) res.write(value);
-      }
-    }
-  } catch (err) {
-    console.error('[tts/stream] Error:', err.message);
-  } finally {
-    if (!res.writableEnded) res.end();
-  }
-});
-
-// ============ CHAT CONFIG / SIGN ============
-app.get('/api/chat-config', requireAuth, (req, res) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.set('Pragma', 'no-cache');
-  const proxyWsUrl = (req.protocol === 'https' ? 'wss' : 'ws') + '://' + req.get('host') + '/ws/gateway';
-  const config = {
-    gatewayWsUrl: proxyWsUrl,
-    gatewayToken: '',
-    hasDeviceIdentity: false,
-    proxyMode: true
-  };
-  console.log('[chat-config] served:', { wsUrl: config.gatewayWsUrl, proxyMode: true });
-  res.json(config);
-});
-
-app.post('/api/chat-sign', requireAuth, (req, res) => {
-  console.log('[chat-sign] called with nonce:', req.body?.nonce?.substring(0, 8) || 'none');
-  const { nonce } = req.body || {};
-  const token = process.env.GATEWAY_TOKEN || '';
-  const deviceId = process.env.WEBCHAT_DEVICE_ID || '';
-  const publicKeyRaw = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
-  const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
-
-  if (!deviceId || !publicKeyRaw || !privateKeyPem) {
-    return res.json({ device: null, error: 'Device identity not configured' });
-  }
-
-  try {
-    const crypto = require('crypto');
-    const signedAt = Date.now();
-    const scopes = 'operator.read,operator.write,operator.admin';
-    const version = nonce ? 'v2' : 'v1';
-    const parts = [version, deviceId, 'webchat-ui', 'webchat', 'operator', scopes, String(signedAt), token];
-    if (nonce) parts.push(nonce);
-    const payload = parts.join('|');
-    const key = crypto.createPrivateKey(privateKeyPem);
-    const sig = crypto.sign(null, Buffer.from(payload, 'utf8'), key);
-    const device = { id: deviceId, publicKey: publicKeyRaw, signature: sig.toString('base64url'), signedAt };
-    if (nonce) device.nonce = nonce;
-    res.json({ device });
-  } catch (e) {
-    console.error('Device signing failed:', e.message);
-    res.json({ device: null, error: 'Signing failed' });
-  }
-});
-
-// ============ MODEL SELECTOR ============
-const { execFile } = require('child_process');
-
-const MODEL_OVERRIDE_PATH = path.join(__dirname, 'data', 'model-override.json');
-const MODEL_DEFAULT = 'anthropic/claude-opus-4-6';
-
-app.get('/api/model', requireAuth, (req, res) => {
-  try {
-    const data = JSON.parse(fs.readFileSync(MODEL_OVERRIDE_PATH, 'utf8'));
-    res.json({ model: data.model || MODEL_DEFAULT });
-  } catch {
-    res.json({ model: MODEL_DEFAULT });
-  }
-});
-
-app.post('/api/model', requireAuth, (req, res) => {
-  const { model } = req.body || {};
-  if (!model || typeof model !== 'string') return res.status(400).json({ error: 'model is required' });
-  const allowed = [
-    'anthropic/claude-opus-4-6',
-    'anthropic/claude-sonnet-4-6',
-    'xai/grok-4-1-fast-reasoning',
-    'xai/grok-4-1-fast-non-reasoning',
-    'xai/grok-3',
-  ];
-  if (!allowed.includes(model)) return res.status(400).json({ error: 'unknown model' });
-
-  try {
-    fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
-    fs.writeFileSync(MODEL_OVERRIDE_PATH, JSON.stringify({ model }, null, 2));
-    res.json({ success: true, model, note: 'Model preference saved. Gateway restart required on host to apply.' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// ============ CHAT, TTS, CHANNELS, DEVICES ============
+app.use('/api', require('./routes/chat')({
+  db,
+  AGENTS,
+  CHAT_SESSION_KEY,
+  CHAT_BUFFER_LIMIT,
+  requireAuth,
+  requireAgentKey,
+  uuidv4,
+  JWT_SECRET,
+  jwt,
+  broadcast,
+  broadcastChatEvent,
+  broadcastChannelEvent,
+  connectChatGateway,
+  chatGatewayRequest,
+  gatewayClient,
+  sendAgentMessage,
+  pushToAllDevices,
+  trackUserSend,
+  pushChatMessage,
+  getChatState,
+  setChatState,
+  apns,
+  publicDir: path.join(__dirname, 'public'),
+}));
 
 // ============ AUTH ROUTES ============
 app.get('/auth/google', (req, res, next) => {
@@ -984,45 +752,6 @@ app.get('/api/me', (req, res) => {
   } else { res.json(null); }
 });
 
-// ============ PUSH NOTIFICATIONS ============
-app.post('/api/devices/register', requireAuth, async (req, res) => {
-  try {
-    const { platform, token, bundleId } = req.body;
-    if (!token) return res.status(400).json({ error: 'Token required' });
-
-    const userId = req.user?.id || req.agent?.id;
-    if (!userId) return res.status(401).json({ error: 'User not identified' });
-
-    // Upsert: update user_id and timestamp if token already exists
-    const now = new Date().toISOString();
-    await db.run(`
-      INSERT INTO push_tokens (user_id, platform, token, bundle_id, updated_at)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (token) DO UPDATE SET
-        user_id = $1,
-        platform = $2,
-        bundle_id = $4,
-        updated_at = $5
-    `, [userId, platform || 'ios', token, bundleId || 'com.mapletree.agent-portal', now]);
-
-    console.log(`[push] Registered ${platform || 'ios'} token for user ${userId}: ${token.substring(0, 8)}...`);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[push] Registration error:', err);
-    res.status(500).json({ error: 'Registration failed' });
-  }
-});
-
-app.delete('/api/devices/unregister', requireAuth, async (req, res) => {
-  try {
-    const { token } = req.body;
-    if (!token) return res.status(400).json({ error: 'Token required' });
-    await db.run('DELETE FROM push_tokens WHERE token = $1', [token]);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Unregister failed' });
-  }
-});
 
 /**
  * Send push notifications to all registered devices for a user.
