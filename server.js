@@ -383,6 +383,8 @@ async function refreshChatHistoryFromGateway() {
 // DB persistence, SSE broadcast, and push notification all happen together.
 async function sendAgentMessage(channelId, content, senderName, senderEmoji, senderId) {
   if (!dbReady || !content) return null;
+  // sender_id is NOT NULL in the DB — fall back to a reasonable default
+  if (!senderId) senderId = (senderName || 'agent').toLowerCase().replace(/\s+/g, '-');
   try {
     let channel;
     if (channelId) {

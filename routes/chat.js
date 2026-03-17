@@ -411,12 +411,12 @@ module.exports = function chatRouter(deps) {
       const senderName = req.agent?.name || req.user?.name || 'Unknown';
       const senderEmoji = req.agent ? (AGENTS.find(a => a.id === req.agent.id)?.emoji || '') : '';
 
+      const id = uuidv4();
       let message;
       if (senderType === 'agent') {
         message = await sendAgentMessage(req.params.id, content, senderName, senderEmoji, senderId);
         if (!message) return res.status(500).json({ error: 'Failed to store message' });
       } else {
-        const id = uuidv4();
         await db.run(
           'INSERT INTO messages (id, channel_id, sender_type, sender_id, sender_name, sender_emoji, content, mentions) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
           [id, req.params.id, senderType, senderId, senderName, senderEmoji, content, JSON.stringify(mentions || [])]
