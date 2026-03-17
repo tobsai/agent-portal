@@ -367,6 +367,8 @@ async function refreshChatHistoryFromGateway() {
 // DB persistence, SSE broadcast, and push notification all happen together.
 async function sendAgentMessage(channelId, content, senderName, senderEmoji, senderId) {
   if (!dbReady || !content) return null;
+  // sender_id is NOT NULL in the DB — fall back to a reasonable default
+  if (!senderId) senderId = (senderName || 'agent').toLowerCase().replace(/\s+/g, '-');
   try {
     let channel;
     if (channelId) {
@@ -1587,6 +1589,7 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
     const senderName = req.agent?.name || req.user?.name || 'Unknown';
     const senderEmoji = req.agent ? (AGENTS.find(a => a.id === req.agent.id)?.emoji || '') : '';
 
+    const id = uuidv4();
     let message;
     if (senderType === 'agent') {
       // Unified pipeline: persist + broadcast + push notification
@@ -1594,7 +1597,6 @@ app.post('/api/channels/:id/messages', requireAuth, async (req, res) => {
       if (!message) return res.status(500).json({ error: 'Failed to store message' });
     } else {
       // User message: persist + broadcast only (no push notification)
-      const id = uuidv4();
       await db.run(
         'INSERT INTO messages (id, channel_id, sender_type, sender_id, sender_name, sender_emoji, content, mentions) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
         [id, req.params.id, senderType, senderId, senderName, senderEmoji, content, JSON.stringify(mentions || [])]
