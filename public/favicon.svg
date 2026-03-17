@@ -1,6 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 32 32" width="32" height="32">
-  <defs>
-    <clipPath id="rr"><rect width="32" height="32" rx="8"/></clipPath>
-  </defs>
-  <image width="32" height="32" href="/assets/support-agent-avatar.png" clip-path="url(#rr)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Indigo background with rounded corners -->
+  <rect width="32" height="32" rx="7" fill="#312e81"/>
+  <!-- Outer ring accent -->
+  <circle cx="16" cy="16" r="13" fill="none" stroke="#818cf8" stroke-width="1.5"/>
+  <!-- Agent icon: head -->
+  <circle cx="16" cy="13" r="4.5" fill="#818cf8"/>
+  <!-- Agent icon: body/shoulders arc -->
+  <path d="M8,26 C8,20.5 24,20.5 24,26" fill="#818cf8"/>
 </svg>

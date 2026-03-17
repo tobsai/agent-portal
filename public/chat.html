@@ -646,10 +646,14 @@
       font-family: inherit;
       font-size: 0.9rem;
       color: var(--text);
-      resize: none;
+      min-height: 42px;
       max-height: 120px;
       overflow-y: auto;
       transition: all 0.15s;
+      white-space: pre-wrap;
+      word-break: break-word;
+      cursor: text;
+      line-height: 1.5;
     }
 
     .input-box:focus {
@@ -658,7 +662,35 @@
       background: var(--surface-hover);
     }
 
-    .input-box::placeholder { color: var(--text-dim); }
+    /* Empty state placeholder via CSS attr() on data-placeholder */
+    .input-box:empty::before {
+      content: attr(data-placeholder);
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+
+    /* @-mention pill inside the compose box */
+    .input-mention-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      background: rgba(129,140,248,0.2);
+      border: 1px solid rgba(129,140,248,0.35);
+      color: var(--accent);
+      font-weight: 600;
+      border-radius: 4px;
+      padding: 0 5px;
+      font-size: 0.88em;
+      cursor: default;
+      white-space: nowrap;
+      line-height: 1.5;
+      user-select: all;
+      -webkit-user-select: all;
+    }
+
+    .input-mention-pill .pill-emoji {
+      font-size: 0.9em;
+    }
 
     .send-btn {
       width: 40px;
@@ -1380,12 +1412,15 @@
         <div class="input-hint" style="font-size:0.68rem; color:var(--text-dim); text-align:right; margin-bottom:4px; font-family:'JetBrains Mono',monospace;">Enter to send · Shift+Enter for newline</div>
         <div class="input-wrapper">
           <button class="attach-btn" onclick="openFilePicker()" title="Attach image">📎</button>
-          <textarea
+          <div
             class="input-box"
             id="message-input"
-            placeholder="Type a message..."
-            rows="1"
-            maxlength="10000"></textarea>
+            contenteditable="true"
+            data-placeholder="Type a message..."
+            role="textbox"
+            aria-multiline="true"
+            aria-label="Message input"
+            spellcheck="true"></div>
           <div style="position:relative; display:flex; align-items:center; gap:4px; flex-shrink:0;">
             <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Voice input" aria-label="Voice input">🎙️</button>
             <button class="voice-settings-btn" id="voice-settings-btn" onclick="toggleVoiceSettings(event)" title="Voice settings">⚙️</button>
@@ -1473,8 +1508,108 @@
     let collectedMentions = [];
 
     const messagesContainer = document.getElementById('messages');
-    const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
+
+    // ─── MessageInput Abstraction (contenteditable → value/focus API) ─────────
+    // Wraps the contenteditable #message-input div to expose a textarea-compatible
+    // interface (.value, .focus(), .style.height) used throughout the codebase.
+    const messageInput = (() => {
+      const el = document.getElementById('message-input');
+
+      /** Extract plain-text content; pill spans → '@Name' */
+      function getPlainText() {
+        let text = '';
+        el.childNodes.forEach(node => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            text += node.textContent;
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.classList.contains('input-mention-pill')) {
+              text += node.dataset.mentionText || node.textContent;
+            } else if (node.nodeName === 'BR') {
+              text += '\n';
+            } else {
+              text += node.textContent;
+            }
+          }
+        });
+        return text;
+      }
+
+      /** Set plain text content (clears pills) — used by voice input */
+      function setPlainText(text) {
+        el.innerHTML = '';
+        if (text) el.appendChild(document.createTextNode(text));
+        // Move cursor to end
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+
+      /** Place cursor at end of content */
+      function moveCursorToEnd() {
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+
+      return {
+        get el() { return el; },
+        // Textarea-compatible value property
+        get value() { return getPlainText(); },
+        set value(text) {
+          setPlainText(text);
+        },
+        // Textarea-compatible focus/blur
+        focus() { el.focus(); moveCursorToEnd(); },
+        blur() { el.blur(); },
+        // style.height shim — contenteditable grows naturally; these are no-ops
+        get style() { return el.style; },
+        // selectionStart — approximation (used only in insertMention)
+        get selectionStart() {
+          const sel = window.getSelection();
+          if (!sel || !sel.rangeCount) return getPlainText().length;
+          const range = sel.getRangeAt(0);
+          const preRange = range.cloneRange();
+          preRange.selectNodeContents(el);
+          preRange.setEnd(range.startContainer, range.startOffset);
+          return preRange.toString().length;
+        },
+        // setSelectionRange — move cursor to pos
+        setSelectionRange(start, end) {
+          // Simplified: just move cursor to character offset `end` in plain text
+          const text = getPlainText();
+          let offset = Math.min(end, text.length);
+          try {
+            const sel = window.getSelection();
+            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+            let node = walker.nextNode();
+            while (node) {
+              if (offset <= node.textContent.length) {
+                const r = document.createRange();
+                r.setStart(node, offset);
+                r.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(r);
+                return;
+              }
+              offset -= node.textContent.length;
+              node = walker.nextNode();
+            }
+            moveCursorToEnd();
+          } catch (_) { /* ignore */ }
+        },
+        addEventListener(type, fn, opts) { el.addEventListener(type, fn, opts); },
+        dispatchEvent(event) { return el.dispatchEvent(event); },
+        // For paste handling: refers to the underlying element
+        contains(node) { return el.contains(node); },
+      };
+    })();
     const connectionStatus = document.getElementById('connection-status');
     const errorBanner = document.getElementById('error-banner');
     const errorMessage = document.getElementById('error-message');
@@ -1592,7 +1727,8 @@
       const list = document.getElementById('channel-list');
       list.innerHTML = '';
       // Filter out DM channels — they belong in the Direct Messages section
-      const publicChannels = channels.filter(ch => !ch.is_dm);
+      // Coerce to boolean to handle SQLite (integer 0/1) vs Postgres (boolean) differences
+      const publicChannels = channels.filter(ch => !ch.is_dm && ch.is_dm !== 1);
       publicChannels.forEach(ch => {
         const item = document.createElement('div');
         item.className = 'channel-item' + (ch.id === activeChannelId ? ' active' : '');
@@ -2263,13 +2399,72 @@
     }
 
     function insertMention(candidate) {
-      const val = messageInput.value;
-      const before = val.slice(0, mentionStartPos);
-      const after = val.slice(messageInput.selectionStart);
-      const mentionText = `@${candidate.name} `;
-      messageInput.value = before + mentionText + after;
-      const newPos = before.length + mentionText.length;
-      messageInput.setSelectionRange(newPos, newPos);
+      const el = messageInput.el;
+
+      // Delete the partial "@query" text before the cursor (from mentionStartPos)
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        const range = sel.getRangeAt(0);
+        // Walk backwards through text nodes to delete typed "@query"
+        try {
+          const startNode = range.startContainer;
+          const startOffset = range.startOffset;
+          if (startNode.nodeType === Node.TEXT_NODE) {
+            const textBefore = startNode.textContent.slice(0, startOffset);
+            // Find the @ in the text before cursor
+            const atIdx = textBefore.lastIndexOf('@');
+            if (atIdx >= 0) {
+              startNode.textContent = startNode.textContent.slice(0, atIdx) + startNode.textContent.slice(startOffset);
+              range.setStart(startNode, atIdx);
+              range.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+          }
+        } catch (_) { /* ignore cursor manipulation errors */ }
+      }
+
+      // Build and insert pill span
+      const pill = document.createElement('span');
+      pill.className = 'input-mention-pill';
+      pill.contentEditable = 'false';
+      pill.dataset.mentionId = candidate.id;
+      pill.dataset.mentionText = `@${candidate.name}`;
+      pill.dataset.mentionType = candidate.type || 'agent';
+      if (candidate.emoji) {
+        const emojiSpan = document.createElement('span');
+        emojiSpan.className = 'pill-emoji';
+        emojiSpan.textContent = candidate.emoji;
+        pill.appendChild(emojiSpan);
+      }
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = '@' + candidate.name;
+      pill.appendChild(nameSpan);
+
+      // Insert pill at current cursor position
+      const insertSel = window.getSelection();
+      if (insertSel && insertSel.rangeCount) {
+        const insertRange = insertSel.getRangeAt(0);
+        insertRange.insertNode(pill);
+        insertRange.setStartAfter(pill);
+        insertRange.collapse(true);
+        insertSel.removeAllRanges();
+        insertSel.addRange(insertRange);
+      } else {
+        el.appendChild(pill);
+      }
+
+      // Insert a trailing space text node for continued typing
+      const space = document.createTextNode('\u00A0');
+      const afterRange = window.getSelection()?.getRangeAt(0);
+      if (afterRange) {
+        afterRange.insertNode(space);
+        afterRange.setStartAfter(space);
+        afterRange.collapse(true);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(afterRange);
+      }
+
       messageInput.focus();
 
       // Track mention
@@ -2281,26 +2476,37 @@
     }
 
     function handleMentionInput() {
-      const val = messageInput.value;
-      const cursorPos = messageInput.selectionStart;
+      // For contenteditable: read text from cursor position backwards to find @
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) { hideMentionPopup(); return; }
+      const range = sel.getRangeAt(0);
+      if (!range.collapsed) { hideMentionPopup(); return; }
 
-      // Find the last @ before cursor
+      // Extract text content before cursor (up to 80 chars) from text nodes
+      let textBefore = '';
+      try {
+        const startNode = range.startContainer;
+        if (startNode.nodeType === Node.TEXT_NODE) {
+          textBefore = startNode.textContent.slice(0, range.startOffset);
+        }
+      } catch (_) {}
+
+      // Find the last @ that triggers a mention
       let atPos = -1;
-      for (let i = cursorPos - 1; i >= 0; i--) {
-        if (val[i] === '@') {
-          // Check that @ is at start or preceded by whitespace
-          if (i === 0 || /\s/.test(val[i - 1])) {
+      for (let i = textBefore.length - 1; i >= 0; i--) {
+        if (textBefore[i] === '@') {
+          if (i === 0 || /[\s\u00A0]/.test(textBefore[i - 1])) {
             atPos = i;
           }
           break;
         }
-        if (/\s/.test(val[i])) break;
+        if (/[\s\u00A0]/.test(textBefore[i])) break;
       }
 
       if (atPos >= 0) {
         mentionActive = true;
         mentionStartPos = atPos;
-        mentionQuery = val.slice(atPos + 1, cursorPos);
+        mentionQuery = textBefore.slice(atPos + 1);
         const filtered = filterMentionCandidates(mentionQuery);
         showMentionPopup(filtered);
       } else {
@@ -2531,15 +2737,31 @@
         // Check mention popup first
         if (handleMentionKeydown(e)) return;
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        // Backspace on a pill: delete the whole pill
+        if (e.key === 'Backspace') {
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount) {
+            const range = sel.getRangeAt(0);
+            if (range.collapsed) {
+              const prev = range.startContainer.nodeType === Node.ELEMENT_NODE
+                ? range.startContainer.childNodes[range.startOffset - 1]
+                : null;
+              if (prev && prev.classList && prev.classList.contains('input-mention-pill')) {
+                e.preventDefault();
+                prev.remove();
+              }
+            }
+          }
+        }
       });
       messageInput.addEventListener('input', () => {
-        messageInput.style.height = 'auto';
-        messageInput.style.height = messageInput.scrollHeight + 'px';
         handleMentionInput();
       });
       messageInput.addEventListener('paste', (e) => {
         const items = e.clipboardData?.items;
         if (!items) return;
+
+        // Check for image paste first
         for (const item of items) {
           if (item.type.startsWith('image/')) {
             e.preventDefault();
@@ -2551,13 +2773,20 @@
               showImagePreview(ev.target.result);
             };
             reader.readAsDataURL(file);
-            break;
+            return;
           }
+        }
+
+        // Plain text paste: prevent rich HTML from being pasted into contenteditable
+        e.preventDefault();
+        const text = e.clipboardData.getData('text/plain');
+        if (text) {
+          document.execCommand('insertText', false, text);
         }
       });
       // Close mention popup on click outside
       document.addEventListener('click', (e) => {
-        if (!mentionPopup.contains(e.target) && e.target !== messageInput) {
+        if (!mentionPopup.contains(e.target) && !messageInput.el.contains(e.target)) {
           hideMentionPopup();
         }
       });
@@ -2613,7 +2842,6 @@
       if (!eventSource || eventSource.readyState === EventSource.CLOSED) { showError('Not connected'); return; }
 
       messageInput.value = '';
-      messageInput.style.height = 'auto';
       hideMentionPopup();
 
       let fullContent = text;
