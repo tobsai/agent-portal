@@ -17,7 +17,6 @@ const apns = require('./lib/apns');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -25,7 +24,7 @@ const http = require('http');
 const WebSocket = require('ws');
 
 const jwt = require('jsonwebtoken');
-const JWT_SECRET = process.env.SESSION_SECRET || 'agent-portal-dev-secret';
+const { JWT_SECRET, configurePassport, jwtMiddleware, requireAuth, requireAgentKey, requireAdmin } = require('./lib/auth');
 
 // ── Native Gateway Client (Phase 1: OpenClaw channel integration) ──────────
 const { gatewayClient, sessionKeyForAgent, agentIdForSessionKey } = require('./lib/gateway-client');
@@ -616,36 +615,7 @@ app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
 
-passport.serializeUser((user, done) => done(null, user.id));
-passport.deserializeUser(async (id, done) => {
-  try {
-    const user = await db.get('SELECT * FROM users WHERE id = $1', [id]);
-    done(null, user);
-  } catch (err) { done(err, null); }
-});
-
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-  passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback'
-  }, async (accessToken, refreshToken, profile, done) => {
-    try {
-      let user = await db.get('SELECT * FROM users WHERE google_id = $1', [profile.id]);
-      if (!user) {
-        const id = uuidv4();
-        const email = profile.emails?.[0]?.value || '';
-        const isFirstUser = !(await db.get('SELECT id FROM users LIMIT 1'));
-        await db.run(
-          'INSERT INTO users (id, google_id, email, name, picture, is_admin) VALUES ($1, $2, $3, $4, $5, $6)',
-          [id, profile.id, email, profile.displayName, profile.photos?.[0]?.value, isFirstUser]
-        );
-        user = await db.get('SELECT * FROM users WHERE id = $1', [id]);
-      }
-      done(null, user);
-    } catch (err) { done(err, null); }
-  }));
-}
+configurePassport(db);
 
 // ============ MIDDLEWARE ============
 app.use(express.json({ limit: '10mb' }));
@@ -668,44 +638,9 @@ function broadcast(event, data) {
 }
 
 // JWT auth middleware for mobile app — runs before API routes
-app.use('/api', async (req, res, next) => {
-  if (req.isAuthenticated()) return next();
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    if (token.startsWith('ak_')) return next();
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      const user = await db.get('SELECT * FROM users WHERE id = $1', [decoded.userId]);
-      if (user) {
-        req.user = user;
-        req.isAuthenticated = () => true;
-      }
-    } catch (e) { /* invalid token, continue unauthenticated */ }
-  }
-  next();
-});
+app.use('/api', jwtMiddleware(db));
 
-function requireAuth(req, res, next) {
-  if (req.isAuthenticated()) return next();
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) return requireAgentKey(req, res, next);
-  res.status(401).json({ error: 'Authentication required' });
-}
-
-async function requireAgentKey(req, res, next) {
-  const key = req.headers.authorization?.replace('Bearer ', '');
-  if (!key) return res.status(401).json({ error: 'API key required' });
-  const agent = await db.get('SELECT * FROM agents WHERE api_key = $1', [key]);
-  if (!agent) return res.status(401).json({ error: 'Invalid API key' });
-  req.agent = agent;
-  next();
-}
-
-function requireAdmin(req, res, next) {
-  if (req.user?.is_admin) return next();
-  res.status(403).json({ error: 'Admin access required' });
-}
+// requireAuth, requireAgentKey, requireAdmin imported from lib/auth
 
 // ============ STATIC ============
 app.get('/', (req, res) => {
@@ -793,8 +728,8 @@ app.get('/api/chat/stream', async (req, res) => {
         const decoded = jwt.verify(queryToken, JWT_SECRET);
         const user = await db.get('SELECT * FROM users WHERE id = $1', [decoded.userId]);
         if (user) {
-          req.user = user;
-          req.isAuthenticated = () => true;
+          // Use req.logIn with session:false to satisfy Passport contract
+          await new Promise((resolve, reject) => req.logIn(user, { session: false }, err => err ? reject(err) : resolve()));
         }
       } catch (err) {}
     }
