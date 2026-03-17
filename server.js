@@ -1082,6 +1082,9 @@ app.get('/subagents', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'subagents.html'));
 });
 
+// ============ SCHEDULED TASKS ============
+app.use('/api', require('./routes/scheduled')({ db, requireAuth, requireAgentKey }));
+
 // ============ HEALTH CHECK ============
 app.use('/api', require('./routes/health')({
   gatewayClient,
