@@ -652,21 +652,7 @@ if (isProduction) {
         ALTER TABLE channels ADD COLUMN IF NOT EXISTS dm_agent_id TEXT;
         ALTER TABLE channels ADD COLUMN IF NOT EXISTS dm_user_id TEXT;
 
-        -- Fix type mismatches: cast columns to boolean if created with wrong type
-        DO $$ BEGIN
-          IF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'channels' AND column_name = 'is_dm' AND data_type <> 'boolean'
-          ) THEN
-            ALTER TABLE channels ALTER COLUMN is_dm TYPE BOOLEAN USING CASE WHEN is_dm::text IN ('1','true','t') THEN true ELSE false END;
-          END IF;
-          IF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'channels' AND column_name = 'is_default' AND data_type <> 'boolean'
-          ) THEN
-            ALTER TABLE channels ALTER COLUMN is_default TYPE BOOLEAN USING CASE WHEN is_default::text IN ('1','true','t') THEN true ELSE false END;
-          END IF;
-        END $$;
+
 
         CREATE TABLE IF NOT EXISTS channel_members (
           channel_id TEXT,
@@ -1515,7 +1501,7 @@ app.get('/api/dm/:agentId', requireAuth, async (req, res) => {
 // ============ CHANNELS ============
 app.get('/api/channels', requireAuth, async (req, res) => {
   try {
-    const channels = await db.query('SELECT * FROM channels WHERE is_dm IS NOT TRUE AND is_dm != 1 ORDER BY created_at');
+    const channels = await db.query('SELECT * FROM channels WHERE is_dm IS NOT TRUE ORDER BY created_at');
     res.json(channels);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
