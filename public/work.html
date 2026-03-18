@@ -451,6 +451,121 @@
       color: var(--text-dim);
       flex-shrink: 0;
     }
+
+    /* ─── Sub-Agent Summary Widget ─── */
+    .subagent-widget {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.875rem 1rem;
+      grid-column: 1 / -1;
+      margin-bottom: 0;
+    }
+
+    .subagent-widget-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .subagent-widget-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .subagent-widget-title .live-badge {
+      font-size: 0.6rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: rgba(52,211,153,0.1);
+      color: var(--green);
+      border: 1px solid rgba(52,211,153,0.2);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+    }
+
+    .subagent-widget-link {
+      font-size: 0.72rem;
+      color: var(--accent);
+      text-decoration: none;
+      opacity: 0.8;
+      transition: opacity 0.15s;
+    }
+
+    .subagent-widget-link:hover { opacity: 1; }
+
+    .subagent-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    .subagent-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.35rem 0.5rem;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.02);
+      font-size: 0.78rem;
+    }
+
+    .sa-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .sa-dot.active   { background: var(--blue); box-shadow: 0 0 5px var(--blue); animation: pulse 2s infinite; }
+    .sa-dot.done     { background: var(--green); }
+    .sa-dot.complete { background: var(--green); }
+    .sa-dot.error    { background: var(--red); }
+    .sa-dot.unknown  { background: var(--text-dim); }
+
+    .sa-label {
+      font-weight: 500;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sa-status {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .sa-status.active   { background: rgba(96,165,250,0.15); color: var(--blue); }
+    .sa-status.done     { background: rgba(52,211,153,0.12); color: var(--green); }
+    .sa-status.complete { background: rgba(52,211,153,0.12); color: var(--green); }
+    .sa-status.error    { background: rgba(248,113,113,0.12); color: var(--red); }
+    .sa-status.unknown  { background: rgba(255,255,255,0.05); color: var(--text-dim); }
+
+    .sa-meta {
+      font-size: 0.67rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0;
+    }
+
+    .subagent-empty {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      text-align: center;
+      padding: 0.75rem 0;
+    }
   </style>
 </head>
 <body>
@@ -483,6 +598,20 @@
     <!-- Stats -->
     <div id="stats-area" style="grid-column:1/-1;"></div>
     <div id="error-area" style="grid-column:1/-1;"></div>
+
+    <!-- Sub-Agent Summary Widget -->
+    <div class="subagent-widget" id="subagent-widget">
+      <div class="subagent-widget-header">
+        <div class="subagent-widget-title">
+          🤖 Sub-Agent Activity
+          <span class="live-badge" id="sa-live-badge" style="display:none">live</span>
+        </div>
+        <a href="/subagents" class="subagent-widget-link">Full tree →</a>
+      </div>
+      <div class="subagent-rows" id="subagent-rows">
+        <div class="subagent-empty">Loading…</div>
+      </div>
+    </div>
 
     <!-- Main: Initiatives + Tasks -->
     <div id="work-area"><div class="loading">Loading…</div></div>
@@ -731,9 +860,73 @@
       ws.onerror = () => { ws?.close(); };
     }
 
+    // ─── Sub-Agent Widget ───────────────────────────────────────────────────
+    function formatRuntime(ms) {
+      if (!ms && ms !== 0) return '';
+      const secs = Math.floor(ms / 1000);
+      if (secs < 60) return `${secs}s`;
+      const mins = Math.floor(secs / 60);
+      if (mins < 60) return `${mins}m`;
+      return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+    }
+
+    function flattenTree(nodes, result = []) {
+      for (const n of nodes) {
+        result.push(n);
+        if (n.children && n.children.length) flattenTree(n.children, result);
+      }
+      return result;
+    }
+
+    async function loadSubAgentWidget() {
+      try {
+        const res = await fetch('/api/subagents');
+        if (!res.ok) return;
+        const data = await res.json();
+        const all = flattenTree(data.tree || []);
+
+        const rowsEl = document.getElementById('subagent-rows');
+        const liveBadge = document.getElementById('sa-live-badge');
+
+        // Show live badge if any active agents
+        const hasActive = all.some(a => a.status === 'active');
+        liveBadge.style.display = hasActive ? '' : 'none';
+
+        if (!all.length) {
+          rowsEl.innerHTML = '<div class="subagent-empty">No sub-agent activity yet.</div>';
+          return;
+        }
+
+        // Show most recent 5, newest first (sorted by startedAt desc)
+        const sorted = [...all].sort((a, b) =>
+          new Date(b.startedAt || 0) - new Date(a.startedAt || 0)
+        ).slice(0, 5);
+
+        rowsEl.innerHTML = sorted.map(agent => {
+          const label = agent.label || agent.id.slice(0, 24);
+          const st = agent.status || 'unknown';
+          const runtime = agent.runtime ? formatRuntime(agent.runtime) : '';
+          const depthPrefix = agent.depth > 0
+            ? `<span style="color:var(--text-dim);font-size:0.65rem;margin-right:2px">${'↳'.repeat(Math.min(agent.depth, 3))}</span>`
+            : '';
+          return `
+            <div class="subagent-row">
+              <span class="sa-dot ${escHtml(st)}"></span>
+              ${depthPrefix}<span class="sa-label" title="${escHtml(agent.id)}">${escHtml(label)}</span>
+              <span class="sa-status ${escHtml(st)}">${escHtml(st)}</span>
+              ${runtime ? `<span class="sa-meta">${escHtml(runtime)}</span>` : ''}
+            </div>`;
+        }).join('');
+      } catch (_) {
+        // silently fail — widget is supplemental
+      }
+    }
+
     // ─── Init ───────────────────────────────────────────────────────────────
     load();
+    loadSubAgentWidget();
     connectWs();
+    setInterval(loadSubAgentWidget, 30000); // refresh widget every 30s
   </script>
 </body>
 </html>
