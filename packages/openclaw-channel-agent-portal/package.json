@@ -1,0 +1,12 @@
+{
+  "name": "openclaw-channel-agent-portal",
+  "version": "1.0.0",
+  "description": "Agent Portal channel plugin for OpenClaw",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --outDir dist --declaration --module commonjs --target es2020 --esModuleInterop index.ts"
+  },
+  "keywords": ["openclaw", "channel-plugin", "agent-portal"],
+  "license": "MIT"
+}

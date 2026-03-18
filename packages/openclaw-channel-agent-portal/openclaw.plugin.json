@@ -1,0 +1,12 @@
+{
+  "name": "openclaw-channel-agent-portal",
+  "version": "1.0.0",
+  "description": "Agent Portal channel plugin for OpenClaw",
+  "main": "index.js",
+  "channel": {
+    "id": "portal",
+    "displayName": "Agent Portal",
+    "streaming": "partial",
+    "dmPolicy": "open"
+  }
+}

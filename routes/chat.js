@@ -24,8 +24,9 @@
  * @param {Function} deps.pushToAllDevices    — pushToAllDevices(message, senderName): Promise
  * @param {Function} deps.trackUserSend       — trackUserSend(message)
  * @param {Function} deps.pushChatMessage     — pushChatMessage(entry) → boolean
- * @param {Function} deps.getChatState        — () => { authenticated, ws, buffer, sseClients, channelSseClients, lastActiveChannelId, lastActiveSessionKey }
- * @param {Function} deps.setChatState        — ({ lastActiveChannelId?, lastActiveSessionKey? })
+ * @param {Function} deps.getChatState        — () => { authenticated, ws, buffer, sseClients, channelSseClients, lastActiveChannelId, lastActiveSessionKey, sessionChannelMap }
+ * @param {Function} deps.setChatState        — ({ lastActiveChannelId?, lastActiveSessionKey?, sessionChannelMap?: { sessionKey, channelId } })
+ * @param {Map}      deps.sessionChannelMap   — Maps sessionKey → channelId for DM reply routing (shared reference)
  * @param {object}   deps.apns                — apns module
  * @param {string}   deps.publicDir
  * @returns {import('express').Router}
@@ -44,6 +45,7 @@ module.exports = function chatRouter(deps) {
     gatewayClient,
     sendAgentMessage, pushToAllDevices,
     trackUserSend, pushChatMessage, getChatState, setChatState,
+    sessionChannelMap,
     apns,
     publicDir,
   } = deps;
@@ -414,13 +416,27 @@ module.exports = function chatRouter(deps) {
 
   router.post('/channels/:id/messages', requireAuth, async (req, res) => {
     try {
-      const { content, mentions } = req.body;
+      const { content, mentions, is_delta } = req.body;
       if (!content) return res.status(400).json({ error: 'Content required' });
 
       const senderType = req.agent ? 'agent' : 'user';
       const senderId = req.agent?.id || req.user?.id;
       const senderName = req.agent?.name || req.user?.name || 'Unknown';
       const senderEmoji = req.agent ? (AGENTS.find(a => a.id === req.agent.id)?.emoji || '') : '';
+
+      // Delta messages: broadcast as SSE delta, skip DB persistence
+      if (is_delta === true) {
+        const deltaPayload = {
+          content,
+          sender_type: senderType,
+          sender_id: senderId,
+          sender_name: senderName,
+          sender_emoji: senderEmoji,
+          is_delta: true,
+        };
+        broadcastChannelEvent(req.params.id, 'delta', deltaPayload);
+        return res.status(200).json({ ok: true, delta: true });
+      }
 
       const id = uuidv4();
       let message;
@@ -447,13 +463,24 @@ module.exports = function chatRouter(deps) {
           const dmAgent = AGENTS.find(a => a.id === channel.dm_agent_id);
           if (dmAgent) {
             const sessionKeyForAgent = id => `portal:dm-${id}`;
-            setChatState({ lastActiveSessionKey: sessionKeyForAgent(dmAgent.id) });
+            const dmSessionKey = sessionKeyForAgent(dmAgent.id);
+            setChatState({ lastActiveSessionKey: dmSessionKey });
+
+            // Register the session → channel mapping so that when the agent replies
+            // via the native gateway client, wireGatewayClientEvents() routes the
+            // response to this exact channel rather than lastActiveChannelId (which
+            // is a global and can be clobbered by concurrent messages).
+            if (sessionChannelMap) {
+              sessionChannelMap.set(dmSessionKey, req.params.id);
+            } else {
+              setChatState({ sessionChannelMap: { sessionKey: dmSessionKey, channelId: req.params.id } });
+            }
 
             if (gatewayClient.isReady) {
               try {
                 trackUserSend(content);
-                await gatewayClient.send(dmAgent.id, content, message.id);
-                console.log('[channels] DM routed via native gateway client to', dmAgent.id);
+                await gatewayClient.sendUserMessage(dmSessionKey, content, message.id);
+                console.log('[channels] DM routed via native gateway client to', dmAgent.id, '(sessionKey:', dmSessionKey + ')');
               } catch (err) {
                 console.error('[channels] Native client DM failed, falling back:', err.message);
                 if (dmAgent.sessionKey) {
@@ -466,6 +493,12 @@ module.exports = function chatRouter(deps) {
               }
             } else if (dmAgent.sessionKey) {
               setChatState({ lastActiveSessionKey: dmAgent.sessionKey });
+              // Also register in sessionChannelMap so any native-client reply later routes correctly
+              if (sessionChannelMap) {
+                sessionChannelMap.set(dmAgent.sessionKey, req.params.id);
+              } else {
+                setChatState({ sessionChannelMap: { sessionKey: dmAgent.sessionKey, channelId: req.params.id } });
+              }
               try {
                 trackUserSend(content);
                 await chatGatewayRequest('chat.send', { sessionKey: dmAgent.sessionKey, message: content, idempotencyKey: message.id });

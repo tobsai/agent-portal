@@ -203,6 +203,17 @@ let lastActiveSessionKey = CHAT_SESSION_KEY; // tracks which agent session is cu
 let chatGatewayReconnectTimer = null;
 let chatGatewayReqCounter = 0;
 
+/**
+ * Maps gateway session keys → channel IDs so that agent replies route back to
+ * the correct DM (or general) channel when the native client fires a 'message'
+ * event.  Populated by routes/chat.js when a user sends to a channel; read by
+ * wireGatewayClientEvents() below.
+ *
+ * Key:   sessionKey  (e.g. 'portal:dm-lewis')
+ * Value: channelId   (UUID of the channel the reply should route to)
+ */
+const sessionChannelMap = new Map();
+
 function writeSseEvent(res, event, data) {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -218,11 +229,17 @@ function getChatState() {
     channelSseClients,
     lastActiveChannelId,
     lastActiveSessionKey,
+    sessionChannelMap,
   };
 }
 function setChatState(updates) {
   if ('lastActiveChannelId' in updates) lastActiveChannelId = updates.lastActiveChannelId;
   if ('lastActiveSessionKey' in updates) lastActiveSessionKey = updates.lastActiveSessionKey;
+  if ('sessionChannelMap' in updates) {
+    // Caller passes { sessionKey, channelId } — update the shared Map entry
+    const { sessionKey, channelId } = updates.sessionChannelMap;
+    if (sessionKey && channelId) sessionChannelMap.set(sessionKey, channelId);
+  }
 }
 
 function broadcastChatEvent(event, data) {
@@ -378,6 +395,44 @@ async function refreshChatHistoryFromGateway() {
   }
 }
 
+/**
+ * Deliver a webhook POST to the iOS plugin's /inbound endpoint when configured.
+ * Fire-and-forget: does not block sendAgentMessage on webhook success/failure.
+ * Logs errors but does not throw.
+ *
+ * @param {string} channelId
+ * @param {string} content
+ * @param {string} sender
+ * @param {string} timestamp
+ */
+async function deliverWebhook(channelId, content, sender, timestamp) {
+  const webhookUrl = process.env.WEBHOOK_URL;
+  if (!webhookUrl) return; // webhook is optional
+
+  const webhookSecret = process.env.WEBHOOK_SECRET || '';
+  const payload = { type: 'message', channelId, content, sender, timestamp };
+  const body = JSON.stringify(payload);
+
+  try {
+    const crypto = require('crypto');
+    const hmac = crypto.createHmac('sha256', webhookSecret);
+    hmac.update(body);
+    const signature = `sha256=${hmac.digest('hex')}`;
+
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Portal-Signature': signature,
+      },
+      body,
+    });
+  } catch (err) {
+    // Swallow errors — webhook failure must not break message delivery
+    console.error('[webhook] delivery failed:', err.message);
+  }
+}
+
 // ── Unified agent→user message pipeline ────────────────────────────────────
 // All agent message deliveries must flow through this function to guarantee
 // DB persistence, SSE broadcast, and push notification all happen together.
@@ -396,9 +451,10 @@ async function sendAgentMessage(channelId, content, senderName, senderEmoji, sen
     if (!channel) return null;
 
     const id = uuidv4();
+    const timestamp = new Date().toISOString();
     await db.run(
-      'INSERT INTO messages (id, channel_id, sender_type, sender_id, sender_name, sender_emoji, content, mentions) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [id, channel.id, 'agent', senderId, senderName, senderEmoji, content, '[]']
+      'INSERT INTO messages (id, channel_id, sender_type, sender_id, sender_name, sender_emoji, content, mentions, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [id, channel.id, 'agent', senderId, senderName, senderEmoji, content, '[]', timestamp]
     );
     const message = await db.get('SELECT * FROM messages WHERE id = $1', [id]);
     if (message) broadcastChannelEvent(channel.id, 'message', message);
@@ -410,6 +466,9 @@ async function sendAgentMessage(channelId, content, senderName, senderEmoji, sen
       console.error('[sendAgentMessage] Push notification error:', err.message);
     }
 
+    // Webhook delivery — fire-and-forget
+    deliverWebhook(channel.id, content, senderName, timestamp).catch(() => {});
+
     return message || null;
   } catch (err) {
     console.error('[sendAgentMessage] Failed:', err.message);
@@ -417,36 +476,12 @@ async function sendAgentMessage(channelId, content, senderName, senderEmoji, sen
   }
 }
 
-// Stores an agent message from the gateway into the channels DB and broadcasts to channel SSE
 let dbReady = false;
 
-async function storeAgentMessageInChannel(normalizedMsg, sessionKey, channelId = null) {
-  if (!dbReady) return;
-  try {
-    const agent = AGENTS.find(a => a.sessionKey === sessionKey);
-    if (!agent) return;
-
-    let channel;
-    if (channelId) {
-      channel = await db.get('SELECT id FROM channels WHERE id = $1', [channelId]);
-    }
-    // For DM channels: if channelId is a DM channel for this agent, use it; otherwise fall back to general
-    if (!channel) {
-      channel = await db.get("SELECT id FROM channels WHERE name = 'general'");
-    }
-    if (!channel) return;
-
-    const id = uuidv4();
-    await db.run(
-      'INSERT INTO messages (id, channel_id, sender_type, sender_id, sender_name, sender_emoji, content, mentions) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [id, channel.id, 'agent', agent.id, agent.name, agent.emoji, normalizedMsg.text, '[]']
-    );
-    const message = await db.get('SELECT * FROM messages WHERE id = $1', [id]);
-    if (message) broadcastChannelEvent(channel.id, 'message', message);
-  } catch (err) {
-    console.error('[chat-api] storeAgentMessageInChannel failed:', err.message);
-  }
-}
+// NOTE: storeAgentMessageInChannel() was removed 2026-03-18.
+// It was superseded by sendAgentMessage() (the unified pipeline) combined with
+// wireGatewayClientEvents() → sessionChannelMap DM routing.  All agent message
+// persistence now flows through sendAgentMessage().
 
 function connectChatGateway() {
   if (chatGatewayWs && (chatGatewayWs.readyState === WebSocket.OPEN || chatGatewayWs.readyState === WebSocket.CONNECTING)) return;
@@ -549,17 +584,25 @@ connectChatGateway();
 // Once Phase 2 is complete the proxy path (gwProxy) and connectChatGateway will be removed.
 
 function wireGatewayClientEvents() {
-  // chat.delta → typing indicator to all SSE clients
+  // chat.delta → typing indicator to all SSE clients + per-DM-channel SSE
   gatewayClient.on('delta', ({ agentId, sessionKey }) => {
     broadcastChatEvent('typing', { active: true, agentId });
-    // Also broadcast to channel SSE clients watching this session's DM channel
-    // (channel lookup deferred to Phase 2)
+    // Also fan typing indicator to channel SSE subscribers for this session's DM channel
+    const dmChannelId = sessionChannelMap.get(sessionKey);
+    if (dmChannelId) {
+      broadcastChannelEvent(dmChannelId, 'typing', { active: true, agentId });
+    }
   });
 
   // final agent message → push to chat buffer + channel DB + push notifications
   gatewayClient.on('message', async (event) => {
     const { agentId, sessionKey, text, message } = event;
     broadcastChatEvent('typing', { active: false });
+
+    // Resolve the correct channel for this reply:
+    //   1. Per-session DM channel (populated when the user sent the triggering message)
+    //   2. Fall back to lastActiveChannelId (legacy global, catches general-channel messages)
+    const resolvedChannelId = sessionChannelMap.get(sessionKey) || lastActiveChannelId;
 
     // Build a normalized message compatible with the existing chat buffer
     const normalized = normalizeChatMessage({
@@ -576,7 +619,7 @@ function wireGatewayClientEvents() {
     // Persist + broadcast + push via unified pipeline
     if (normalized.text) {
       const agent = AGENTS.find(a => a.sessionKey === sessionKey || a.id === agentId);
-      sendAgentMessage(lastActiveChannelId, normalized.text, agent?.name || 'Agent Portal', agent?.emoji || '', agent?.id || null).catch(() => {});
+      sendAgentMessage(resolvedChannelId, normalized.text, agent?.name || 'Agent Portal', agent?.emoji || '', agent?.id || null).catch(() => {});
     }
   });
 
@@ -713,6 +756,7 @@ app.use('/api', require('./routes/chat')({
   pushChatMessage,
   getChatState,
   setChatState,
+  sessionChannelMap,
   apns,
   publicDir: path.join(__dirname, 'public'),
 }));
