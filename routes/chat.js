@@ -102,6 +102,8 @@ module.exports = function chatRouter(deps) {
   });
 
   router.get('/chat/stream', async (req, res) => {
+    // SSE connections cannot send Authorization headers, so JWT is passed as ?token=
+    // This path runs ONLY when jwtMiddleware (Bearer header) did not already authenticate.
     if (!req.isAuthenticated()) {
       const queryToken = typeof req.query?.token === 'string' ? req.query.token : '';
       if (queryToken && !queryToken.startsWith('ak_')) {
@@ -110,8 +112,17 @@ module.exports = function chatRouter(deps) {
           const user = await db.get('SELECT * FROM users WHERE id = $1', [decoded.userId]);
           if (user) {
             await new Promise((resolve, reject) => req.logIn(user, { session: false }, err => err ? reject(err) : resolve()));
+          } else {
+            console.warn('[auth:chatStream] JWT decoded but user not found, id:', decoded.userId);
           }
-        } catch (err) {}
+        } catch (err) {
+          if (err.name === 'TokenExpiredError') {
+            console.warn('[auth:chatStream] query token expired:', err.message);
+            return res.status(401).json({ error: 'Token expired' });
+          }
+          // Invalid token — log and fall through to the 401 below
+          console.warn('[auth:chatStream] invalid query token:', err.name, err.message);
+        }
       }
     }
     if (!req.isAuthenticated()) return res.status(401).json({ error: 'Authentication required' });
