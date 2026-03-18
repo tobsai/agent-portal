@@ -108,7 +108,13 @@ module.exports = function agentsRouter({ db, AGENTS, requireAuth, requireAdmin, 
   });
 
   // ============ SUBAGENT TREE ============
-  // GET /api/subagents — build spawn tree from signals metadata
+  // GET /api/subagents — build spawn tree from signals metadata.
+  //
+  // NOTE: This is a signals-based workaround. The OpenClaw Gateway does not yet
+  // expose a native sessions.list API. When it does, replace the signals query
+  // below with a gatewayClient._request('sessions.list', { includeEnded: true })
+  // call and map the response to AgentNode shape (see lib/types.js).
+  // See docs/SUBAGENT_API_GAP.md for full context and migration path.
   router.get('/subagents', requireAuth, async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit || '200', 10), 500);
