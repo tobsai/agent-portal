@@ -1,5 +1,7 @@
 'use strict';
 
+const { deliverInboundWebhook } = require('../lib/webhook-delivery');
+
 /**
  * routes/chat.js — /api/chat/*, /api/chat-debug, /api/tts, /api/chat-config,
  *                  /api/chat-sign, /api/model, /api/channels, /api/devices
@@ -475,6 +477,15 @@ module.exports = function chatRouter(deps) {
             } else {
               setChatState({ sessionChannelMap: { sessionKey: dmSessionKey, channelId: req.params.id } });
             }
+
+            // Notify OpenClaw plugin's onInbound() handler — fire-and-forget
+            deliverInboundWebhook({
+              channelId: req.params.id,
+              sessionKey: dmSessionKey,
+              text: content,
+              senderId: senderId || 'user',
+              timestamp: message?.created_at || new Date().toISOString(),
+            }).catch(() => {});
 
             if (gatewayClient.isReady) {
               try {
