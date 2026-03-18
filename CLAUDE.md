@@ -37,8 +37,30 @@ Agent Portal is Talos's personal AI agent dashboard — a real-time web interfac
 npm install       # Install deps
 npm start         # Start server (port from PORT env or 3000)
 npm run dev       # Same — no hot-reload, restart manually
-# No test suite, no lint config
+npm test          # Run test suite (vitest run)
+npm run test:watch      # Watch mode
+npm run test:coverage   # Coverage report (v8)
 ```
+
+## Testing
+
+**Stack**: [Vitest](https://vitest.dev/) v4 + [Supertest](https://github.com/ladjs/supertest)
+
+**Approach**: Integration-style tests via Supertest — full Express app, real route handlers, in-memory SQLite (no live DB, no network calls). Mock at module boundaries (DB injected into `createApp()`), not inside functions.
+
+**Test files**:
+| File | What it covers |
+|------|---------------|
+| `tests/health.test.js` | `GET /api/health` — 200 + `{ status: 'ok' }` |
+| `tests/auth.test.js` | `requireAuth` / `requireAgentKey` — missing token (401), invalid token (401), valid `ak_` key (200/201) |
+| `tests/agents.test.js` | `GET /api/agents` — 200 + array, public endpoint (no auth required) |
+| `tests/work.test.js` | `GET /api/work` — 200 with valid key, 401 without |
+
+**Test helper**: `tests/helpers/createApp.js` — factory that wires an Express app with:
+- In-memory SQLite (`:memory:`) — fully isolated, no disk I/O
+- Seeded test agent (`ak_test_...`) for agent-key auth tests
+- Inline `requireAuth` / `requireAgentKey` that use the test DB, not the `lib/db.js` singleton
+- `broadcast = () => {}` no-op so WebSocket events don't fail silently
 
 ## Current Focus / Next Steps
 - Gateway WebSocket proxy (`/ws/gateway`) is live — chat interface connects to OpenClaw via `gw.mtree.io` tunnel
@@ -67,14 +89,11 @@ agent-portal/
 
 ## ⚠️ Tech Debt & Architectural Problems
 
-### 🔴 Critical: God Object — `server.js` (1,924 lines)
-All routes, WebSocket logic, auth, DB access, and business logic live in a single file. This is the most serious structural problem in the codebase. It makes the code nearly impossible to test, difficult to reason about, and risky to change.
-- **Suggested refactor**: Split into `routes/`, `lib/db.js`, `lib/auth.js`, `lib/websocket.js`, `lib/gateway-proxy.js`, `middleware/`. Each module should have a single responsibility.
+### ~~🔴 Critical: God Object — `server.js`~~ ✅ Resolved
+Refactored from 2,136 → 908 lines. Routes now in `routes/` (health.js, agents.js, work.js, chat.js, scheduled.js); shared code in `lib/` (db.js, auth.js).
 
-### 🔴 No Test Suite
-Zero tests. No devDependencies whatsoever. A 1,924-line monolith with no tests is a liability — every change is a leap of faith.
-- `test-activity-endpoints.sh` is a manual curl script, not an automated test suite.
-- **Suggested fix**: Add Vitest or Jest; start with integration tests for the API routes (at minimum: `/api/health`, `/api/work`, `/api/subagents`). Use `supertest` for HTTP-level tests.
+### ~~🔴 No Test Suite~~ ✅ Resolved
+Vitest + Supertest suite added. 13 tests across 4 files. In-memory SQLite isolation. Run with `npm test`.
 
 ### 🟡 CI Workflow Is Wrong
 `.github/workflows/deploy.yml` uses a Railway GraphQL mutation to force a deploy on push. This is unnecessary — Railway already auto-deploys via GitHub integration. Worse, if both run simultaneously, you risk duplicate deploys.

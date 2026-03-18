@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@sentry/node": "^8.0.0",
@@ -23,5 +26,11 @@
   },
   "optionalDependencies": {
     "better-sqlite3": "^9.4.3"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.0",
+    "better-sqlite3": "^12.8.0",
+    "supertest": "^7.2.2",
+    "vitest": "^4.1.0"
   }
 }
