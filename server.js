@@ -816,6 +816,9 @@ app.get('/subagents', requireAuth, (req, res) => {
 // ============ SCHEDULED TASKS ============
 app.use('/api', require('./routes/scheduled')({ db, requireAuth, requireAgentKey }));
 
+// ============ ACTIVITY FEED ============
+app.use('/api', require('./routes/activity')({ db, requireAuth }));
+
 // ============ HEALTH CHECK ============
 app.use('/api', require('./routes/health')({
   gatewayClient,

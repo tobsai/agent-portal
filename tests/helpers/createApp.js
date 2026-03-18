@@ -183,6 +183,8 @@ function createApp(opts = {}) {
   const healthRouter    = require('../../routes/health');
   const agentsRouter    = require('../../routes/agents');
   const workRouter      = require('../../routes/work');
+  const scheduledRouter = require('../../routes/scheduled');
+  const activityRouter  = require('../../routes/activity');
 
   app.use('/api', healthRouter({
     gatewayClient: { isReady: false, ws: null },
@@ -206,6 +208,10 @@ function createApp(opts = {}) {
     broadcast,
     publicDir: __dirname,
   }));
+
+  app.use('/api', scheduledRouter({ db, requireAuth, requireAgentKey }));
+
+  app.use('/api', activityRouter({ db, requireAuth }));
 
   return { app, db, testAgentKey };
 }
