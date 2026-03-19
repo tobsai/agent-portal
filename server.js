@@ -30,6 +30,11 @@ const { JWT_SECRET, configurePassport, jwtMiddleware, requireAuth, requireAgentK
 // ── Native Gateway Client (Phase 1: OpenClaw channel integration) ──────────
 const { gatewayClient, sessionKeyForAgent, agentIdForSessionKey } = require('./lib/gateway-client');
 
+// ── Extracted modules (NEXT-027 Part 1) ────────────────────────────────────
+const createChatState = require('./lib/chat-state');
+const createBroadcast = require('./lib/broadcast');
+const createChatGateway = require('./lib/chat-gateway');
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ noServer: true });
@@ -159,285 +164,28 @@ gwProxy.on('connection', (clientWs, req) => {
   clientWs.on('error', () => { if (gwWs.readyState === WebSocket.OPEN || gwWs.readyState === WebSocket.CONNECTING) gwWs.close(); });
 });
 
-// ============ AGENTS REGISTRY ============
-const AGENTS = [
-  { id: 'lewis', name: 'Lewis', emoji: '📚', sessionKey: 'agent:main:main', avatarUrl: '/assets/lewis-avatar.png' },
-  { id: 'marty', name: 'Marty', emoji: '🎯', sessionKey: 'agent:marty:main', avatarUrl: '/assets/marty-avatar.jpg' },
-  { id: 'pascal', name: 'Pascal', emoji: '⚙️', sessionKey: 'agent:pascal:main', avatarUrl: '/assets/pascal-avatar.jpg' },
-  { id: 'milton', name: 'Milton', emoji: '💰', sessionKey: 'agent:milton:main', avatarUrl: '/assets/milton-avatar.jpg' }
-];
+// ============ CHAT STATE (extracted) ============
+const chatState = createChatState();
+const {
+  AGENTS,
+  CHAT_SESSION_KEY,
+  CHAT_BUFFER_LIMIT,
+  chatSseClients,
+  channelSseClients,
+  sessionChannelMap,
+  trackUserSend,
+  pushChatMessage,
+  getChatState,
+  setChatState,
+} = chatState;
 
-// ============ CHAT GATEWAY ============
+// ============ BROADCAST (extracted) ============
+const { broadcastChatEvent, broadcastChannelEvent } = createBroadcast({
+  chatSseClients,
+  channelSseClients,
+});
 
-/**
- * Resolve an agent from a session key or agentId.
- * Handles sub-agent keys like "agent:main:subagent:uuid" by extracting the parent agent.
- * Falls back to agentId string match.
- */
-function resolveAgent(sessionKey, agentId) {
-  // Direct session key match first
-  let agent = AGENTS.find(a => a.sessionKey === sessionKey);
-  if (agent) return agent;
-
-  // Direct agentId match
-  if (agentId) {
-    agent = AGENTS.find(a => a.id === agentId);
-    if (agent) return agent;
-  }
-
-  // Parse sub-agent session keys: "agent:<parentAgentId>:subagent:<uuid>"
-  if (sessionKey) {
-    const parts = sessionKey.split(':');
-    if (parts.length >= 2 && parts[0] === 'agent') {
-      const parentAgentId = parts[1];
-      // Map 'main' to 'lewis'
-      const mappedId = parentAgentId === 'main' ? 'lewis' : parentAgentId;
-      agent = AGENTS.find(a => a.id === mappedId);
-      if (agent) return agent;
-    }
-  }
-
-  return null;
-}
-
-const CHAT_SESSION_KEY = 'agent:main:main';
-const CHAT_BUFFER_LIMIT = 200;
-const chatMessageBuffer = [];
-const chatSseClients = new Set();
-const gatewayPendingReqs = new Map();
-const recentUserSends = new Map();
-const RECENT_USER_SEND_TTL = 30000;
-
-function userContentKey(text) { return (text || '').slice(0, 200); }
-function trackUserSend(text) {
-  const key = userContentKey(text);
-  recentUserSends.set(key, Date.now());
-  if (recentUserSends.size > 50) {
-    const now = Date.now();
-    for (const [k, ts] of recentUserSends) {
-      if (now - ts > RECENT_USER_SEND_TTL) recentUserSends.delete(k);
-    }
-  }
-}
-function isRecentUserSend(text) {
-  const key = userContentKey(text);
-  const ts = recentUserSends.get(key);
-  if (!ts) return false;
-  if (Date.now() - ts > RECENT_USER_SEND_TTL) { recentUserSends.delete(key); return false; }
-  recentUserSends.delete(key);
-  return true;
-}
-
-let chatGatewayWs = null;
-let chatGatewayAuthenticated = false;
-// Track last channel that sent a message so agent replies go back to the right channel
-let lastActiveChannelId = null;
-let lastActiveSessionKey = CHAT_SESSION_KEY; // tracks which agent session is currently active
-let chatGatewayReconnectTimer = null;
-let chatGatewayReqCounter = 0;
-
-/**
- * Maps gateway session keys → channel IDs so that agent replies route back to
- * the correct DM (or general) channel when the native client fires a 'message'
- * event.  Populated by routes/chat.js when a user sends to a channel; read by
- * wireGatewayClientEvents() below.
- *
- * Key:   sessionKey  (e.g. 'portal:dm-lewis')
- * Value: channelId   (UUID of the channel the reply should route to)
- */
-const sessionChannelMap = new Map();
-
-function writeSseEvent(res, event, data) {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
-/** Helper: expose mutable chat state to route modules */
-function getChatState() {
-  return {
-    authenticated: chatGatewayAuthenticated,
-    ws: chatGatewayWs,
-    buffer: chatMessageBuffer,
-    sseClients: chatSseClients,
-    channelSseClients,
-    lastActiveChannelId,
-    lastActiveSessionKey,
-    sessionChannelMap,
-  };
-}
-function setChatState(updates) {
-  if ('lastActiveChannelId' in updates) lastActiveChannelId = updates.lastActiveChannelId;
-  if ('lastActiveSessionKey' in updates) lastActiveSessionKey = updates.lastActiveSessionKey;
-  if ('sessionChannelMap' in updates) {
-    // Caller passes { sessionKey, channelId } — update the shared Map entry
-    const { sessionKey, channelId } = updates.sessionChannelMap;
-    if (sessionKey && channelId) sessionChannelMap.set(sessionKey, channelId);
-  }
-}
-
-function broadcastChatEvent(event, data) {
-  for (const client of chatSseClients) {
-    writeSseEvent(client.res, event, data);
-  }
-}
-
-// ============ CHANNEL SSE ============
-const channelSseClients = new Map(); // channelId -> Set<{res, userId}>
-
-function broadcastChannelEvent(channelId, event, data) {
-  const clients = channelSseClients.get(channelId);
-  if (clients) {
-    for (const client of clients) {
-      writeSseEvent(client.res, event, data);
-    }
-  }
-  const allClients = channelSseClients.get('__all__');
-  if (allClients) {
-    for (const client of allClients) {
-      writeSseEvent(client.res, event, { ...data, channelId });
-    }
-  }
-}
-
-function normalizeChatText(content) {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter(part => part && part.type === 'text' && typeof part.text === 'string')
-      .map(part => part.text)
-      .join('\n');
-  }
-  return '';
-}
-
-function looksLikeToolOutput(text) {
-  if (!text || text.length < 5) return false;
-  const trimmed = text.trim();
-  if (/^\{"data":\{/.test(trimmed)) return true;
-  if (/^\{"errors":\[/.test(trimmed)) return true;
-  if (/^[\s\S]*➜\s/.test(trimmed) && trimmed.includes('workspace')) return true;
-  if (trimmed.startsWith('ID:') && trimmed.includes('Vault:')) return true;
-  return false;
-}
-
-function normalizeChatMessage(message) {
-  if (!message || (message.role !== 'user' && message.role !== 'assistant')) return null;
-  const text = normalizeChatText(message.content || message.text || '');
-  if (!text) return null;
-  if (message.role === 'assistant' && looksLikeToolOutput(text)) return null;
-  const id = message.id || `msg-${message.role}-${simpleHash(text)}-${Math.floor(Date.now() / 15000)}`;
-  return {
-    id,
-    role: message.role,
-    text,
-    timestamp: message.timestamp || new Date().toISOString(),
-    status: message.status || 'delivered'
-  };
-}
-
-function simpleHash(str) {
-  let hash = 0;
-  for (let i = 0; i < Math.min(str.length, 200); i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(36);
-}
-
-function pushChatMessage(message) {
-  const index = chatMessageBuffer.findIndex(m => m.id === message.id);
-  if (index >= 0) { chatMessageBuffer[index] = message; return false; }
-  const msgTime = new Date(message.timestamp || Date.now()).getTime();
-  const dup = chatMessageBuffer.find(m =>
-    m.role === message.role && m.text === message.text &&
-    Math.abs(new Date(m.timestamp || 0).getTime() - msgTime) < 30000
-  );
-  if (dup) return false;
-  chatMessageBuffer.push(message);
-  while (chatMessageBuffer.length > CHAT_BUFFER_LIMIT) chatMessageBuffer.shift();
-  return true;
-}
-
-function buildGatewayConnectParams(nonce = '') {
-  const token = process.env.GATEWAY_TOKEN || '';
-  const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';
-  const publicKeyB64 = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
-  const params = {
-    minProtocol: 3, maxProtocol: 3,
-    client: { id: 'webchat-ui', version: '1.0.0', platform: 'web', mode: 'webchat' },
-    role: 'operator',
-    scopes: ['operator.read', 'operator.write', 'operator.admin'],
-    auth: { token },
-    userAgent: 'agent-portal-chat-api/1.0'
-  };
-
-  if (privateKeyPem && publicKeyB64) {
-    try {
-      const crypto = require('crypto');
-      const raw = Buffer.from(publicKeyB64, 'base64url');
-      const deviceId = crypto.createHash('sha256').update(raw).digest('hex');
-      const signedAt = Date.now();
-      const scopes = 'operator.read,operator.write,operator.admin';
-      const payload = ['v2', deviceId, 'webchat-ui', 'webchat', 'operator', scopes, String(signedAt), token, nonce].join('|');
-      const privKey = crypto.createPrivateKey({ key: privateKeyPem, format: 'pem', type: 'pkcs8' });
-      const sig = crypto.sign(null, Buffer.from(payload), privKey);
-      params.device = { id: deviceId, publicKey: publicKeyB64, signature: sig.toString('base64url'), signedAt, nonce };
-    } catch (err) {
-      console.error('[chat-api] device auth signing failed:', err.message);
-    }
-  }
-
-  return params;
-}
-
-function scheduleChatGatewayReconnect() {
-  if (chatGatewayReconnectTimer) return;
-  chatGatewayReconnectTimer = setTimeout(() => {
-    chatGatewayReconnectTimer = null;
-    connectChatGateway();
-  }, 3000);
-}
-
-function chatGatewayRequest(method, params, timeoutMs = 15000) {
-  return new Promise((resolve, reject) => {
-    if (!chatGatewayWs || chatGatewayWs.readyState !== WebSocket.OPEN || !chatGatewayAuthenticated) {
-      reject(new Error('Gateway not connected'));
-      return;
-    }
-    const id = `chat-${Date.now()}-${++chatGatewayReqCounter}`;
-    const timer = setTimeout(() => {
-      gatewayPendingReqs.delete(id);
-      reject(new Error(`${method} timed out`));
-    }, timeoutMs);
-    gatewayPendingReqs.set(id, {
-      resolve: (payload) => { clearTimeout(timer); resolve(payload); },
-      reject: (error) => { clearTimeout(timer); reject(error); }
-    });
-    chatGatewayWs.send(JSON.stringify({ type: 'req', id, method, params }));
-  });
-}
-
-async function refreshChatHistoryFromGateway() {
-  try {
-    const response = await chatGatewayRequest('chat.history', { sessionKey: CHAT_SESSION_KEY });
-    const history = (response.payload?.messages || []).map(normalizeChatMessage).filter(Boolean);
-    chatMessageBuffer.length = 0;
-    history.slice(-CHAT_BUFFER_LIMIT).forEach(pushChatMessage);
-  } catch (err) {
-    console.error('[chat-api] failed to refresh history:', err.message);
-  }
-}
-
-/**
- * Deliver a webhook POST to the iOS plugin's /inbound endpoint when configured.
- * Fire-and-forget: does not block sendAgentMessage on webhook success/failure.
- * Logs errors but does not throw.
- *
- * @param {string} channelId
- * @param {string} content
- * @param {string} sender
- * @param {string} timestamp
- */
+// ============ WEBHOOK DELIVERY ============
 async function deliverWebhook(channelId, content, sender, timestamp) {
   const webhookUrl = process.env.WEBHOOK_URL;
   if (!webhookUrl) return; // webhook is optional
@@ -467,11 +215,10 @@ async function deliverWebhook(channelId, content, sender, timestamp) {
 }
 
 // ── Unified agent→user message pipeline ────────────────────────────────────
-// All agent message deliveries must flow through this function to guarantee
-// DB persistence, SSE broadcast, and push notification all happen together.
+let dbReady = false;
+
 async function sendAgentMessage(channelId, content, senderName, senderEmoji, senderId) {
   if (!dbReady || !content) return null;
-  // sender_id is NOT NULL in the DB — fall back to a reasonable default
   if (!senderId) senderId = (senderName || 'agent').toLowerCase().replace(/\s+/g, '-');
   try {
     let channel;
@@ -509,173 +256,28 @@ async function sendAgentMessage(channelId, content, senderName, senderEmoji, sen
   }
 }
 
-let dbReady = false;
+// ============ CHAT GATEWAY (extracted) ============
+const chatGateway = createChatGateway({
+  chatState,
+  broadcast: { broadcastChatEvent, broadcastChannelEvent },
+  sendAgentMessage,
+  gatewayClient,
+});
+const { connectChatGateway, chatGatewayRequest } = chatGateway;
 
-// NOTE: storeAgentMessageInChannel() was removed 2026-03-18.
-// It was superseded by sendAgentMessage() (the unified pipeline) combined with
-// wireGatewayClientEvents() → sessionChannelMap DM routing.  All agent message
-// persistence now flows through sendAgentMessage().
-
-function connectChatGateway() {
-  if (chatGatewayWs && (chatGatewayWs.readyState === WebSocket.OPEN || chatGatewayWs.readyState === WebSocket.CONNECTING)) return;
-  const rawGwUrl = (process.env.GATEWAY_WS_URL || '').trim();
-  if (!rawGwUrl) return;
-  const gwUrl = rawGwUrl.replace(/^https?/, 'ws').replace(/^(?!wss?:\/\/)/, 'wss://');
-
-  chatGatewayWs = new WebSocket(gwUrl, { headers: { Origin: 'https://talos.mtree.io' } });
-
-  chatGatewayWs.on('message', async (data, isBinary) => {
-    const text = isBinary ? data : data.toString();
-    let msg;
-    try {
-      msg = JSON.parse(text);
-    } catch {
-      return;
-    }
-
-    if (msg.event === 'connect.challenge') {
-      const connectId = `chat-connect-${Date.now()}`;
-      chatGatewayWs.send(JSON.stringify({ type: 'req', id: connectId, method: 'connect', params: buildGatewayConnectParams(msg.payload?.nonce || '') }));
-      return;
-    }
-
-    if (msg.type === 'res' && typeof msg.id === 'string' && msg.id.startsWith('chat-connect-')) {
-      chatGatewayAuthenticated = !!msg.ok;
-      broadcastChatEvent('status', { connected: chatGatewayAuthenticated });
-      if (!msg.ok) {
-        broadcastChatEvent('error', { message: msg.error?.message || 'Gateway auth failed' });
-        return;
-      }
-      // No chat.subscribe needed — gateway pushes chat/agent events automatically after connect
-      await refreshChatHistoryFromGateway();
-      return;
-    }
-
-    if (msg.type === 'res' && gatewayPendingReqs.has(msg.id)) {
-      const pending = gatewayPendingReqs.get(msg.id);
-      gatewayPendingReqs.delete(msg.id);
-      if (msg.ok) pending.resolve(msg);
-      else pending.reject(new Error(msg.error?.message || 'Gateway request failed'));
-      return;
-    }
-
-    if (msg.event === 'chat') {
-      const payload = msg.payload || msg.data || {};
-      const state = payload.state;
-      // Determine which agent this event is from
-      const eventSessionKey = payload.sessionKey || lastActiveSessionKey;
-      const eventAgent = resolveAgent(eventSessionKey, payload.agentId);
-      if (state === 'delta') {
-        broadcastChatEvent('typing', { active: true, agentId: eventAgent?.id });
-        return;
-      }
-      if (state === 'error') {
-        broadcastChatEvent('typing', { active: false });
-        broadcastChatEvent('error', { message: payload.errorMessage || 'Agent error' });
-        return;
-      }
-      if (state === 'final') {
-        broadcastChatEvent('typing', { active: false });
-      }
-      const normalized = normalizeChatMessage(payload.message || payload);
-      if (normalized) {
-        if (normalized.role === 'user' && isRecentUserSend(normalized.text)) {
-          return;
-        }
-        const added = pushChatMessage(normalized);
-        if (!added) return;
-        broadcastChatEvent('message', normalized);
-        // Persist + broadcast + push via unified pipeline for agent messages
-        if (normalized.role === 'assistant' && normalized.text) {
-          const agentName = eventAgent?.name || 'Agent Portal';
-          const agentEmoji = eventAgent?.emoji || '';
-          const agentId = eventAgent?.id || null;
-          sendAgentMessage(lastActiveChannelId, normalized.text, agentName, agentEmoji, agentId).catch(() => {});
-        }
-      }
-    }
-  });
-
-  chatGatewayWs.on('close', () => {
-    chatGatewayAuthenticated = false;
-    broadcastChatEvent('status', { connected: false });
-    for (const [id, pending] of gatewayPendingReqs.entries()) {
-      pending.reject(new Error('Gateway disconnected'));
-      gatewayPendingReqs.delete(id);
-    }
-    scheduleChatGatewayReconnect();
-  });
-
-  chatGatewayWs.on('error', () => {});
+// Augment getChatState to include gateway-owned fields
+const originalGetChatState = getChatState;
+function getFullChatState() {
+  const state = originalGetChatState();
+  const gwState = chatGateway.getGatewayState();
+  return { ...state, authenticated: gwState.authenticated, ws: gwState.ws };
 }
 
 connectChatGateway();
 
 // ── Phase 1: Wire native gateway client events ─────────────────────────────
-// The native client (lib/gateway-client.js) connects directly to ws://127.0.0.1:18789.
-// It supplements the existing proxy path; both can run in parallel during rollout.
-// Once Phase 2 is complete the proxy path (gwProxy) and connectChatGateway will be removed.
-
-function wireGatewayClientEvents() {
-  // chat.delta → typing indicator to all SSE clients + per-DM-channel SSE
-  gatewayClient.on('delta', ({ agentId, sessionKey }) => {
-    broadcastChatEvent('typing', { active: true, agentId });
-    // Also fan typing indicator to channel SSE subscribers for this session's DM channel
-    const dmChannelId = sessionChannelMap.get(sessionKey);
-    if (dmChannelId) {
-      broadcastChannelEvent(dmChannelId, 'typing', { active: true, agentId });
-    }
-  });
-
-  // final agent message → push to chat buffer + channel DB + push notifications
-  gatewayClient.on('message', async (event) => {
-    const { agentId, sessionKey, text, message } = event;
-    broadcastChatEvent('typing', { active: false });
-
-    // Resolve the correct channel for this reply:
-    //   1. Per-session DM channel (populated when the user sent the triggering message)
-    //   2. Fall back to lastActiveChannelId (legacy global, catches general-channel messages)
-    const resolvedChannelId = sessionChannelMap.get(sessionKey) || lastActiveChannelId;
-
-    // Build a normalized message compatible with the existing chat buffer
-    const normalized = normalizeChatMessage({
-      role: 'assistant',
-      content: text || message?.content || '',
-      id: `gw-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-    });
-    if (!normalized) return;
-
-    const added = pushChatMessage(normalized);
-    if (added) broadcastChatEvent('message', normalized);
-
-    // Persist + broadcast + push via unified pipeline
-    if (normalized.text) {
-      const agent = resolveAgent(sessionKey, agentId);
-      sendAgentMessage(resolvedChannelId, normalized.text, agent?.name || 'Agent Portal', agent?.emoji || '', agent?.id || null).catch(() => {});
-    }
-  });
-
-  gatewayClient.on('agentError', ({ agentId, errorMessage }) => {
-    broadcastChatEvent('typing', { active: false });
-    broadcastChatEvent('error', { message: errorMessage || 'Agent error' });
-  });
-
-  gatewayClient.on('connected', () => {
-    console.log('[gateway-client] native connection ready');
-    broadcastChatEvent('status', { connected: true, native: true });
-  });
-
-  gatewayClient.on('disconnected', () => {
-    console.log('[gateway-client] native connection lost, reconnecting...');
-    broadcastChatEvent('status', { connected: false, native: true });
-  });
-}
-
-// Start native gateway client (connects to ws://127.0.0.1:18789)
-// Only if GATEWAY_TOKEN is set (same guard as the existing proxy path)
 if (process.env.GATEWAY_TOKEN) {
-  wireGatewayClientEvents();
+  chatGateway.wireGatewayClientEvents();
   gatewayClient.connect();
   console.log('[gateway-client] native client starting');
 }
@@ -738,12 +340,9 @@ function broadcast(event, data) {
 // JWT auth middleware for mobile app — runs before API routes
 app.use('/api', jwtMiddleware(db));
 
-// requireAuth, requireAgentKey, requireAdmin imported from lib/auth
-
 // ============ STATIC ============
 app.get('/', (req, res) => {
   if (req.isAuthenticated()) return res.redirect('/chat');
-  // Show login page if it exists, otherwise redirect to Google OAuth
   const loginPath = path.join(__dirname, 'public', 'login.html');
   if (require('fs').existsSync(loginPath)) return res.sendFile(loginPath);
   res.redirect('/auth/google');
@@ -790,7 +389,7 @@ app.use('/api', require('./routes/chat')({
   pushToAllDevices,
   trackUserSend,
   pushChatMessage,
-  getChatState,
+  getChatState: getFullChatState,
   setChatState,
   sessionChannelMap,
   apns,
@@ -877,7 +476,7 @@ app.use('/api', require('./routes/activity')({ db, requireAuth }));
 // ============ HEALTH CHECK ============
 app.use('/api', require('./routes/health')({
   gatewayClient,
-  getChatState: () => ({ authenticated: chatGatewayAuthenticated, ws: chatGatewayWs }),
+  getChatState: () => chatGateway.getGatewayState(),
 }));
 
 // ============ ERROR HANDLING ============
