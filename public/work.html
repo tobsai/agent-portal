@@ -566,6 +566,116 @@
       text-align: center;
       padding: 0.75rem 0;
     }
+
+    /* ─── Sub-Agent Metrics ─── */
+    .sa-metrics {
+      margin: 0.75rem 0;
+      padding: 0.75rem 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sa-metric-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .sa-metric-item {
+      text-align: center;
+      padding: 0.5rem;
+      background: rgba(255,255,255,0.02);
+      border-radius: 6px;
+    }
+
+    .sa-metric-label {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      margin-bottom: 0.3rem;
+    }
+
+    .sa-metric-value {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .sa-metric-value.error {
+      color: var(--red);
+    }
+
+    /* ─── Sub-Agent Chart (CSS-only bars) ─── */
+    .sa-chart-container {
+      margin: 0.75rem 0;
+      padding: 0.75rem 0;
+    }
+
+    .sa-chart-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      margin-bottom: 0.75rem;
+      padding: 0 0.5rem;
+    }
+
+    #sa-chart-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      padding: 0 0.5rem;
+    }
+
+    .sa-chart-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .sa-chart-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      min-width: 100px;
+      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .sa-chart-bar-track {
+      flex: 1;
+      height: 22px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sa-chart-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent) 0%, rgba(129,140,248,0.6) 100%);
+      border-radius: 4px;
+      transition: width 0.4s ease-out;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 0.4rem;
+    }
+
+    .sa-chart-bar-count {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      text-shadow: 0 0 4px rgba(0,0,0,0.8);
+    }
   </style>
 </head>
 <body>
@@ -606,8 +716,41 @@
           🤖 Sub-Agent Activity
           <span class="live-badge" id="sa-live-badge" style="display:none">live</span>
         </div>
-        <a href="/subagents" class="subagent-widget-link">Full tree →</a>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <button class="btn-sm" id="sa-refresh-btn" onclick="loadSubAgentWidget()" style="font-size:0.7rem;padding:0.2rem 0.5rem">Refresh</button>
+          <a href="/subagents" class="subagent-widget-link">Full tree →</a>
+        </div>
       </div>
+      
+      <!-- Metrics Summary -->
+      <div class="sa-metrics" id="sa-metrics" style="display:none;">
+        <div class="sa-metric-row">
+          <div class="sa-metric-item">
+            <div class="sa-metric-label">Spawned Today</div>
+            <div class="sa-metric-value" id="sa-total">—</div>
+          </div>
+          <div class="sa-metric-item">
+            <div class="sa-metric-label">Avg Duration</div>
+            <div class="sa-metric-value" id="sa-avg-duration">—</div>
+          </div>
+          <div class="sa-metric-item">
+            <div class="sa-metric-label">Most Active</div>
+            <div class="sa-metric-value" id="sa-most-active">—</div>
+          </div>
+          <div class="sa-metric-item">
+            <div class="sa-metric-label">Recent Failures</div>
+            <div class="sa-metric-value" id="sa-failures">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="sa-chart-container" id="sa-chart-container" style="display:none;">
+        <div class="sa-chart-title">Spawn Count by Agent (Today)</div>
+        <div id="sa-chart-bars"></div>
+      </div>
+
+      <!-- Recent agents list (existing) -->
       <div class="subagent-rows" id="subagent-rows">
         <div class="subagent-empty">Loading…</div>
       </div>
@@ -870,12 +1013,29 @@
       return `${Math.floor(mins / 60)}h ${mins % 60}m`;
     }
 
+    function formatDuration(secs) {
+      if (!secs) return '0s';
+      const mins = Math.floor(secs / 60);
+      const s = secs % 60;
+      if (mins === 0) return `${s}s`;
+      return `${mins}m ${s}s`;
+    }
+
     function flattenTree(nodes, result = []) {
       for (const n of nodes) {
         result.push(n);
         if (n.children && n.children.length) flattenTree(n.children, result);
       }
       return result;
+    }
+
+    function isTodayUTC(dateStr) {
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      const now = new Date();
+      return d.getUTCFullYear() === now.getUTCFullYear()
+          && d.getUTCMonth() === now.getUTCMonth()
+          && d.getUTCDate() === now.getUTCDate();
     }
 
     async function loadSubAgentWidget() {
@@ -887,6 +1047,8 @@
 
         const rowsEl = document.getElementById('subagent-rows');
         const liveBadge = document.getElementById('sa-live-badge');
+        const metricsEl = document.getElementById('sa-metrics');
+        const chartEl = document.getElementById('sa-chart-container');
 
         // Show live badge if any active agents
         const hasActive = all.some(a => a.status === 'active');
@@ -894,9 +1056,91 @@
 
         if (!all.length) {
           rowsEl.innerHTML = '<div class="subagent-empty">No sub-agent activity yet.</div>';
+          metricsEl.style.display = 'none';
+          chartEl.style.display = 'none';
           return;
         }
 
+        // ─── Filter to today's agents ───
+        const today = all.filter(a => isTodayUTC(a.startedAt));
+
+        if (today.length === 0) {
+          metricsEl.style.display = 'none';
+          chartEl.style.display = 'none';
+          rowsEl.innerHTML = '<div class="subagent-empty">No sub-agent activity today.</div>';
+          return;
+        }
+
+        // ─── Metrics Computation ───
+        const completed = today.filter(a => a.endedAt && a.runtime);
+        const failures = today.filter(a => a.status === 'error');
+
+        // 1. Total spawned today
+        const totalToday = today.length;
+
+        // 2. Average duration (completed only)
+        let avgDuration = '—';
+        if (completed.length > 0) {
+          const totalRuntime = completed.reduce((sum, a) => sum + (a.runtime || 0), 0);
+          avgDuration = formatDuration(Math.floor(totalRuntime / completed.length));
+        }
+
+        // 3. Most active agent (by spawn count)
+        const agentCounts = {};
+        today.forEach(a => {
+          const name = a.label || a.id.slice(0, 24);
+          agentCounts[name] = (agentCounts[name] || 0) + 1;
+        });
+        const topAgent = Object.entries(agentCounts).sort((a, b) => b[1] - a[1])[0];
+        const mostActive = topAgent ? `${topAgent[0]} — ${topAgent[1]} run${topAgent[1] > 1 ? 's' : ''}` : '—';
+
+        // 4. Recent failures
+        const failureCount = failures.length;
+        const lastFailure = failures.length > 0
+          ? failures.sort((a, b) => new Date(b.startedAt || 0) - new Date(a.startedAt || 0))[0]
+          : null;
+        const failureText = failureCount > 0
+          ? (lastFailure && lastFailure.signals && lastFailure.signals.length > 0
+              ? lastFailure.signals[lastFailure.signals.length - 1].message.slice(0, 40) + '…'
+              : `${failureCount} failure${failureCount > 1 ? 's' : ''}`)
+          : '—';
+
+        // ─── Render Metrics ───
+        document.getElementById('sa-total').textContent = totalToday;
+        document.getElementById('sa-avg-duration').textContent = avgDuration;
+        document.getElementById('sa-most-active').textContent = mostActive;
+        const failEl = document.getElementById('sa-failures');
+        failEl.textContent = failureText;
+        failEl.className = 'sa-metric-value' + (failureCount > 0 ? ' error' : '');
+
+        metricsEl.style.display = 'block';
+
+        // ─── Render Chart (CSS bars) ───
+        const sortedAgents = Object.entries(agentCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5); // top 5
+
+        if (sortedAgents.length > 0) {
+          const maxCount = sortedAgents[0][1];
+          const barsHtml = sortedAgents.map(([name, count]) => {
+            const widthPct = (count / maxCount) * 100;
+            return `
+              <div class="sa-chart-bar">
+                <div class="sa-chart-label" title="${escHtml(name)}">${escHtml(name)}</div>
+                <div class="sa-chart-bar-track">
+                  <div class="sa-chart-bar-fill" style="width:${widthPct}%">
+                    <span class="sa-chart-bar-count">${count}</span>
+                  </div>
+                </div>
+              </div>`;
+          }).join('');
+          document.getElementById('sa-chart-bars').innerHTML = barsHtml;
+          chartEl.style.display = 'block';
+        } else {
+          chartEl.style.display = 'none';
+        }
+
+        // ─── Render Recent List (existing) ───
         // Show most recent 5, newest first (sorted by startedAt desc)
         const sorted = [...all].sort((a, b) =>
           new Date(b.startedAt || 0) - new Date(a.startedAt || 0)
@@ -905,7 +1149,7 @@
         rowsEl.innerHTML = sorted.map(agent => {
           const label = agent.label || agent.id.slice(0, 24);
           const st = agent.status || 'unknown';
-          const runtime = agent.runtime ? formatRuntime(agent.runtime) : '';
+          const runtime = agent.runtime ? formatRuntime(agent.runtime * 1000) : '';
           const depthPrefix = agent.depth > 0
             ? `<span style="color:var(--text-dim);font-size:0.65rem;margin-right:2px">${'↳'.repeat(Math.min(agent.depth, 3))}</span>`
             : '';
@@ -917,7 +1161,8 @@
               ${runtime ? `<span class="sa-meta">${escHtml(runtime)}</span>` : ''}
             </div>`;
         }).join('');
-      } catch (_) {
+      } catch (err) {
+        console.error('[loadSubAgentWidget] error:', err);
         // silently fail — widget is supplemental
       }
     }
