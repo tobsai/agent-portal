@@ -167,6 +167,38 @@ const AGENTS = [
 ];
 
 // ============ CHAT GATEWAY ============
+
+/**
+ * Resolve an agent from a session key or agentId.
+ * Handles sub-agent keys like "agent:main:subagent:uuid" by extracting the parent agent.
+ * Falls back to agentId string match.
+ */
+function resolveAgent(sessionKey, agentId) {
+  // Direct session key match first
+  let agent = AGENTS.find(a => a.sessionKey === sessionKey);
+  if (agent) return agent;
+
+  // Direct agentId match
+  if (agentId) {
+    agent = AGENTS.find(a => a.id === agentId);
+    if (agent) return agent;
+  }
+
+  // Parse sub-agent session keys: "agent:<parentAgentId>:subagent:<uuid>"
+  if (sessionKey) {
+    const parts = sessionKey.split(':');
+    if (parts.length >= 2 && parts[0] === 'agent') {
+      const parentAgentId = parts[1];
+      // Map 'main' to 'lewis'
+      const mappedId = parentAgentId === 'main' ? 'lewis' : parentAgentId;
+      agent = AGENTS.find(a => a.id === mappedId);
+      if (agent) return agent;
+    }
+  }
+
+  return null;
+}
+
 const CHAT_SESSION_KEY = 'agent:main:main';
 const CHAT_BUFFER_LIMIT = 200;
 const chatMessageBuffer = [];
@@ -531,7 +563,7 @@ function connectChatGateway() {
       const state = payload.state;
       // Determine which agent this event is from
       const eventSessionKey = payload.sessionKey || lastActiveSessionKey;
-      const eventAgent = AGENTS.find(a => a.sessionKey === eventSessionKey);
+      const eventAgent = resolveAgent(eventSessionKey, payload.agentId);
       if (state === 'delta') {
         broadcastChatEvent('typing', { active: true, agentId: eventAgent?.id });
         return;
@@ -618,7 +650,7 @@ function wireGatewayClientEvents() {
 
     // Persist + broadcast + push via unified pipeline
     if (normalized.text) {
-      const agent = AGENTS.find(a => a.sessionKey === sessionKey || a.id === agentId);
+      const agent = resolveAgent(sessionKey, agentId);
       sendAgentMessage(resolvedChannelId, normalized.text, agent?.name || 'Agent Portal', agent?.emoji || '', agent?.id || null).catch(() => {});
     }
   });
