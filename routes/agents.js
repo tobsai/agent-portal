@@ -119,12 +119,19 @@ module.exports = function agentsRouter({ db, AGENTS, requireAuth, requireAdmin, 
     try {
       const limit = Math.min(parseInt(req.query.limit || '200', 10), 500);
       const since = req.query.since || null; // ISO timestamp filter
+      const date = req.query.date || null; // YYYY-MM-DD filter (for today-only queries)
 
       let sql = 'SELECT * FROM signals WHERE metadata IS NOT NULL';
       const params = [];
       let idx = 1;
 
-      if (since) {
+      if (date) {
+        // Filter by date: created_at >= date 00:00:00 AND created_at < date+1 00:00:00
+        const startOfDay = new Date(date + 'T00:00:00Z').toISOString();
+        const endOfDay = new Date(new Date(date).getTime() + 86400000).toISOString();
+        sql += ` AND created_at >= $${idx++} AND created_at < $${idx++}`;
+        params.push(startOfDay, endOfDay);
+      } else if (since) {
         sql += ` AND created_at >= $${idx++}`;
         params.push(since);
       }

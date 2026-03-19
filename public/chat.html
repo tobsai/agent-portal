@@ -23,6 +23,7 @@
   <link rel="apple-touch-icon" href="/favicon-192.png">
   <link rel="manifest" href="/manifest.json">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --bg: #0a0a0f;
@@ -1349,6 +1350,18 @@
       <div style="font-size:0.65rem; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; padding:0.4rem 0.25rem 0.3rem;">Active Work</div>
       <div id="work-widget-items" style="display:flex; flex-direction:column; gap:2px;"></div>
       <a href="/work" style="display:block; font-size:0.7rem; color:var(--text-dim); text-align:center; padding:0.4rem 0; text-decoration:none; margin-top:2px;" onmouseover="this.style.color='var(--text-muted)'" onmouseout="this.style.color='var(--text-dim)'">View all →</a>
+    </div>
+    <div style="border-top:1px solid var(--border); flex-shrink:0;"></div>
+
+    <!-- ─── Sub-Agent Activity Widget ─── -->
+    <div id="subagent-widget" style="display:none; padding:0.5rem 0.75rem; flex-shrink:0;">
+      <div style="font-size:0.65rem; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; padding:0.4rem 0.25rem 0.3rem;">Sub-Agent Activity</div>
+      <div id="subagent-widget-stats" style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; padding:0.25rem; margin-bottom:0.5rem; font-size:0.72rem;"></div>
+      <div id="subagent-widget-chart" style="padding:0.25rem; margin-bottom:0.5rem;">
+        <canvas id="subagent-chart" style="max-height:120px;"></canvas>
+      </div>
+      <div id="subagent-widget-recent" style="display:flex; flex-direction:column; gap:2px; margin-bottom:0.25rem;"></div>
+      <a href="/subagents" style="display:block; font-size:0.7rem; color:var(--text-dim); text-align:center; padding:0.4rem 0; text-decoration:none;" onmouseover="this.style.color='var(--text-muted)'" onmouseout="this.style.color='var(--text-dim)'">View full tree →</a>
     </div>
     <div style="border-top:1px solid var(--border); flex-shrink:0;"></div>
 
@@ -3482,6 +3495,186 @@
 
     // Load on page init — defer slightly to not block critical path
     setTimeout(loadWorkWidget, 1500);
+
+    // ─── Sub-Agent Activity Widget ────────────────────────────────────────────
+    let subagentChart = null;
+
+    function subagentStatusBadge(status) {
+      const colors = {
+        'done': '#34d399',
+        'complete': '#34d399',
+        'active': '#fbbf24',
+        'running': '#fbbf24',
+        'error': '#f87171',
+        'failed': '#f87171',
+      };
+      const labels = {
+        'done': 'completed',
+        'complete': 'completed',
+        'active': 'running',
+        'running': 'running',
+        'error': 'failed',
+        'failed': 'failed',
+      };
+      const c = colors[status] || '#71717a';
+      const l = labels[status] || status;
+      return `<span style="display:inline-block;padding:1px 6px;border-radius:8px;background:${c};color:#000;font-size:0.6rem;font-weight:600;text-transform:uppercase;line-height:1.4;">${l}</span>`;
+    }
+
+    function relativeTime(isoDate) {
+      const now = Date.now();
+      const then = new Date(isoDate).getTime();
+      const diff = Math.floor((now - then) / 1000);
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    function extractAgentName(sessionKey) {
+      // Extract agent name from session_key patterns like "agent:main:subagent:uuid"
+      // Look for metadata or parse from key
+      const match = sessionKey.match(/agent:([^:]+):/);
+      return match ? match[1] : 'agent';
+    }
+
+    function renderSubagentWidget(data) {
+      const widget = document.getElementById('subagent-widget');
+      const stats = document.getElementById('subagent-widget-stats');
+      const chartContainer = document.getElementById('subagent-widget-chart');
+      const recent = document.getElementById('subagent-widget-recent');
+      if (!widget || !stats || !recent) return;
+
+      const tree = data.tree || [];
+      const allNodes = [];
+      function collect(nodes) {
+        nodes.forEach(n => { allNodes.push(n); collect(n.children || []); });
+      }
+      collect(tree);
+
+      if (allNodes.length === 0) {
+        widget.style.display = 'none';
+        return;
+      }
+
+      widget.style.display = 'block';
+
+      // Stats: total today, avg duration, most active agent
+      const today = new Date().toISOString().slice(0, 10);
+      const todayNodes = allNodes.filter(n => n.startedAt && n.startedAt.startsWith(today));
+      const completedNodes = allNodes.filter(n => ['done', 'complete'].includes(n.status) && n.runtime);
+      const avgDuration = completedNodes.length > 0
+        ? (completedNodes.reduce((sum, n) => sum + n.runtime, 0) / completedNodes.length / 60).toFixed(1)
+        : '0.0';
+
+      // Most active agent: count spawns by agent name
+      const agentCounts = {};
+      todayNodes.forEach(n => {
+        const name = n.label || extractAgentName(n.id);
+        agentCounts[name] = (agentCounts[name] || 0) + 1;
+      });
+      const mostActive = Object.entries(agentCounts).sort((a, b) => b[1] - a[1])[0];
+      const mostActiveLabel = mostActive ? `${mostActive[0]} (${mostActive[1]})` : 'None';
+
+      stats.innerHTML = `
+        <div style="display:flex;flex-direction:column;">
+          <div style="color:var(--text-dim);">Spawned Today</div>
+          <div style="color:var(--text);font-weight:600;font-size:1rem;">${todayNodes.length}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;">
+          <div style="color:var(--text-dim);">Avg Duration</div>
+          <div style="color:var(--text);font-weight:600;font-size:1rem;">${avgDuration}m</div>
+        </div>
+        <div style="display:flex;flex-direction:column;grid-column:span 2;">
+          <div style="color:var(--text-dim);">Most Active</div>
+          <div style="color:var(--text);font-weight:600;font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escW(mostActiveLabel)}</div>
+        </div>
+      `;
+
+      // Chart: spawn count by agent name for today
+      const chartLabels = Object.keys(agentCounts).slice(0, 5);
+      const chartData = chartLabels.map(l => agentCounts[l]);
+
+      const canvas = document.getElementById('subagent-chart');
+      if (canvas && chartLabels.length > 0) {
+        chartContainer.style.display = 'block';
+        if (subagentChart) subagentChart.destroy();
+        subagentChart = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: chartLabels,
+            datasets: [{
+              label: 'Spawns',
+              data: chartData,
+              backgroundColor: 'rgba(129,140,248,0.6)',
+              borderColor: 'rgba(129,140,248,0.8)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { enabled: true }
+            },
+            scales: {
+              x: {
+                beginAtZero: true,
+                ticks: { color: '#71717a', font: { size: 9 } },
+                grid: { color: 'rgba(255,255,255,0.05)' }
+              },
+              y: {
+                ticks: { color: '#71717a', font: { size: 9 } },
+                grid: { display: false }
+              }
+            }
+          }
+        });
+      } else {
+        chartContainer.style.display = 'none';
+      }
+
+      // Recent activity: last 3 sub-agents
+      const recentNodes = allNodes
+        .filter(n => n.startedAt)
+        .sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
+        .slice(0, 3);
+
+      recent.innerHTML = recentNodes.map(n => {
+        const label = n.label || extractAgentName(n.id);
+        const taskSummary = (n.signals && n.signals[0]?.message) || 'No description';
+        const shortTask = taskSummary.length > 40 ? taskSummary.slice(0, 40) + '…' : taskSummary;
+        return `
+          <a href="/subagents" style="display:flex;align-items:flex-start;gap:0.4rem;padding:0.3rem 0.25rem;border-radius:5px;text-decoration:none;transition:background 0.1s;" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background='transparent'">
+            <div style="min-width:0;flex:1;">
+              <div style="display:flex;align-items:center;gap:0.3rem;margin-bottom:2px;">
+                <div style="font-size:0.75rem;color:var(--text-muted);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escW(label)}</div>
+                ${subagentStatusBadge(n.status)}
+              </div>
+              <div style="font-size:0.65rem;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escW(taskSummary)}">${escW(shortTask)}</div>
+              <div style="font-size:0.6rem;color:var(--text-dim);margin-top:2px;">${relativeTime(n.startedAt)}</div>
+            </div>
+          </a>`;
+      }).join('');
+    }
+
+    async function loadSubagentWidget() {
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const res = await fetch('/api/subagents?date=' + today + '&limit=500');
+        if (!res.ok) return;
+        const data = await res.json();
+        renderSubagentWidget(data);
+      } catch { /* silent fail — widget is optional */ }
+    }
+
+    // Auto-refresh every 60 seconds
+    setInterval(loadSubagentWidget, 60000);
+
+    // Load on page init — defer slightly to not block critical path
+    setTimeout(loadSubagentWidget, 2000);
   </script>
 </body>
 </html>
