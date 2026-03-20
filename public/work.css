@@ -677,6 +677,7 @@ body {
   flex-shrink: 0;
 }
 
+.sa-dot.registered { background: var(--text-dim); border: 1.5px dashed var(--text-muted); }
 .sa-dot.active   { background: var(--blue); box-shadow: 0 0 5px var(--blue); animation: pulse 2s infinite; }
 .sa-dot.done     { background: var(--green); }
 .sa-dot.complete { background: var(--green); }
@@ -702,6 +703,7 @@ body {
   flex-shrink: 0;
 }
 
+.sa-status.registered { background: rgba(255,255,255,0.04); color: var(--text-muted); font-style: italic; }
 .sa-status.active   { background: rgba(96,165,250,0.15); color: var(--blue); }
 .sa-status.done     { background: rgba(52,211,153,0.12); color: var(--green); }
 .sa-status.complete { background: rgba(52,211,153,0.12); color: var(--green); }

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * routes/work.js — /api/status, /api/agent-health, /api/work, /api/signals
+ * routes/work.js — /api/status, /api/agent-health, /api/work, /api/signals, /api/subagents
  *
  * @param {object} deps
  * @param {object}   deps.db
@@ -359,6 +359,46 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
 
       const rows = await db.query(sql, params);
       res.json({ signals: rows, total: rows.length });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // POST /api/subagents — register a sub-agent at spawn time
+  //
+  // Agents call this immediately when spawning a child session so the portal
+  // can display a "registered" row in the tree before any signal fires. This
+  // closes the observability gap for fast sub-agents (NEXT-086).
+  //
+  // Body (all optional except session_key):
+  //   session_key  — the child session's key (required)
+  //   label        — human-readable label (defaults to session_key)
+  //   parent_key   — parent session key for tree nesting
+  //   model        — model id the child will use
+  //
+  // The registration is persisted as a signal with type "registered" so the
+  // GET /api/subagents tree builder can surface it even if the child emits
+  // no further signals.
+  router.post('/subagents', requireAgentKey, async (req, res) => {
+    try {
+      const { session_key, label, parent_key, model } = req.body;
+      if (!session_key) return res.status(400).json({ error: 'session_key required' });
+
+      const metadata = {
+        type: 'registered',
+        label: label || session_key,
+        ...(parent_key && { parentKey: parent_key }),
+        ...(model      && { model }),
+      };
+
+      const row = await insertSignal(db, uuidv4, {
+        agent_id:     req.agent?.id || null,
+        session_key,
+        level:        'info',
+        message:      `Sub-agent registered: ${label || session_key}`,
+        metadata,
+      });
+
+      broadcast('work:subagent:registered', { ...row, metadata });
+      res.status(201).json(row);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

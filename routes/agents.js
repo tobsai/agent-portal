@@ -182,10 +182,30 @@ module.exports = function agentsRouter({ db, AGENTS, requireAuth, requireAdmin, 
         if (meta.tokenCount !== undefined) node.tokenCount = meta.tokenCount;
         if (meta.tokens !== undefined) node.tokenCount = meta.tokens;
 
-        // Track timing
+        // Track timing — signal-type → status mapping
+        // Priority order (lowest → highest precedence): registered < active < done/error.
+        // A terminal state (done/error) must not be overwritten by a late-arriving
+        // registration signal; guard every status assignment accordingly.
+        const TERMINAL_STATUSES = new Set(['done', 'complete', 'error', 'cancelled']);
+
+        if (meta.type === 'registered') {
+          // Registration fires at spawn time — captures the node even if the child
+          // emits no further signals (NEXT-086).
+          node.startedAt = node.startedAt || row.created_at;
+          if (!TERMINAL_STATUSES.has(node.status) && node.status === 'unknown') {
+            node.status = 'registered';
+          }
+          // Capture parent relationship declared at registration time
+          if (meta.parentKey && meta.parentKey !== sessionKey && !node.parentId) {
+            node.parentId = meta.parentKey;
+            getOrCreate(meta.parentKey);
+          }
+        }
         if (meta.type === 'subagent_start' || meta.type === 'spawn') {
           node.startedAt = row.created_at;
-          node.status = node.status === 'unknown' ? 'active' : node.status;
+          if (!TERMINAL_STATUSES.has(node.status)) {
+            node.status = 'active';
+          }
         }
         if (meta.type === 'subagent_end' || meta.type === 'complete' || meta.type === 'done') {
           node.endedAt = row.created_at;
@@ -208,9 +228,9 @@ module.exports = function agentsRouter({ db, AGENTS, requireAuth, requireAdmin, 
           }
         }
 
-        // Parent-child relationship
-        const parentKey = meta.parent_session || meta.parentSession || meta.spawner;
-        if (parentKey && parentKey !== sessionKey) {
+        // Parent-child relationship (parentKey already handled for 'registered' above)
+        const parentKey = meta.parent_session || meta.parentSession || meta.spawner || meta.parentKey;
+        if (parentKey && parentKey !== sessionKey && !node.parentId) {
           node.parentId = parentKey;
           getOrCreate(parentKey); // ensure parent exists
         }
