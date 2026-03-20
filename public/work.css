@@ -661,6 +661,70 @@ body {
   padding: 0.75rem 0;
 }
 
+/* ─── Subagent Row — Failure Drill-Down (NEXT-071) ─── */
+.subagent-row.expandable {
+  cursor: pointer;
+  flex-wrap: wrap;
+  transition: background 0.15s;
+}
+.subagent-row.expandable:hover {
+  background: rgba(248,113,113,0.07);
+}
+.subagent-row.expandable .sa-row-chevron {
+  font-size: 0.6rem;
+  color: var(--red);
+  opacity: 0.7;
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+.subagent-row.expandable.expanded .sa-row-chevron {
+  transform: rotate(90deg);
+}
+.sa-row-detail {
+  display: none;
+  width: 100%;
+  padding: 0.55rem 0.5rem 0.35rem;
+  border-top: 1px solid rgba(248,113,113,0.18);
+  margin-top: 0.3rem;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+}
+.subagent-row.expanded .sa-row-detail {
+  display: block;
+}
+.sa-row-detail-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 0.75rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.7rem;
+}
+.sa-row-detail-key {
+  color: var(--text-dim);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.sa-row-detail-val {
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sa-row-detail-message {
+  font-size: 0.72rem;
+  color: var(--red);
+  font-family: 'JetBrains Mono', monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0.85;
+  padding: 0.3rem 0.4rem;
+  background: rgba(248,113,113,0.07);
+  border-radius: 4px;
+  border-left: 2px solid rgba(248,113,113,0.35);
+}
+
 /* ─── Scheduled Tasks Widget ─── */
 .scheduled-widget {
   background: var(--surface);

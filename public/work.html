@@ -663,15 +663,46 @@
           const label = agent.label || agent.id.slice(0, 24);
           const st = agent.status || 'unknown';
           const runtime = agent.runtime ? formatRuntime(agent.runtime * 1000) : '';
+          const isError = st === 'error';
           const depthPrefix = agent.depth > 0
             ? `<span style="color:var(--text-dim);font-size:0.65rem;margin-right:2px">${'↳'.repeat(Math.min(agent.depth, 3))}</span>`
             : '';
+
+          // For error rows, look up the failure detail from the server-shaped failures array
+          // (pre-populated in _currentFailures by loadSubAgentWidget before this render step)
+          const failureDetail = isError
+            ? (_currentFailures.find(f => f.id === agent.id) || null)
+            : null;
+
+          const detailSection = isError ? (() => {
+            const ts    = agent.startedAt ? escHtml(new Date(agent.startedAt).toLocaleString()) : '—';
+            const tsEnd = agent.endedAt   ? escHtml(new Date(agent.endedAt).toLocaleString())   : '—';
+            const msg   = escHtml(
+              (failureDetail && failureDetail.lastMessage)
+                ? failureDetail.lastMessage
+                : '(No error message available)'
+            );
+            return `
+            <div class="sa-row-detail" aria-hidden="true">
+              <div class="sa-row-detail-grid">
+                <span class="sa-row-detail-key">Started</span>
+                <span class="sa-row-detail-val">${ts}</span>
+                <span class="sa-row-detail-key">Ended</span>
+                <span class="sa-row-detail-val">${tsEnd}</span>
+                ${runtime ? `<span class="sa-row-detail-key">Runtime</span><span class="sa-row-detail-val">${escHtml(runtime)}</span>` : ''}
+              </div>
+              <div class="sa-row-detail-message">${msg}</div>
+            </div>`;
+          })() : '';
+
           return `
-            <div class="subagent-row">
+            <div class="subagent-row${isError ? ' expandable' : ''}"${isError ? ' onclick="toggleSubagentRow(this)" title="Click to expand failure details"' : ''}>
               <span class="sa-dot ${escHtml(st)}"></span>
               ${depthPrefix}<span class="sa-label" title="${escHtml(agent.id)}">${escHtml(label)}</span>
               <span class="sa-status ${escHtml(st)}">${escHtml(st)}</span>
               ${runtime ? `<span class="sa-meta">${escHtml(runtime)}</span>` : ''}
+              ${isError ? '<span class="sa-row-chevron">▶</span>' : ''}
+              ${detailSection}
             </div>`;
         }).join('');
       } catch (err) {
@@ -759,6 +790,18 @@
         const detail = el.querySelector('.sa-failure-detail');
         if (detail) detail.setAttribute('aria-hidden', 'false');
       }
+    }
+
+    // ─── Subagent Row Failure Drill-Down (NEXT-071) ──────────────────────────
+    // Handles inline expand/collapse on error-status rows in the recent sub-agent list.
+    // Toggling is independent of the metrics failures panel (NEXT-056); each row
+    // expands in place without closing others (not accordion — multiple may be open).
+    function toggleSubagentRow(el) {
+      if (!el || !el.classList.contains('expandable')) return;
+      const isExpanded = el.classList.contains('expanded');
+      el.classList.toggle('expanded', !isExpanded);
+      const detail = el.querySelector('.sa-row-detail');
+      if (detail) detail.setAttribute('aria-hidden', isExpanded ? 'true' : 'false');
     }
 
     // ─── Scheduled Tasks Widget ─────────────────────────────────────────────
