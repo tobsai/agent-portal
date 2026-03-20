@@ -15,51 +15,9 @@
 const { Router } = require('express');
 const path = require('path');
 
-/**
- * @typedef {object} SignalInput
- * @property {string|null} [task_id]
- * @property {string|null} [initiative_id]
- * @property {string|null} [agent_id]
- * @property {string|null} [session_key]
- * @property {string}      message
- * @property {string}      [level]       — info | success | warning | error | progress
- * @property {object|null} [metadata]
- */
-
-const VALID_SIGNAL_LEVELS = ['info', 'success', 'warning', 'error', 'progress'];
-
-/**
- * Insert a signal row and resolve task_label from session_key if present.
- * Returns the persisted row.
- *
- * @param {object}      db       — database client (query/run/get)
- * @param {Function}    uuidv4   — id generator
- * @param {SignalInput} signal
- * @returns {Promise<object>}    — the inserted signal row
- */
-async function insertSignal(db, uuidv4, signal) {
-  const { task_id, initiative_id, agent_id, session_key, message, level, metadata } = signal;
-  const sigLevel = VALID_SIGNAL_LEVELS.includes(level) ? level : 'info';
-  const id = uuidv4();
-  const metaStr = metadata ? JSON.stringify(metadata) : null;
-
-  // Resolve task_label from session_key → work_tasks join (server-side)
-  let taskLabel = null;
-  if (session_key) {
-    const taskRow = await db.get(
-      'SELECT title FROM work_tasks WHERE session_key = $1 LIMIT 1',
-      [session_key]
-    );
-    if (taskRow) taskLabel = taskRow.title;
-  }
-
-  await db.run(
-    'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, task_label, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-    [id, task_id || null, initiative_id || null, agent_id || null, session_key || null, taskLabel, sigLevel, message, metaStr]
-  );
-
-  return db.get('SELECT * FROM signals WHERE id = $1', [id]);
-}
+// insertSignal lives in lib/signals.js — shared with lib modules that need to
+// emit signals without creating a circular lib → routes dependency.
+const { insertSignal } = require('../lib/signals');
 
 module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4, broadcast, publicDir }) {
   const router = Router();

@@ -184,7 +184,10 @@ app.set('trust proxy', 1);
 const { db, isProduction } = require('./lib/db');
 
 // ============ PUSH NOTIFICATIONS ============
-const { pushToAllDevices } = require('./lib/push')({ db, apns });
+// uuidv4 and broadcast are passed so push failures emit signals to the dashboard.
+// broadcast is defined below — but pushToAllDevices is only called after server
+// start when broadcast is already wired, so the closure captures the correct ref.
+const { pushToAllDevices } = require('./lib/push')({ db, apns, uuidv4, broadcast });
 
 // ============ SESSION SETUP ============
 let sessionStore;

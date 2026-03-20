@@ -485,6 +485,8 @@ module.exports = function chatRouter(deps) {
               text: content,
               senderId: senderId || 'user',
               timestamp: message?.created_at || new Date().toISOString(),
+              // Pass deps so delivery failures emit signals and capture to Sentry
+              _deps: { db, uuidv4, broadcast },
             }).catch(() => {});
 
             if (gatewayClient.isReady) {
