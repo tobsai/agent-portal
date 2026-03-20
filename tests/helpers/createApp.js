@@ -121,6 +121,12 @@ function createTestDb() {
       task TEXT,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS agent_health (
+      agent_id    TEXT PRIMARY KEY,
+      health_data TEXT NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
   `);
 
   return {

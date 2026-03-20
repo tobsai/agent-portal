@@ -172,7 +172,7 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
   // ============ AGENT HEALTH MONITORING ============
   let agentHealthStatus = {};
 
-  router.post('/agent-health', requireAgentKey, (req, res) => {
+  router.post('/agent-health', requireAgentKey, async (req, res) => {
     try {
       const { agentId, iMessagePolling, heartbeatActive, gatewayUptime } = req.body;
       if (!agentId) return res.status(400).json({ error: 'agentId is required' });
@@ -190,6 +190,16 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
         heartbeatActive: heartbeatActive !== undefined ? heartbeatActive : true,
         gatewayUptime: gatewayUptime || 0
       };
+
+      // Persist to DB so health data survives process restarts / redeploys
+      await db.run(
+        `INSERT INTO agent_health (agent_id, health_data, updated_at)
+         VALUES ($1, $2, $3)
+         ON CONFLICT(agent_id) DO UPDATE SET
+           health_data = excluded.health_data,
+           updated_at  = excluded.updated_at`,
+        [agentId, JSON.stringify(agentHealthStatus[agentId]), Date.now()]
+      );
 
       broadcast('agent-health', agentHealthStatus[agentId]);
       res.json({ success: true, timestamp: now });
@@ -228,8 +238,21 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
     };
   }
 
-  router.get('/agent-health', requireAuth, (req, res) => {
+  router.get('/agent-health', requireAuth, async (req, res) => {
     try {
+      // Rehydrate from DB on cold start (e.g. after a Railway redeploy) when
+      // in-memory store is empty. DB is the durable backing; memory is the hot path.
+      if (Object.keys(agentHealthStatus).length === 0) {
+        const rows = await db.query('SELECT agent_id, health_data FROM agent_health', []).catch(() => []);
+        for (const row of rows) {
+          try {
+            agentHealthStatus[row.agent_id] = JSON.parse(row.health_data);
+          } catch (parseErr) {
+            console.warn(`[agent-health] Failed to parse DB row for ${row.agent_id}:`, parseErr);
+          }
+        }
+      }
+
       const agentId = req.query.agent_id;
       if (agentId) {
         const health = agentHealthStatus[agentId];
