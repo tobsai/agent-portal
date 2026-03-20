@@ -99,6 +99,26 @@
 
     .nav-conn.live { color: var(--text-muted); }
 
+    .health-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.65rem;
+      color: var(--text-dim);
+    }
+    .health-badge-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .health-badge.ok   .health-badge-dot { background: var(--green); box-shadow: 0 0 5px var(--green); }
+    .health-badge.ok   { color: var(--text-muted); }
+    .health-badge.degraded .health-badge-dot { background: var(--yellow); }
+    .health-badge.degraded { color: var(--yellow); }
+    .health-badge.down .health-badge-dot { background: var(--red); }
+    .health-badge.down { color: var(--red); }
+
     .btn-sm {
       font-size: 0.75rem;
       padding: 0.3rem 0.75rem;
@@ -567,6 +587,136 @@
       padding: 0.75rem 0;
     }
 
+    /* ─── Scheduled Tasks Widget ─── */
+    .scheduled-widget {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.875rem 1rem;
+      grid-column: 1 / -1;
+      margin-bottom: 0;
+    }
+
+    .scheduled-widget-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .scheduled-widget-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .scheduled-tabs {
+      display: flex;
+      gap: 0.3rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .scheduled-tab {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .scheduled-tab.active {
+      background: var(--accent-dim);
+      border-color: rgba(129,140,248,0.3);
+      color: var(--accent);
+    }
+
+    .scheduled-tab:hover:not(.active) { background: var(--surface-hover); color: var(--text-muted); }
+
+    .scheduled-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 0.5rem;
+    }
+
+    .scheduled-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 0.8rem;
+      transition: border-color 0.15s;
+    }
+
+    .scheduled-card:hover { border-color: rgba(255,255,255,0.14); }
+
+    .scheduled-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.3rem;
+    }
+
+    .scheduled-card-name {
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .scheduled-status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-left: 0.4rem;
+    }
+
+    .scheduled-status-dot.ok    { background: var(--green); }
+    .scheduled-status-dot.error { background: var(--red); box-shadow: 0 0 5px var(--red); }
+    .scheduled-status-dot.none  { background: var(--text-dim); }
+
+    .scheduled-card-schedule {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 0.3rem;
+    }
+
+    .scheduled-card-outcome {
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .scheduled-card-footer {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.35rem;
+      font-size: 0.65rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .scheduled-next { color: var(--accent); }
+    .scheduled-last { color: var(--text-dim); }
+
+    .scheduled-empty {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      text-align: center;
+      padding: 1rem 0;
+    }
+
     /* ─── Sub-Agent Metrics ─── */
     .sa-metrics {
       margin: 0.75rem 0;
@@ -691,6 +841,10 @@
         <span class="nav-conn-dot"></span>
         <span id="nav-conn-text">Connecting</span>
       </div>
+      <div class="health-badge" id="health-badge" title="System health">
+        <span class="health-badge-dot"></span>
+        <span id="health-badge-text">…</span>
+      </div>
       <a href="/subagents" class="btn-sm">Sub-Agents</a>
       <a href="/chat" class="btn-sm">Chat</a>
     </div>
@@ -708,6 +862,25 @@
     <!-- Stats -->
     <div id="stats-area" style="grid-column:1/-1;"></div>
     <div id="error-area" style="grid-column:1/-1;"></div>
+
+    <!-- Scheduled Tasks Widget -->
+    <div class="scheduled-widget" id="scheduled-widget">
+      <div class="scheduled-widget-header">
+        <div class="scheduled-widget-title">
+          ⏱ Scheduled Tasks
+          <span id="scheduled-error-count" style="display:none; font-size:0.72rem; font-weight:400; color:var(--red); margin-left:0.5rem;"></span>
+        </div>
+        <a href="/scheduled" style="font-size:0.72rem; color:var(--text-dim); text-decoration:none;">Full schedule →</a>
+      </div>
+      <div class="scheduled-tabs">
+        <button class="scheduled-tab active" data-filter="active" onclick="setScheduledFilter('active')">Active</button>
+        <button class="scheduled-tab" data-filter="errors" onclick="setScheduledFilter('errors')">Errors</button>
+        <button class="scheduled-tab" data-filter="all" onclick="setScheduledFilter('all')">All</button>
+      </div>
+      <div class="scheduled-grid" id="scheduled-grid">
+        <div class="scheduled-empty">Loading scheduled tasks…</div>
+      </div>
+    </div>
 
     <!-- Sub-Agent Summary Widget -->
     <div class="subagent-widget" id="subagent-widget">
@@ -1167,16 +1340,139 @@
       }
     }
 
+    // ─── Scheduled Tasks Widget ─────────────────────────────────────────────
+    let scheduledData = [];
+    let scheduledFilter = 'active';
+
+    function setScheduledFilter(f) {
+      scheduledFilter = f;
+      document.querySelectorAll('.scheduled-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === f);
+      });
+      renderScheduledGrid();
+    }
+
+    function relativeTime(isoStr) {
+      if (!isoStr) return null;
+      const diff = Date.now() - new Date(isoStr).getTime();
+      const s = Math.floor(Math.abs(diff) / 1000);
+      const future = diff < 0;
+      if (s < 60)  return future ? `in ${s}s`       : `${s}s ago`;
+      if (s < 3600) return future ? `in ${Math.floor(s/60)}m` : `${Math.floor(s/60)}m ago`;
+      if (s < 86400) return future ? `in ${Math.floor(s/3600)}h` : `${Math.floor(s/3600)}h ago`;
+      return future ? `in ${Math.floor(s/86400)}d` : `${Math.floor(s/86400)}d ago`;
+    }
+
+    function renderScheduledGrid() {
+      const grid = document.getElementById('scheduled-grid');
+      if (!scheduledData.length) {
+        grid.innerHTML = '<div class="scheduled-empty">No scheduled tasks found.</div>';
+        return;
+      }
+
+      let items = scheduledData;
+      if (scheduledFilter === 'active') {
+        items = scheduledData.filter(t => t.enabled && t.next_run_at);
+      } else if (scheduledFilter === 'errors') {
+        items = scheduledData.filter(t => t.last_status === 'error');
+      }
+
+      if (!items.length) {
+        const msg = scheduledFilter === 'errors' ? 'No error tasks 🎉' : 'No tasks match this filter.';
+        grid.innerHTML = `<div class="scheduled-empty">${escHtml(msg)}</div>`;
+        return;
+      }
+
+      // Sort: errors first, then by next_run_at asc, then by last_run_at desc
+      items = [...items].sort((a, b) => {
+        if (a.last_status === 'error' && b.last_status !== 'error') return -1;
+        if (b.last_status === 'error' && a.last_status !== 'error') return  1;
+        if (a.next_run_at && b.next_run_at) return new Date(a.next_run_at) - new Date(b.next_run_at);
+        return 0;
+      });
+
+      grid.innerHTML = items.map(t => {
+        const dotClass = t.last_status === 'error' ? 'error' : t.last_status === 'ok' ? 'ok' : 'none';
+        const nextRel  = relativeTime(t.next_run_at);
+        const lastRel  = relativeTime(t.last_run_at);
+        const outcome  = t.last_outcome ? t.last_outcome.slice(0, 80) : (t.last_status === 'error' ? 'Last run failed' : '');
+        return `
+          <div class="scheduled-card">
+            <div class="scheduled-card-header">
+              <span class="scheduled-card-name" title="${escHtml(t.name)}">${escHtml(t.name)}</span>
+              <span class="scheduled-status-dot ${escHtml(dotClass)}" title="${escHtml(t.last_status || 'no runs yet')}"></span>
+            </div>
+            <div class="scheduled-card-schedule">${escHtml(t.schedule_human || '')}</div>
+            ${outcome ? `<div class="scheduled-card-outcome" title="${escHtml(t.last_outcome || '')}">${escHtml(outcome)}</div>` : ''}
+            <div class="scheduled-card-footer">
+              ${nextRel ? `<span class="scheduled-next">next ${escHtml(nextRel)}</span>` : '<span></span>'}
+              ${lastRel ? `<span class="scheduled-last">ran ${escHtml(lastRel)}</span>` : '<span class="scheduled-last">never run</span>'}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    async function loadScheduledWidget() {
+      try {
+        const res = await fetch('/api/scheduled');
+        if (!res.ok) return;
+        const data = await res.json();
+        scheduledData = data.scheduled || [];
+
+        // Count enabled error tasks for badge
+        const errorCount = scheduledData.filter(t => t.enabled && t.last_status === 'error').length;
+        const errBadge = document.getElementById('scheduled-error-count');
+        if (errorCount > 0) {
+          errBadge.textContent = `${errorCount} error${errorCount > 1 ? 's' : ''}`;
+          errBadge.style.display = '';
+        } else {
+          errBadge.style.display = 'none';
+        }
+
+        renderScheduledGrid();
+      } catch (err) {
+        console.error('[loadScheduledWidget] error:', err);
+      }
+    }
+
     // ─── PostHog Analytics ───────────────────────────────────────────────────
     !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageviewId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
     posthog.init('phc_QBrEydH4duDZXg7OeNTpOrCb2lB77yn1S54FrnCt8Pp', { api_host: 'https://analytics.mtree.io', person_profiles: 'identified_only', autocapture: false });
     posthog.capture('page_view', { page: 'dashboard' });
 
+    // ─── Health Badge ────────────────────────────────────────────────────────
+    async function refreshHealthBadge() {
+      try {
+        const r = await fetch('/api/dashboard');
+        if (!r.ok) throw new Error('fetch failed');
+        const data = await r.json();
+        const h = data.health;
+        if (!h) return;
+        const badge = document.getElementById('health-badge');
+        const text  = document.getElementById('health-badge-text');
+        if (!badge || !text) return;
+        badge.className = 'health-badge ' + (h.status || 'degraded');
+        text.textContent = h.status === 'ok' ? 'All systems OK'
+                         : h.status === 'degraded' ? 'Degraded'
+                         : 'System down';
+        badge.title = `DB: ${h.checks?.db?.status ?? '?'} · Gateway: ${h.checks?.gateway?.status ?? '?'} · APNS: ${h.checks?.apns?.status ?? '?'}`;
+      } catch {
+        const badge = document.getElementById('health-badge');
+        if (badge) badge.className = 'health-badge down';
+        const text = document.getElementById('health-badge-text');
+        if (text) text.textContent = 'Unknown';
+      }
+    }
+
     // ─── Init ───────────────────────────────────────────────────────────────
     load();
     loadSubAgentWidget();
+    loadScheduledWidget();
     connectWs();
-    setInterval(loadSubAgentWidget, 30000); // refresh widget every 30s
+    refreshHealthBadge();
+    setInterval(loadSubAgentWidget, 30000);   // refresh sub-agent widget every 30s
+    setInterval(loadScheduledWidget, 60000);  // refresh scheduled widget every 60s
+    setInterval(refreshHealthBadge, 60000);   // refresh health badge every 60s
   </script>
 </body>
 </html>
