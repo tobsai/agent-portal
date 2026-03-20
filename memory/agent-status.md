@@ -185,3 +185,28 @@ The sub-agent visual tree is **live and fully functional** at https://talos.mtre
 **Deployment:** Production (Railway)  
 **URL:** https://talos.mtree.io/subagents  
 **Status:** ✅ **LIVE AND OPERATIONAL**
+
+---
+
+## ✅ NEXT-056: Agent Portal Creative Pass (2026-03-19 22:45 CDT)
+
+**Task:** Creative discovery pass — what's missing from the dashboard?  
+**Outcome:** Implemented scheduled tasks widget on `work.html`. Documented 4 additional gaps in `docs/CREATIVE_PASS_MAR_27.md`.
+
+**Quick Win Implemented:**
+- **Scheduled Tasks Widget** — card grid surfacing `/api/scheduled` data on the main dashboard
+  - Tabs: Active / Errors / All
+  - Each card: task name, schedule, last outcome snippet, relative next/last run time, status dot
+  - Error count badge in widget title
+  - Auto-refreshes every 60s
+  - Commit: `acd7bc5` — pushed to `origin/main`
+
+**Remaining Findings (documented, not implemented):**
+1. Current Work Status Banner — `/api/status` visible only in nav dot
+2. Signal Digest Mode — group signals by session_key to reduce noise
+3. Live Signal ↔ Task Annotations — tie signal lines to their originating task
+4. Sub-agent failure drill-down — make error count clickable
+
+**Architectural flags noted:** Duplicate scheduled task IDs, ephemeral status field, low `last_outcome` population rate.
+
+**Files:** `public/work.html`, `docs/CREATIVE_PASS_MAR_27.md`, `memory/agent-status.md`
