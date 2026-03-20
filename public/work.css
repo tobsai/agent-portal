@@ -481,6 +481,49 @@ body {
   flex-shrink: 0;
 }
 
+/* ─── Signals level filter (QW-3) ─── */
+.signals-level-filter {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.signals-level-pill {
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 0.15rem 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  line-height: 1.4;
+}
+
+.signals-level-pill:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.signals-level-pill.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.signals-level-pill[data-level="warning"].active {
+  border-color: var(--yellow);
+  background: rgba(251,191,36,0.12);
+  color: var(--yellow);
+}
+
+.signals-level-pill[data-level="error"].active {
+  border-color: var(--red);
+  background: rgba(248,113,113,0.12);
+  color: var(--red);
+}
+
 /* ─── Signal task label pill ─── */
 .signal-task-pill {
   display: inline-block;

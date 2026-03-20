@@ -137,6 +137,12 @@
       <div class="signals-header">
         <h2>Live Signals</h2>
         <div style="display:flex;align-items:center;gap:0.5rem;">
+          <div class="signals-level-filter" id="signals-level-filter" role="group" aria-label="Filter signals by level">
+            <button class="signals-level-pill active" data-level="" onclick="setSignalLevel('')">All</button>
+            <button class="signals-level-pill" data-level="info" onclick="setSignalLevel('info')">Info</button>
+            <button class="signals-level-pill" data-level="warning" onclick="setSignalLevel('warning')">Warn</button>
+            <button class="signals-level-pill" data-level="error" onclick="setSignalLevel('error')">Error</button>
+          </div>
           <button class="btn-sm" id="signals-mode-btn" onclick="toggleSignalsMode()" title="Toggle digest / all signals" style="font-size:0.7rem;padding:0.2rem 0.5rem">Digest</button>
           <span class="signals-live-dot" id="signals-dot"></span>
         </div>
@@ -193,6 +199,37 @@
     let _signalDigestMode = localStorage.getItem('signals_digest_mode') !== 'false';
     // All signals buffer for digest re-render
     let _allSignals = [];
+
+    // ─── Level filter ────────────────────────────────────────────────────────
+    /** @type {string} '' = all, 'info' | 'warning' | 'error' */
+    let _signalLevel = '';
+
+    /**
+     * Set the active level filter, update pill styles, and re-fetch signals.
+     * @param {string} level
+     */
+    function setSignalLevel(level) {
+      _signalLevel = level;
+      document.querySelectorAll('.signals-level-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.level === level);
+      });
+      fetchSignals();
+    }
+
+    /**
+     * Fetch signals from the API, honouring the active level filter.
+     * Replaces the in-memory buffer and re-renders the panel.
+     * Also called on initial load (from loadSignals → this replaces it).
+     */
+    async function fetchSignals() {
+      try {
+        const qs = _signalLevel ? `?level=${encodeURIComponent(_signalLevel)}` : '';
+        const res = await fetch(`/api/signals${qs}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        loadSignals(data.signals || []);
+      } catch { /* non-fatal — panel remains showing prior data */ }
+    }
 
     // ─── Digest mode toggle ─────────────────────────────────────────────────
     function toggleSignalsMode() {
@@ -459,10 +496,11 @@
         const data = await res.json();
         const initiatives = data.initiatives || [];
         const tasks = data.tasks || [];
-        const signals = data.signals || [];
-        renderStats(initiatives, tasks, signals);
+        // Render stats with the unfiltered signal count from /api/work
+        renderStats(initiatives, tasks, data.signals || []);
         renderInitiatives(initiatives, tasks);
-        loadSignals(signals);
+        // Signals are fetched separately so the level filter is respected
+        fetchSignals();
       } catch (err) {
         document.getElementById('error-area').innerHTML =
           `<div class="error-msg">Failed to load work data: ${escHtml(err.message)}</div>`;
@@ -498,7 +536,12 @@
         try { msg = JSON.parse(evt.data); } catch { return; }
 
         if (msg.event === 'work:signal') {
-          renderSignal(msg.data, true);
+          // Only inject live signals that match the active level filter.
+          // If no filter is set, all signals pass through.
+          const sig = msg.data;
+          if (!_signalLevel || sig.level === _signalLevel) {
+            renderSignal(sig, true);
+          }
         } else if (msg.event === 'agent:status') {
           applyAgentStatus(msg.data);
         } else if (msg.event === 'agent-health') {

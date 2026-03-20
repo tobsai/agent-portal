@@ -15,6 +15,52 @@
 const { Router } = require('express');
 const path = require('path');
 
+/**
+ * @typedef {object} SignalInput
+ * @property {string|null} [task_id]
+ * @property {string|null} [initiative_id]
+ * @property {string|null} [agent_id]
+ * @property {string|null} [session_key]
+ * @property {string}      message
+ * @property {string}      [level]       — info | success | warning | error | progress
+ * @property {object|null} [metadata]
+ */
+
+const VALID_SIGNAL_LEVELS = ['info', 'success', 'warning', 'error', 'progress'];
+
+/**
+ * Insert a signal row and resolve task_label from session_key if present.
+ * Returns the persisted row.
+ *
+ * @param {object}      db       — database client (query/run/get)
+ * @param {Function}    uuidv4   — id generator
+ * @param {SignalInput} signal
+ * @returns {Promise<object>}    — the inserted signal row
+ */
+async function insertSignal(db, uuidv4, signal) {
+  const { task_id, initiative_id, agent_id, session_key, message, level, metadata } = signal;
+  const sigLevel = VALID_SIGNAL_LEVELS.includes(level) ? level : 'info';
+  const id = uuidv4();
+  const metaStr = metadata ? JSON.stringify(metadata) : null;
+
+  // Resolve task_label from session_key → work_tasks join (server-side)
+  let taskLabel = null;
+  if (session_key) {
+    const taskRow = await db.get(
+      'SELECT title FROM work_tasks WHERE session_key = $1 LIMIT 1',
+      [session_key]
+    );
+    if (taskRow) taskLabel = taskRow.title;
+  }
+
+  await db.run(
+    'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, task_label, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+    [id, task_id || null, initiative_id || null, agent_id || null, session_key || null, taskLabel, sigLevel, message, metaStr]
+  );
+
+  return db.get('SELECT * FROM signals WHERE id = $1', [id]);
+}
+
 module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4, broadcast, publicDir }) {
   const router = Router();
 
@@ -65,12 +111,10 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
           console.log('[status] Auto-expired thinking status to idle');
           // Emit a visible warning signal so the expiry appears in the dashboard.
           // Best-effort — don't let signal failures block the status update.
-          const expireSignalId = uuidv4();
-          db.run(
-            'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, task_label, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-            [expireSignalId, null, null, null, null, null, 'warning', 'Thinking status auto-expired after 5 min of inactivity', null]
-          ).then(() => db.get('SELECT * FROM signals WHERE id = $1', [expireSignalId]))
-            .then(row => { if (row) broadcast('work:signal', row); })
+          insertSignal(db, uuidv4, {
+            level: 'warning',
+            message: 'Thinking status auto-expired after 5 min of inactivity',
+          }).then(row => { if (row) broadcast('work:signal', row); })
             .catch(e => console.error('[status] Auto-expire signal insert failed:', e));
           // Best-effort DB update on auto-expire; fire-and-forget
           db.run(
@@ -343,29 +387,10 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
       const { task_id, initiative_id, session_key, level, message, metadata } = req.body;
       if (!message) return res.status(400).json({ error: 'message required' });
 
-      const validLevels = ['info', 'success', 'warning', 'error', 'progress'];
-      const sigLevel = validLevels.includes(level) ? level : 'info';
-
-      const id = uuidv4();
-      const agentId = req.agent?.id || null;
-      const metaStr = metadata ? JSON.stringify(metadata) : null;
-
-      // Resolve task_label from session_key → work_tasks join (server-side)
-      let taskLabel = null;
-      if (session_key) {
-        const taskRow = await db.get(
-          'SELECT title FROM work_tasks WHERE session_key = $1 LIMIT 1',
-          [session_key]
-        );
-        if (taskRow) taskLabel = taskRow.title;
-      }
-
-      await db.run(
-        'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, task_label, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-        [id, task_id || null, initiative_id || null, agentId, session_key || null, taskLabel, sigLevel, message, metaStr]
-      );
-
-      const row = await db.get('SELECT * FROM signals WHERE id = $1', [id]);
+      const row = await insertSignal(db, uuidv4, {
+        task_id, initiative_id, agent_id: req.agent?.id || null,
+        session_key, level, message, metadata,
+      });
       broadcast('work:signal', row);
       res.status(201).json(row);
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -381,26 +406,11 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
       if (type === 'signal') {
         const { task_id, initiative_id, session_key, level, message, metadata } = req.body;
         if (!message) return res.status(400).json({ error: 'message required' });
-        const validLevels = ['info', 'success', 'warning', 'error', 'progress'];
-        const sigLevel = validLevels.includes(level) ? level : 'info';
-        const id = uuidv4();
-        const metaStr = metadata ? JSON.stringify(metadata) : null;
 
-        // Resolve task_label from session_key → work_tasks join (server-side)
-        let taskLabel = null;
-        if (session_key) {
-          const taskRow = await db.get(
-            'SELECT title FROM work_tasks WHERE session_key = $1 LIMIT 1',
-            [session_key]
-          );
-          if (taskRow) taskLabel = taskRow.title;
-        }
-
-        await db.run(
-          'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, task_label, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-          [id, task_id || null, initiative_id || null, req.agent?.id || null, session_key || null, taskLabel, sigLevel, message, metaStr]
-        );
-        const row = await db.get('SELECT * FROM signals WHERE id = $1', [id]);
+        const row = await insertSignal(db, uuidv4, {
+          task_id, initiative_id, agent_id: req.agent?.id || null,
+          session_key, level, message, metadata,
+        });
         broadcast('work:signal', row);
         return res.status(201).json(row);
       }
