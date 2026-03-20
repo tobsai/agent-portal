@@ -498,6 +498,24 @@ body {
   text-overflow: ellipsis;
 }
 
+/* ─── Signal session-key fallback pill (orphaned signals with no task label) ─── */
+.signal-session-key-pill {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.4rem;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 9999px;
+  font-size: 0.62rem;
+  color: var(--text-muted, #94a3b8);
+  vertical-align: middle;
+  white-space: nowrap;
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: monospace;
+}
+
 /* ─── Signal digest groups ─── */
 .signal-digest-group {
   border-bottom: 1px solid var(--border);

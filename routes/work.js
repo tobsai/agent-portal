@@ -63,6 +63,15 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
           broadcast('agent:status', agentThinkingStatus);
           thinkingExpireTimer = null;
           console.log('[status] Auto-expired thinking status to idle');
+          // Emit a visible warning signal so the expiry appears in the dashboard.
+          // Best-effort — don't let signal failures block the status update.
+          const expireSignalId = uuidv4();
+          db.run(
+            'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, task_label, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+            [expireSignalId, null, null, null, null, null, 'warning', 'Thinking status auto-expired after 5 min of inactivity', null]
+          ).then(() => db.get('SELECT * FROM signals WHERE id = $1', [expireSignalId]))
+            .then(row => { if (row) broadcast('work:signal', row); })
+            .catch(e => console.error('[status] Auto-expire signal insert failed:', e));
           // Best-effort DB update on auto-expire; fire-and-forget
           db.run(
             `INSERT INTO agent_status (id, status, task, updated_at)

@@ -205,14 +205,26 @@
     function _updateSignalsModeBtn() {
       const btn = document.getElementById('signals-mode-btn');
       if (!btn) return;
-      btn.textContent = _signalDigestMode ? 'Digest' : 'All';
+      // Label shows the *action* (what clicking will do), not the current state.
+      // When digest is ON → clicking will show All; when OFF → clicking will collapse to Digest.
+      btn.textContent = _signalDigestMode ? 'All' : 'Digest';
       btn.title = _signalDigestMode ? 'Showing digest — click for all' : 'Showing all — click for digest';
     }
 
     // ─── Signals rendering ─────────────────────────────────────────────────
     function _signalTaskPill(sig) {
-      if (!sig.task_label) return '';
-      return `<span class="signal-task-pill" title="Task: ${escHtml(sig.task_label)}">${escHtml(sig.task_label)}</span>`;
+      if (sig.task_label) {
+        return `<span class="signal-task-pill" title="Task: ${escHtml(sig.task_label)}">${escHtml(sig.task_label)}</span>`;
+      }
+      // Fallback: show session key as a neutral pill for orphaned signals so
+      // operators can still identify the originating session.
+      if (sig.session_key) {
+        const displayKey = sig.session_key.length > 16
+          ? sig.session_key.slice(0, 16) + '…'
+          : sig.session_key;
+        return `<span class="signal-session-key-pill" title="Session: ${escHtml(sig.session_key)}">${escHtml(displayKey)}</span>`;
+      }
+      return '';
     }
 
     function _buildSignalItem(sig, isNew = false) {
@@ -314,8 +326,11 @@
 
     function _updateSignalsFooter() {
       signalCount = _allSignals.length;
-      document.getElementById('signals-footer').textContent =
-        `${signalCount} signal${signalCount !== 1 ? 's' : ''} — refreshes live`;
+      // Show cap-aware copy so operators know this is a rolling window, not the full history.
+      const atCap = signalCount >= MAX_SIGNALS;
+      document.getElementById('signals-footer').textContent = atCap
+        ? `Showing newest ${MAX_SIGNALS} signals — refreshes live`
+        : `${signalCount} signal${signalCount !== 1 ? 's' : ''} — refreshes live`;
     }
 
     function renderSignalsPanel() {
