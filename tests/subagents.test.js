@@ -64,4 +64,46 @@ describe('GET /api/subagents', () => {
     expect(res.body.total).toBeGreaterThan(0);
     expect(res.body.tree.length).toBeGreaterThan(0);
   });
+
+  it('response includes failures summary with count and items', async () => {
+    const res = await request(app)
+      .get('/api/subagents')
+      .set('Authorization', `Bearer ${testAgentKey}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('failures');
+    expect(typeof res.body.failures.count).toBe('number');
+    expect(Array.isArray(res.body.failures.items)).toBe(true);
+  });
+
+  it('failure items have required drill-down fields when errors exist', async () => {
+    // Seed an error-status signal for a subagent session
+    await request(app)
+      .post('/api/signals')
+      .set('Authorization', `Bearer ${testAgentKey}`)
+      .send({
+        session_key: 'agent:main:subagent:fail-test-001',
+        level: 'error',
+        message: 'Simulated subagent failure for test',
+        metadata: {
+          type: 'subagent_error',
+          label: 'fail-test-001',
+          status: 'error',
+        },
+      });
+
+    const res = await request(app)
+      .get('/api/subagents')
+      .set('Authorization', `Bearer ${testAgentKey}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.failures.count).toBeGreaterThan(0);
+
+    const item = res.body.failures.items[0];
+    expect(item).toHaveProperty('id');
+    expect(item).toHaveProperty('label');
+    expect(item).toHaveProperty('lastMessage');
+    expect(item).toHaveProperty('runtime');
+    expect(item).toHaveProperty('startedAt');
+    expect(item).toHaveProperty('endedAt');
+  });
 });

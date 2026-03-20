@@ -291,9 +291,37 @@ module.exports = function agentsRouter({ db, AGENTS, requireAuth, requireAdmin, 
         node.children.sort(sortByStart);
       }
 
+      // ─── Compute failures summary (server-side; consumed by drill-down panel) ───
+      // Walk the full node map (not just today's roots) and extract error nodes.
+      // Each item exposes a pre-shaped lastMessage so the client needs zero reshaping.
+      const failureItems = [];
+      for (const node of nodeMap.values()) {
+        if (node.status !== 'error') continue;
+        // Pick the most informative signal: prefer error-level, fall back to last
+        const errorSignal = node.signals.slice().reverse().find(s => s.level === 'error');
+        const lastSignal  = node.signals.length > 0 ? node.signals[node.signals.length - 1] : null;
+        const chosen      = errorSignal || lastSignal;
+        failureItems.push({
+          id:          node.id,
+          label:       node.label || node.id,
+          lastMessage: chosen ? chosen.message : null,
+          runtime:     node.runtime,         // seconds | null
+          startedAt:   node.startedAt,
+          endedAt:     node.endedAt,
+        });
+      }
+      // Sort newest-first for stable panel ordering
+      failureItems.sort((a, b) =>
+        new Date(b.startedAt || 0) - new Date(a.startedAt || 0)
+      );
+
       res.json({
-        tree: roots,
-        total: nodeMap.size,
+        tree:     roots,
+        total:    nodeMap.size,
+        failures: {
+          count: failureItems.length,
+          items: failureItems,
+        },
         generatedAt: new Date().toISOString(),
       });
     } catch (err) {

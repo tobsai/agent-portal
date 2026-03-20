@@ -1006,7 +1006,82 @@ body {
   border-radius: 6px;
   padding: 0.5rem 0.7rem;
   margin: 0 0.5rem 0.35rem;
-  cursor: default;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sa-failure-item:hover {
+  background: rgba(248,113,113,0.11);
+  border-color: rgba(248,113,113,0.35);
+}
+
+.sa-failure-item.expanded {
+  background: rgba(248,113,113,0.13);
+  border-color: rgba(248,113,113,0.4);
+}
+
+/* ─── Per-row inline detail panel ─── */
+.sa-failure-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease, padding-top 0.2s ease;
+  padding-top: 0;
+  border-top: 0 solid rgba(248,113,113,0.15);
+}
+
+.sa-failure-item.expanded .sa-failure-detail {
+  max-height: 300px;
+  padding-top: 0.55rem;
+  border-top-width: 1px;
+}
+
+.sa-failure-detail-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.18rem 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.sa-failure-detail-key {
+  font-size: 0.67rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.sa-failure-detail-val {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  word-break: break-all;
+}
+
+.sa-failure-detail-message {
+  font-size: 0.73rem;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: pre-wrap;
+  background: rgba(0,0,0,0.18);
+  border-radius: 4px;
+  padding: 0.45rem 0.55rem;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.sa-failure-item-header .sa-failure-chevron {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  user-select: none;
+}
+
+.sa-failure-item.expanded .sa-failure-chevron {
+  transform: rotate(90deg);
 }
 
 .sa-failure-item-header {

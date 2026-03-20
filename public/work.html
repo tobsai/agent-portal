@@ -596,16 +596,14 @@
         const topAgent = Object.entries(agentCounts).sort((a, b) => b[1] - a[1])[0];
         const mostActive = topAgent ? `${topAgent[0]} — ${topAgent[1]} run${topAgent[1] > 1 ? 's' : ''}` : '—';
 
-        // 4. Recent failures — sorted newest-first, cached for drill-down panel
-        const failureCount = failures.length;
-        const sortedFailures = [...failures].sort(
-          (a, b) => new Date(b.startedAt || 0) - new Date(a.startedAt || 0)
-        );
-        _currentFailures = sortedFailures; // expose for drill-down panel
-        const lastFailure = sortedFailures.length > 0 ? sortedFailures[0] : null;
+        // 4. Recent failures — use server-computed failures summary (no client reshaping)
+        const serverFailures = data.failures || { count: 0, items: [] };
+        const failureCount = serverFailures.count;
+        _currentFailures = serverFailures.items; // pre-shaped by server
+        const lastFailure = _currentFailures.length > 0 ? _currentFailures[0] : null;
         const failureText = failureCount > 0
-          ? (lastFailure && lastFailure.signals && lastFailure.signals.length > 0
-              ? lastFailure.signals[lastFailure.signals.length - 1].message.slice(0, 40) + '…'
+          ? (lastFailure && lastFailure.lastMessage
+              ? lastFailure.lastMessage.slice(0, 40) + '…'
               : `${failureCount} failure${failureCount > 1 ? 's' : ''}`)
           : '—';
 
@@ -712,25 +710,55 @@
         return;
       }
 
-      list.innerHTML = failures.map(agent => {
-        const label = agent.label || agent.id?.slice(0, 32) || 'Unknown agent';
-        const lastSignal = agent.signals && agent.signals.length > 0
-          ? agent.signals[agent.signals.length - 1]
-          : null;
-        const lastMsg = lastSignal?.message || '(No failure message available)';
-        const age = timeAgo(agent.startedAt);
-        const duration = agent.runtime ? formatRuntime(agent.runtime * 1000) : '';
+      // Items are pre-shaped by the server (label, lastMessage, runtime, startedAt, endedAt).
+      // Per-row expand/collapse: click the row to toggle the .sa-failure-detail panel.
+      list.innerHTML = failures.map((item, idx) => {
+        const label    = escHtml(item.label || item.id?.slice(0, 40) || 'Unknown agent');
+        const age      = escHtml(timeAgo(item.startedAt));
+        const duration = item.runtime ? escHtml(formatRuntime(item.runtime * 1000)) : '';
+        const ts       = item.startedAt ? escHtml(new Date(item.startedAt).toLocaleString()) : '—';
+        const tsEnd    = item.endedAt   ? escHtml(new Date(item.endedAt).toLocaleString())   : '—';
+        const msg      = escHtml(item.lastMessage || '(No failure message available)');
+        const idAttr   = escHtml(item.id || '');
 
         return `
-          <div class="sa-failure-item">
+          <div class="sa-failure-item" data-failure-idx="${idx}" onclick="toggleFailureRow(this)" title="Click to expand">
             <div class="sa-failure-item-header">
-              <span class="sa-failure-label" title="${escHtml(agent.id || '')}">${escHtml(label)}</span>
-              ${duration ? `<span class="sa-failure-duration">${escHtml(duration)}</span>` : ''}
-              <span class="sa-failure-age">${escHtml(age)}</span>
+              <span class="sa-failure-chevron">▶</span>
+              <span class="sa-failure-label" title="${idAttr}">${label}</span>
+              ${duration ? `<span class="sa-failure-duration">${duration}</span>` : ''}
+              <span class="sa-failure-age">${age}</span>
             </div>
-            <div class="sa-failure-message">${escHtml(lastMsg)}</div>
+            <div class="sa-failure-detail" aria-hidden="true">
+              <div class="sa-failure-detail-grid">
+                <span class="sa-failure-detail-key">Label</span>
+                <span class="sa-failure-detail-val">${label}</span>
+                <span class="sa-failure-detail-key">Started</span>
+                <span class="sa-failure-detail-val">${ts}</span>
+                <span class="sa-failure-detail-key">Ended</span>
+                <span class="sa-failure-detail-val">${tsEnd}</span>
+                ${duration ? `<span class="sa-failure-detail-key">Runtime</span><span class="sa-failure-detail-val">${duration}</span>` : ''}
+              </div>
+              <div class="sa-failure-detail-message">${msg}</div>
+            </div>
           </div>`;
       }).join('');
+    }
+
+    function toggleFailureRow(el) {
+      if (!el) return;
+      const isExpanded = el.classList.contains('expanded');
+      // Collapse all rows, then expand this one (accordion-style)
+      document.querySelectorAll('.sa-failure-item.expanded').forEach(row => {
+        row.classList.remove('expanded');
+        const detail = row.querySelector('.sa-failure-detail');
+        if (detail) detail.setAttribute('aria-hidden', 'true');
+      });
+      if (!isExpanded) {
+        el.classList.add('expanded');
+        const detail = el.querySelector('.sa-failure-detail');
+        if (detail) detail.setAttribute('aria-hidden', 'false');
+      }
     }
 
     // ─── Scheduled Tasks Widget ─────────────────────────────────────────────
