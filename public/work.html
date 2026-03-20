@@ -195,6 +195,10 @@
     let signalCount = 0;
     const MAX_SIGNALS = 80;
 
+    // True total from the DB (populated by fetchSignals from the `total` field).
+    // When _dbTotal > MAX_SIGNALS the footer shows "Showing newest N of M".
+    let _dbTotal = 0;
+
     // Digest mode: default collapsed, persisted in localStorage
     let _signalDigestMode = localStorage.getItem('signals_digest_mode') !== 'false';
     // All signals buffer for digest re-render
@@ -220,6 +224,9 @@
      * Fetch signals from the API, honouring the active level filter.
      * Replaces the in-memory buffer and re-renders the panel.
      * Also called on initial load (from loadSignals → this replaces it).
+     *
+     * Consumes the `total` field from GET /api/signals to populate _dbTotal,
+     * which drives the "Showing newest N of M" footer when the buffer is full.
      */
     async function fetchSignals() {
       try {
@@ -227,6 +234,9 @@
         const res = await fetch(`/api/signals${qs}`);
         if (!res.ok) return;
         const data = await res.json();
+        // `total` is the true DB count (may exceed MAX_SIGNALS buffer).
+        // Preserve 0 as the default so the footer is coherent before first fetch.
+        _dbTotal = typeof data.total === 'number' ? data.total : (data.signals || []).length;
         loadSignals(data.signals || []);
       } catch { /* non-fatal — panel remains showing prior data */ }
     }
@@ -363,10 +373,26 @@
 
     function _updateSignalsFooter() {
       signalCount = _allSignals.length;
-      // Show cap-aware copy so operators know this is a rolling window, not the full history.
-      const atCap = signalCount >= MAX_SIGNALS;
-      document.getElementById('signals-footer').textContent = atCap
-        ? `Showing newest ${MAX_SIGNALS} signals — refreshes live`
+      const footer = document.getElementById('signals-footer');
+      if (!footer) return;
+
+      // Use the true DB total when the buffer is at capacity so the operator
+      // sees an accurate count, not the capped buffer size.
+      //
+      // Three cases:
+      //   1. No signals yet           → "No signals yet"
+      //   2. Buffer not full          → "N signal(s) — refreshes live"
+      //   3. Buffer full, true total  → "Showing newest N of M — refreshes live"
+      //      (M may equal N if the DB was queried at exactly the limit boundary;
+      //       the copy is still correct — "showing newest N of N" is clear)
+      if (signalCount === 0) {
+        footer.textContent = 'No signals yet';
+        return;
+      }
+
+      const atCap = signalCount >= MAX_SIGNALS && _dbTotal > signalCount;
+      footer.textContent = atCap
+        ? `Showing newest ${signalCount} of ${_dbTotal} — refreshes live`
         : `${signalCount} signal${signalCount !== 1 ? 's' : ''} — refreshes live`;
     }
 

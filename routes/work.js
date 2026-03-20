@@ -329,6 +329,16 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
 
   // ============ SIGNALS ============
   // GET /api/signals — fetch recent signals (auth required: user session OR agent key)
+  //
+  // Response shape:
+  //   { signals: SignalRow[], total: number, count: number }
+  //
+  //   total — true row count in the DB matching the active filters (may exceed `limit`)
+  //   count — number of rows returned in this response (≤ limit)
+  //
+  // The distinction matters when `count === limit`: the caller knows there are
+  // `total - count` additional rows not included in the response. The UI uses
+  // this to render "Showing newest N of M" instead of a misleading flat count.
   router.get('/signals', requireAuth, async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
@@ -336,8 +346,25 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
       const initiative_id = req.query.initiative_id || null;
       const level = req.query.level || null;
 
-      // JOIN with work_tasks to resolve task_label from session_key match
-      let sql = `
+      // Build WHERE conditions — shared between the count query and the data query.
+      const conditions = [];
+      const filterParams = [];
+      let filterIdx = 1;
+
+      if (task_id) { conditions.push(`s.task_id = $${filterIdx++}`); filterParams.push(task_id); }
+      if (initiative_id) { conditions.push(`s.initiative_id = $${filterIdx++}`); filterParams.push(initiative_id); }
+      if (level) { conditions.push(`s.level = $${filterIdx++}`); filterParams.push(level); }
+
+      const whereClause = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+
+      // COUNT query — true total in DB matching the active filters.
+      // Uses a table alias to keep WHERE syntax consistent with the data query.
+      const countSql = `SELECT COUNT(*) AS n FROM signals s${whereClause}`;
+      const countRow = await db.get(countSql, filterParams);
+      const dbTotal = (countRow?.n ?? countRow?.count ?? 0);
+
+      // Data query — JOIN with work_tasks to resolve task_label from session_key match.
+      let dataSql = `
         SELECT s.*,
                COALESCE(s.task_label, wt.title) AS task_label
         FROM signals s
@@ -345,20 +372,18 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
           ON wt.session_key IS NOT NULL
          AND wt.session_key != ''
          AND s.session_key = wt.session_key`;
-      const conditions = [];
-      const params = [];
-      let idx = 1;
 
-      if (task_id) { conditions.push(`s.task_id = $${idx++}`); params.push(task_id); }
-      if (initiative_id) { conditions.push(`s.initiative_id = $${idx++}`); params.push(initiative_id); }
-      if (level) { conditions.push(`s.level = $${idx++}`); params.push(level); }
+      // Append limit param after filter params
+      const dataParams = [...filterParams, limit];
+      dataSql += whereClause + ` ORDER BY s.created_at DESC LIMIT $${filterIdx}`;
 
-      if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-      sql += ` ORDER BY s.created_at DESC LIMIT $${idx}`;
-      params.push(limit);
+      const rows = await db.query(dataSql, dataParams);
 
-      const rows = await db.query(sql, params);
-      res.json({ signals: rows, total: rows.length });
+      res.json({
+        signals: rows,
+        count:   rows.length,
+        total:   Number(dbTotal),
+      });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

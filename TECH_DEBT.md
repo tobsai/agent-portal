@@ -1,5 +1,30 @@
 # TECH_DEBT.md — Agent Portal
 
+---
+
+## [NEXT-088] Signal count `_dbTotal` not updated on live WebSocket push
+
+**File:** `public/work.html` — `renderSignal` / `_updateSignalsFooter`
+**Added:** 2026-03-20
+
+When a live signal arrives over WebSocket, `renderSignal(sig, true)` inserts it
+into `_allSignals` but does not update `_dbTotal`. The footer therefore shows the
+DB total from the last `fetchSignals()` HTTP call, not the current DB state.
+
+In practice the drift is minor: `fetchSignals()` is triggered on every level
+filter change, and `_dbTotal` from the last poll is always within one signal of
+truth for a live panel. The next full fetch (reconnect, filter toggle, page load)
+will correct it.
+
+**Correct fix:** Increment `_dbTotal` atomically when a new signal is pushed via
+WebSocket, and handle the case where `_dbTotal` was zero (first signal ever).
+This removes the one-off drift without adding another round-trip.
+
+**Deferred because:** The window is always sub-second and the copy "Showing newest
+N of M" is a floor, never an overcount.
+
+---
+
 Track shortcuts and deferred architectural work here. Do not build on top of them.
 
 ---

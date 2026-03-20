@@ -3,61 +3,47 @@
 /**
  * tests/activity.test.js
  *
- * GET /api/activity — returns recent signals as an activity feed.
- * Requires a valid agent key (requireAuth).
+ * GET /api/activity — DEPRECATED in NEXT-088.
+ *
+ * The route now returns HTTP 410 Gone with a migration pointer to
+ * GET /api/signals. These tests verify the deprecation contract:
+ *   - Unauthenticated requests still get 401 (auth check runs before 410)
+ *   - Authenticated requests get 410
+ *   - Response body has the expected deprecation shape
  */
 
 const request = require('supertest');
 const { createApp } = require('./helpers/createApp');
 
-describe('GET /api/activity', () => {
+describe('GET /api/activity (deprecated — NEXT-088)', () => {
   const { app, testAgentKey } = createApp();
-
-  it('returns 200 with valid agent key', async () => {
-    const res = await request(app)
-      .get('/api/activity')
-      .set('Authorization', `Bearer ${testAgentKey}`);
-    expect(res.status).toBe(200);
-  });
-
-  it('response has activity array and total', async () => {
-    const res = await request(app)
-      .get('/api/activity')
-      .set('Authorization', `Bearer ${testAgentKey}`);
-    expect(res.body).toHaveProperty('activity');
-    expect(Array.isArray(res.body.activity)).toBe(true);
-    expect(typeof res.body.total).toBe('number');
-  });
-
-  it('returns empty feed when no signals exist', async () => {
-    const res = await request(app)
-      .get('/api/activity')
-      .set('Authorization', `Bearer ${testAgentKey}`);
-    expect(res.body.activity).toHaveLength(0);
-    expect(res.body.total).toBe(0);
-  });
 
   it('returns 401 without auth', async () => {
     const res = await request(app).get('/api/activity');
     expect(res.status).toBe(401);
   });
 
-  it('reflects newly posted signals', async () => {
-    // Post a signal first
-    await request(app)
-      .post('/api/signals')
-      .set('Authorization', `Bearer ${testAgentKey}`)
-      .send({ message: 'Activity feed test signal', level: 'info' });
-
+  it('returns 410 Gone with valid agent key', async () => {
     const res = await request(app)
       .get('/api/activity')
       .set('Authorization', `Bearer ${testAgentKey}`);
+    expect(res.status).toBe(410);
+  });
 
-    expect(res.status).toBe(200);
-    expect(res.body.activity.length).toBeGreaterThan(0);
-    const found = res.body.activity.find(
-      /** @param {{ message: string }} s */ s => s.message === 'Activity feed test signal'
-    );
-    expect(found).toBeTruthy();
+  it('response body includes error, message, and replacement fields', async () => {
+    const res = await request(app)
+      .get('/api/activity')
+      .set('Authorization', `Bearer ${testAgentKey}`);
+    expect(res.body).toHaveProperty('error', 'Gone');
+    expect(res.body).toHaveProperty('message');
+    expect(typeof res.body.message).toBe('string');
+    expect(res.body).toHaveProperty('replacement', '/api/signals');
+  });
+
+  it('replacement field points to /api/signals', async () => {
+    const res = await request(app)
+      .get('/api/activity')
+      .set('Authorization', `Bearer ${testAgentKey}`);
+    expect(res.body.replacement).toBe('/api/signals');
   });
 });
