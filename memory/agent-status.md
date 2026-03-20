@@ -210,3 +210,21 @@ The sub-agent visual tree is **live and fully functional** at https://talos.mtre
 **Architectural flags noted:** Duplicate scheduled task IDs, ephemeral status field, low `last_outcome` population rate.
 
 **Files:** `public/work.html`, `docs/CREATIVE_PASS_MAR_27.md`, `memory/agent-status.md`
+
+---
+
+## ✅ NEXT-056 Quick Win #3: Subagent Failure Drill-Down (2026-03-20 CDT)
+
+**Task:** Make the "Recent Failures" metric cell in the Sub-Agent Activity widget interactive (NEXT-056 gap #5).
+**Commit:** `452dce7` on branch `next-056-scheduled-widget`
+
+**What was implemented:**
+- `#sa-failures-trigger` — wraps the existing failures metric cell; clickable when failures > 0
+- `toggleFailuresPanel()` — toggles `.sa-failures-panel.open`, re-renders live data on refresh
+- `renderFailuresPanel()` — formats each failed agent: label, last signal message, runtime, age
+- `_currentFailures` — module-level cache populated on each `loadSubAgentWidget()` call (sorted newest-first)
+- CSS: `.sa-failures-panel`, `.sa-failure-item`, `.sa-metric-item.clickable/.expanded` — all styling inline in `work.html`
+
+**Architecture:** UI-only. No new routes, no DB schema changes, no new npm deps. Data sourced from the existing `/api/subagents` response — the `signals[]` array already on each node provides the last failure message.
+
+**Verified:** `node --check server.js` passes, all 65 tests green.

@@ -22,7 +22,11 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
   let agentThinkingStatus = { status: 'idle', task: null, timestamp: null };
   let thinkingExpireTimer = null;
 
-  router.post('/status', requireAgentKey, (req, res) => {
+  // Threshold (ms) below which the in-memory value is considered fresh enough
+  // to skip a DB read on GET. 30 seconds matches the task spec.
+  const STATUS_FRESH_MS = 30 * 1000;
+
+  router.post('/status', requireAgentKey, async (req, res) => {
     try {
       const { status, task } = req.body;
       if (!status || !['thinking', 'idle'].includes(status)) {
@@ -35,15 +39,40 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
       }
 
       const timestamp = new Date().toISOString();
+      const updatedAtMs = Date.now();
       agentThinkingStatus = { status, task: task || null, timestamp };
+
+      // Persist to DB — single-row upsert on id = 1
+      // TODO(lewis): post outcome string to /api/status after cron completion
+      await db.run(
+        `INSERT INTO agent_status (id, status, task, updated_at)
+         VALUES (1, $1, $2, $3)
+         ON CONFLICT(id) DO UPDATE SET
+           status     = excluded.status,
+           task       = excluded.task,
+           updated_at = excluded.updated_at`,
+        [status, task || null, updatedAtMs]
+      );
+
       broadcast('agent:status', agentThinkingStatus);
 
       if (status === 'thinking') {
         thinkingExpireTimer = setTimeout(() => {
-          agentThinkingStatus = { status: 'idle', task: null, timestamp: new Date().toISOString() };
+          const expiredTs = new Date().toISOString();
+          agentThinkingStatus = { status: 'idle', task: null, timestamp: expiredTs };
           broadcast('agent:status', agentThinkingStatus);
           thinkingExpireTimer = null;
           console.log('[status] Auto-expired thinking status to idle');
+          // Best-effort DB update on auto-expire; fire-and-forget
+          db.run(
+            `INSERT INTO agent_status (id, status, task, updated_at)
+             VALUES (1, 'idle', NULL, $1)
+             ON CONFLICT(id) DO UPDATE SET
+               status     = 'idle',
+               task       = NULL,
+               updated_at = excluded.updated_at`,
+            [Date.now()]
+          ).catch(e => console.error('[status] DB expire update failed:', e));
         }, 5 * 60 * 1000);
       }
 
@@ -54,8 +83,37 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
     }
   });
 
-  router.get('/status', requireAuth, (req, res) => {
-    res.json(agentThinkingStatus);
+  router.get('/status', requireAuth, async (req, res) => {
+    try {
+      // Prefer in-memory if it was updated within the freshness window
+      const inMemoryAge = agentThinkingStatus.timestamp
+        ? Date.now() - new Date(agentThinkingStatus.timestamp).getTime()
+        : Infinity;
+
+      if (inMemoryAge <= STATUS_FRESH_MS) {
+        return res.json(agentThinkingStatus);
+      }
+
+      // Stale in-memory (e.g. after a process restart) — fall back to DB
+      const row = await db.get('SELECT * FROM agent_status WHERE id = 1').catch(() => null);
+      if (row) {
+        const dbAge = Date.now() - row.updated_at;
+        const dbStatus = {
+          status:    row.status,
+          task:      row.task || null,
+          timestamp: new Date(row.updated_at).toISOString(),
+        };
+        // Rehydrate in-memory so subsequent GETs don't hit the DB again
+        agentThinkingStatus = dbStatus;
+        return res.json(dbStatus);
+      }
+
+      // No DB row yet — return the default idle state
+      res.json(agentThinkingStatus);
+    } catch (err) {
+      console.error('Error reading agent thinking status:', err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // ============ AGENT HEALTH MONITORING ============

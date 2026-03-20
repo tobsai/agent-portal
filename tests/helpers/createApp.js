@@ -98,6 +98,28 @@ function createTestDb() {
       PRIMARY KEY (channel_id, user_id)
     );
     CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      schedule TEXT NOT NULL,
+      schedule_human TEXT,
+      enabled INTEGER DEFAULT 1,
+      next_run_at TEXT,
+      last_run_at TEXT,
+      last_status TEXT,
+      last_outcome TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_tasks_dedup ON scheduled_tasks(name, schedule);
+
+    CREATE TABLE IF NOT EXISTS agent_status (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'idle',
+      task TEXT,
+      updated_at INTEGER NOT NULL
+    );
   `);
 
   return {
@@ -189,6 +211,7 @@ function createApp(opts = {}) {
   app.use('/api', healthRouter({
     gatewayClient: { isReady: false, ws: null },
     getChatState: () => ({ authenticated: false, ws: null }),
+    db,
   }));
 
   app.use('/api', agentsRouter({

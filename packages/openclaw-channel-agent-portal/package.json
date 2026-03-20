@@ -7,6 +7,15 @@
   "scripts": {
     "build": "tsc --outDir dist --declaration --module commonjs --target es2020 --esModuleInterop index.ts"
   },
-  "keywords": ["openclaw", "channel-plugin", "agent-portal"],
-  "license": "MIT"
+  "keywords": [
+    "openclaw",
+    "channel-plugin",
+    "agent-portal"
+  ],
+  "license": "MIT",
+  "author": "",
+  "type": "commonjs",
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
 }

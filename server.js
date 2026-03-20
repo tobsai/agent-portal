@@ -243,6 +243,8 @@ app.get('/', (req, res) => {
 
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
 app.use('/downloads', express.static(path.join(__dirname, 'public', 'downloads')));
+// Static stylesheets — serve individual CSS files from public/ by name
+app.get('/work.css', (req, res) => res.sendFile(path.join(__dirname, 'public', 'work.css')));
 app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.ico')));
 app.get('/favicon.svg', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.svg')));
 
