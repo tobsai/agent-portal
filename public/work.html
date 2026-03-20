@@ -810,6 +810,113 @@
       flex-shrink: 0;
     }
 
+    /* ─── Sub-Agent Failure Drill-Down ─── */
+    .sa-failures-panel {
+      display: none;
+      margin: 0.5rem 0 0;
+      border-top: 1px solid var(--border);
+      padding-top: 0.5rem;
+    }
+
+    .sa-failures-panel.open { display: block; }
+
+    .sa-failures-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.3rem 0.5rem 0.5rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
+    }
+
+    .sa-failures-close {
+      font-size: 0.85rem;
+      line-height: 1;
+      cursor: pointer;
+      color: var(--text-dim);
+      background: none;
+      border: none;
+      padding: 0;
+      transition: color 0.15s;
+    }
+
+    .sa-failures-close:hover { color: var(--text-muted); }
+
+    .sa-failure-item {
+      background: rgba(248,113,113,0.06);
+      border: 1px solid rgba(248,113,113,0.18);
+      border-radius: 6px;
+      padding: 0.5rem 0.7rem;
+      margin: 0 0.5rem 0.35rem;
+      cursor: default;
+    }
+
+    .sa-failure-item-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .sa-failure-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--red);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sa-failure-age {
+      font-size: 0.67rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0;
+    }
+
+    .sa-failure-duration {
+      font-size: 0.67rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0;
+    }
+
+    .sa-failure-message {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+      font-family: 'JetBrains Mono', monospace;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+
+    .sa-failure-empty {
+      padding: 0.75rem;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      text-align: center;
+    }
+
+    /* Make the failures metric cell interactive */
+    .sa-metric-item.clickable {
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .sa-metric-item.clickable:hover {
+      background: rgba(248,113,113,0.08);
+    }
+
+    .sa-metric-item.clickable.expanded {
+      background: rgba(248,113,113,0.1);
+      outline: 1px solid rgba(248,113,113,0.25);
+    }
+
     /* ─── Sub-Agent Chart (CSS-only bars) ─── */
     .sa-chart-container {
       margin: 0.75rem 0;
@@ -970,11 +1077,20 @@
             <div class="sa-metric-label">Most Active</div>
             <div class="sa-metric-value" id="sa-most-active">—</div>
           </div>
-          <div class="sa-metric-item">
+          <div class="sa-metric-item clickable" id="sa-failures-trigger" onclick="toggleFailuresPanel()" title="Click to see failure details">
             <div class="sa-metric-label">Recent Failures</div>
             <div class="sa-metric-value" id="sa-failures">—</div>
           </div>
         </div>
+      </div>
+
+      <!-- Failure Drill-Down Panel (NEXT-056) -->
+      <div class="sa-failures-panel" id="sa-failures-panel">
+        <div class="sa-failures-panel-header">
+          <span>Failure Details</span>
+          <button class="sa-failures-close" onclick="toggleFailuresPanel()" title="Close">✕</button>
+        </div>
+        <div id="sa-failures-list"></div>
       </div>
 
       <!-- Chart -->
@@ -1329,11 +1445,13 @@
         const topAgent = Object.entries(agentCounts).sort((a, b) => b[1] - a[1])[0];
         const mostActive = topAgent ? `${topAgent[0]} — ${topAgent[1]} run${topAgent[1] > 1 ? 's' : ''}` : '—';
 
-        // 4. Recent failures
+        // 4. Recent failures — sorted newest-first, cached for drill-down panel
         const failureCount = failures.length;
-        const lastFailure = failures.length > 0
-          ? failures.sort((a, b) => new Date(b.startedAt || 0) - new Date(a.startedAt || 0))[0]
-          : null;
+        const sortedFailures = [...failures].sort(
+          (a, b) => new Date(b.startedAt || 0) - new Date(a.startedAt || 0)
+        );
+        _currentFailures = sortedFailures; // expose for drill-down panel
+        const lastFailure = sortedFailures.length > 0 ? sortedFailures[0] : null;
         const failureText = failureCount > 0
           ? (lastFailure && lastFailure.signals && lastFailure.signals.length > 0
               ? lastFailure.signals[lastFailure.signals.length - 1].message.slice(0, 40) + '…'
@@ -1347,6 +1465,17 @@
         const failEl = document.getElementById('sa-failures');
         failEl.textContent = failureText;
         failEl.className = 'sa-metric-value' + (failureCount > 0 ? ' error' : '');
+
+        // Update drill-down trigger affordance and re-render if panel is open
+        const failTrigger = document.getElementById('sa-failures-trigger');
+        if (failTrigger) {
+          failTrigger.style.pointerEvents = failureCount > 0 ? '' : 'none';
+          failTrigger.title = failureCount > 0 ? 'Click to see failure details' : 'No failures';
+        }
+        const failPanel = document.getElementById('sa-failures-panel');
+        if (failPanel && failPanel.classList.contains('open')) {
+          renderFailuresPanel(_currentFailures);
+        }
 
         metricsEl.style.display = 'block';
 
@@ -1400,6 +1529,57 @@
         console.error('[loadSubAgentWidget] error:', err);
         // silently fail — widget is supplemental
       }
+    }
+
+    // ─── Sub-Agent Failure Drill-Down (NEXT-056) ────────────────────────────
+    // Holds the current failures array for rendering the inline panel.
+    let _currentFailures = [];
+
+    function toggleFailuresPanel() {
+      const panel  = document.getElementById('sa-failures-panel');
+      const trigger = document.getElementById('sa-failures-trigger');
+      if (!panel || !trigger) return;
+
+      const isOpen = panel.classList.contains('open');
+
+      if (isOpen) {
+        panel.classList.remove('open');
+        trigger.classList.remove('expanded');
+      } else {
+        renderFailuresPanel(_currentFailures);
+        panel.classList.add('open');
+        trigger.classList.add('expanded');
+      }
+    }
+
+    function renderFailuresPanel(failures) {
+      const list = document.getElementById('sa-failures-list');
+      if (!list) return;
+
+      if (!failures || failures.length === 0) {
+        list.innerHTML = '<div class="sa-failure-empty">No failures to display.</div>';
+        return;
+      }
+
+      list.innerHTML = failures.map(agent => {
+        const label = agent.label || agent.id?.slice(0, 32) || 'Unknown agent';
+        const lastSignal = agent.signals && agent.signals.length > 0
+          ? agent.signals[agent.signals.length - 1]
+          : null;
+        const lastMsg = lastSignal?.message || '(No failure message available)';
+        const age = timeAgo(agent.startedAt);
+        const duration = agent.runtime ? formatRuntime(agent.runtime * 1000) : '';
+
+        return `
+          <div class="sa-failure-item">
+            <div class="sa-failure-item-header">
+              <span class="sa-failure-label" title="${escHtml(agent.id || '')}">${escHtml(label)}</span>
+              ${duration ? `<span class="sa-failure-duration">${escHtml(duration)}</span>` : ''}
+              <span class="sa-failure-age">${escHtml(age)}</span>
+            </div>
+            <div class="sa-failure-message">${escHtml(lastMsg)}</div>
+          </div>`;
+      }).join('');
     }
 
     // ─── Scheduled Tasks Widget ─────────────────────────────────────────────
