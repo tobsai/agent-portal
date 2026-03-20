@@ -42,6 +42,93 @@ module.exports = function scheduledRouter({ db, requireAuth, requireAgentKey }) 
   });
 
   /**
+   * PATCH /api/scheduled/:id — write back outcome after a cron run.
+   *
+   * Body (all fields optional, only provided fields are updated):
+   *   last_run_at   TEXT  ISO timestamp of when the task last ran
+   *   last_status   TEXT  'success' | 'error' | 'running' | ...
+   *   last_outcome  TEXT  human-readable outcome string shown in the UI
+   *   next_run_at   TEXT  ISO timestamp of the next scheduled run
+   *
+   * Returns 404 if the task ID does not exist.
+   * Returns 400 if no updatable fields are provided.
+   *
+   * TODO(lewis): cron jobs should call this endpoint after each run to record
+   * their outcome — without it, the error filter tab stays permanently empty
+   * and lastOutcome never renders in work.html.
+   */
+  router.patch('/scheduled/:id', requireAgentKey, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { last_run_at, last_status, last_outcome, next_run_at } = req.body;
+
+      const VALID_STATUSES = ['success', 'error', 'running', 'skipped', 'unknown'];
+
+      // Reject if last_status is provided but not a known value
+      if (last_status !== undefined && !VALID_STATUSES.includes(last_status)) {
+        return res.status(400).json({
+          error: `"last_status" must be one of: ${VALID_STATUSES.join(', ')}`,
+        });
+      }
+
+      // Validate ISO-ish timestamps when provided (cheap string check)
+      for (const [field, value] of [['last_run_at', last_run_at], ['next_run_at', next_run_at]]) {
+        if (value !== undefined && (typeof value !== 'string' || isNaN(Date.parse(value)))) {
+          return res.status(400).json({ error: `"${field}" must be a valid ISO timestamp` });
+        }
+      }
+
+      if (last_outcome !== undefined && typeof last_outcome !== 'string') {
+        return res.status(400).json({ error: '"last_outcome" must be a string' });
+      }
+
+      const updates = { last_run_at, last_status, last_outcome, next_run_at };
+      const provided = Object.entries(updates).filter(([, v]) => v !== undefined);
+
+      if (provided.length === 0) {
+        return res.status(400).json({ error: 'No updatable fields provided' });
+      }
+
+      const existing = await db.get('SELECT * FROM scheduled_tasks WHERE id = $1', [id]);
+      if (!existing) {
+        return res.status(404).json({ error: 'Scheduled task not found' });
+      }
+
+      const now = new Date().toISOString();
+
+      // Build SET clause with $1…$N for the updated fields, $N+1 for updated_at.
+      // id goes at the end as $N+2 (WHERE clause) so that positional ? bindings
+      // work correctly after the SQLite adapter's $N→? replacement.
+      const values     = provided.map(([, v]) => v);
+      const setClauses = provided.map(([col], i) => `${col} = $${i + 1}`).join(', ');
+      const updatedAtIdx = values.length + 1;
+      const idIdx        = values.length + 2;
+
+      await db.run(
+        `UPDATE scheduled_tasks SET ${setClauses}, updated_at = $${updatedAtIdx} WHERE id = $${idIdx}`,
+        [...values, now, id]
+      );
+
+      const updated = await db.get('SELECT * FROM scheduled_tasks WHERE id = $1', [id]);
+
+      // Enrich with UI field aliases (mirrors GET /api/scheduled)
+      res.json({
+        success: true,
+        task: {
+          ...updated,
+          nextRun:       updated.next_run_at,
+          lastRun:       updated.last_run_at,
+          lastRunStatus: updated.last_status,
+          lastOutcome:   updated.last_outcome || null,
+        },
+      });
+    } catch (err) {
+      console.error('[scheduled] PATCH error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
    * POST /api/scheduled — register or update a scheduled task.
    *
    * Body:

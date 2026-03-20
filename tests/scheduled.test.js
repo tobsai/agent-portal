@@ -131,3 +131,95 @@ describe('POST /api/scheduled — deduplication (NEXT-059)', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('PATCH /api/scheduled/:id — outcome write-back (NEXT-079)', () => {
+  /** Helper: register a task and return its id */
+  async function registerTask(app, key, overrides = {}) {
+    const res = await request(app)
+      .post('/api/scheduled')
+      .set('Authorization', `Bearer ${key}`)
+      .send({ name: 'outcome-task', schedule: '0 * * * *', ...overrides });
+    return res.body.task.id;
+  }
+
+  it('returns 404 when task id does not exist', async () => {
+    const { app, testAgentKey } = createApp();
+    const res = await request(app)
+      .patch('/api/scheduled/nonexistent-id')
+      .set('Authorization', `Bearer ${testAgentKey}`)
+      .send({ last_status: 'success' });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 401 without agent key', async () => {
+    const { app } = createApp();
+    const res = await request(app)
+      .patch('/api/scheduled/any-id')
+      .send({ last_status: 'success' });
+    expect(res.status).toBe(401);
+  });
+
+  it('updates last_status and last_outcome on the task row', async () => {
+    const { app, testAgentKey } = createApp();
+    const id = await registerTask(app, testAgentKey);
+
+    const res = await request(app)
+      .patch(`/api/scheduled/${id}`)
+      .set('Authorization', `Bearer ${testAgentKey}`)
+      .send({
+        last_status:  'success',
+        last_outcome: 'Completed 12 items in 4.2 s',
+        last_run_at:  '2026-03-20T15:00:00.000Z',
+        next_run_at:  '2026-03-20T16:00:00.000Z',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.task.last_status).toBe('success');
+    expect(res.body.task.last_outcome).toBe('Completed 12 items in 4.2 s');
+    expect(res.body.task.lastOutcome).toBe('Completed 12 items in 4.2 s');
+    expect(res.body.task.lastRunStatus).toBe('success');
+  });
+
+  it('supports partial updates — only provided fields change', async () => {
+    const { app, testAgentKey } = createApp();
+    const id = await registerTask(app, testAgentKey);
+
+    // First write: set an outcome
+    await request(app)
+      .patch(`/api/scheduled/${id}`)
+      .set('Authorization', `Bearer ${testAgentKey}`)
+      .send({ last_status: 'success', last_outcome: 'First run OK' });
+
+    // Second write: update only last_status
+    const res = await request(app)
+      .patch(`/api/scheduled/${id}`)
+      .set('Authorization', `Bearer ${testAgentKey}`)
+      .send({ last_status: 'error' });
+
+    expect(res.status).toBe(200);
+    // last_outcome should be unchanged from the first write
+    expect(res.body.task.last_outcome).toBe('First run OK');
+    expect(res.body.task.last_status).toBe('error');
+  });
+
+  it('returns 400 when no updatable fields are provided', async () => {
+    const { app, testAgentKey } = createApp();
+    const id = await registerTask(app, testAgentKey);
+    const res = await request(app)
+      .patch(`/api/scheduled/${id}`)
+      .set('Authorization', `Bearer ${testAgentKey}`)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for an invalid last_status value', async () => {
+    const { app, testAgentKey } = createApp();
+    const id = await registerTask(app, testAgentKey);
+    const res = await request(app)
+      .patch(`/api/scheduled/${id}`)
+      .set('Authorization', `Bearer ${testAgentKey}`)
+      .send({ last_status: 'kaboom' });
+    expect(res.status).toBe(400);
+  });
+});
