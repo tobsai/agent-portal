@@ -146,6 +146,35 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
     }
   });
 
+  /**
+   * Compute staleness thresholds for an agent health record.
+   * Thresholds are server-authoritative — the client only renders what we provide.
+   *
+   * @param {object} health — entry from agentHealthStatus
+   * @returns {{ minutesSinceReport: number, minutesSincePoll: number|null,
+   *             reportStale: boolean, pollStale: boolean,
+   *             stalenessLevel: 'ok'|'stale'|'dead' }}
+   */
+  function computeStaleness(health) {
+    const now = new Date();
+    const lastReportedAt = new Date(health.lastReportedAt);
+    const minutesSinceReport = Math.floor((now - lastReportedAt) / 1000 / 60);
+    const lastPoll = health.iMessagePolling?.lastPoll ? new Date(health.iMessagePolling.lastPoll) : null;
+    const minutesSincePoll = lastPoll ? Math.floor((now - lastPoll) / 1000 / 60) : null;
+
+    const stalenessLevel = minutesSinceReport > 15 ? 'dead'
+                         : minutesSinceReport > 5  ? 'stale'
+                         :                           'ok';
+
+    return {
+      minutesSinceReport,
+      minutesSincePoll,
+      reportStale: minutesSinceReport > 5,
+      pollStale: minutesSincePoll !== null && minutesSincePoll > 15,
+      stalenessLevel,
+    };
+  }
+
   router.get('/agent-health', requireAuth, (req, res) => {
     try {
       const agentId = req.query.agent_id;
@@ -153,23 +182,18 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
         const health = agentHealthStatus[agentId];
         if (!health) return res.status(404).json({ error: 'No health data for this agent' });
 
-        const lastReportedAt = new Date(health.lastReportedAt);
-        const now = new Date();
-        const minutesSinceReport = Math.floor((now - lastReportedAt) / 1000 / 60);
-        const lastPoll = health.iMessagePolling?.lastPoll ? new Date(health.iMessagePolling.lastPoll) : null;
-        const minutesSincePoll = lastPoll ? Math.floor((now - lastPoll) / 1000 / 60) : null;
-
         return res.json({
           ...health,
-          staleness: {
-            reportStale: minutesSinceReport > 10,
-            pollStale: minutesSincePoll !== null && minutesSincePoll > 15,
-            minutesSinceReport,
-            minutesSincePoll
-          }
+          staleness: computeStaleness(health),
         });
       }
-      res.json(agentHealthStatus);
+
+      // Return all agents enriched with staleness data
+      const enriched = {};
+      for (const [id, health] of Object.entries(agentHealthStatus)) {
+        enriched[id] = { ...health, staleness: computeStaleness(health) };
+      }
+      res.json(enriched);
     } catch (err) {
       console.error('Error fetching agent health:', err);
       res.status(500).json({ error: err.message });

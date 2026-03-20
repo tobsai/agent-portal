@@ -47,6 +47,9 @@
       <span class="status-banner-elapsed" id="status-banner-elapsed"></span>
     </div>
 
+    <!-- Agent Health Staleness Bar (NEXT-061) -->
+    <div class="agent-health-bar" id="agent-health-bar"></div>
+
     <!-- Stats -->
     <div id="stats-area" style="grid-column:1/-1;"></div>
     <div id="error-area" style="grid-column:1/-1;"></div>
@@ -483,6 +486,9 @@
           renderSignal(msg.data, true);
         } else if (msg.event === 'agent:status') {
           applyAgentStatus(msg.data);
+        } else if (msg.event === 'agent-health') {
+          // A new health report arrived — re-fetch the full map so staleness is recomputed server-side
+          loadAgentHealth();
         } else if (msg.event === 'work:task:created' || msg.event === 'work:task:updated' ||
                    msg.event === 'work:initiative:created' || msg.event === 'work:initiative:updated') {
           // Reload full state on structural changes
@@ -887,6 +893,55 @@
       } catch { /* non-fatal */ }
     }
 
+    // ─── Agent Health Staleness (NEXT-061) ──────────────────────────────────
+    // Server computes stalenessLevel ('ok'|'stale'|'dead') and minutesSinceReport.
+    // Client only renders what the server provides — no threshold logic here.
+
+    function _formatLastSeen(mins) {
+      if (mins === null || mins === undefined) return '';
+      if (mins < 1) return 'just now';
+      if (mins < 60) return `${mins}m ago`;
+      return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
+    }
+
+    function renderAgentHealthBar(healthMap) {
+      const bar = document.getElementById('agent-health-bar');
+      if (!bar) return;
+
+      const agents = Object.values(healthMap || {});
+      if (!agents.length) {
+        bar.classList.remove('visible');
+        return;
+      }
+
+      bar.classList.add('visible');
+      bar.innerHTML = agents.map(agent => {
+        const s = agent.staleness || {};
+        const level = s.stalenessLevel || 'ok';
+        const mins = s.minutesSinceReport ?? null;
+        const lastSeen = _formatLastSeen(mins);
+        const label = escHtml(agent.agentId || 'agent');
+        const title = mins !== null
+          ? `Last reported ${lastSeen} — ${level}`
+          : `No report time available`;
+
+        return `<div class="agent-health-chip ${escHtml(level)}" title="${escHtml(title)}">
+          <span class="agent-health-chip-dot"></span>
+          <span>${label}</span>
+          ${lastSeen ? `<span class="agent-health-last-seen">${escHtml(lastSeen)}</span>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    async function loadAgentHealth() {
+      try {
+        const r = await fetch('/api/agent-health');
+        if (!r.ok) return;
+        const data = await r.json();
+        renderAgentHealthBar(data);
+      } catch { /* non-fatal */ }
+    }
+
     // ─── PostHog Analytics ───────────────────────────────────────────────────
     !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageviewId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
     posthog.init('phc_QBrEydH4duDZXg7OeNTpOrCb2lB77yn1S54FrnCt8Pp', { api_host: 'https://analytics.mtree.io', person_profiles: 'identified_only', autocapture: false });
@@ -921,12 +976,14 @@
     loadSubAgentWidget();
     loadScheduledWidget();
     loadAgentStatus();
+    loadAgentHealth();
     connectWs();
     refreshHealthBadge();
     setInterval(loadSubAgentWidget, 30000);   // refresh sub-agent widget every 30s
     setInterval(loadScheduledWidget, 60000);  // refresh scheduled widget every 60s
     setInterval(refreshHealthBadge, 60000);   // refresh health badge every 60s
     setInterval(loadAgentStatus, 30000);      // poll status every 30s (fallback for missed WS events)
+    setInterval(loadAgentHealth, 60000);      // poll agent health staleness every 60s (NEXT-061)
   </script>
 </body>
 </html>

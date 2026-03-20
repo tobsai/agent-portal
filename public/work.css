@@ -886,6 +886,85 @@ body {
   flex-shrink: 0;
 }
 
+/* ─── Agent Health Staleness (NEXT-061) ─── */
+
+/**
+ * Agent health staleness section — rendered below the status banner
+ * when agent-health data is available. Server provides `stalenessLevel`:
+ *   ok    → green  (<5 min since last report)
+ *   stale → amber  (5–15 min)
+ *   dead  → red    (>15 min / disconnected)
+ */
+.agent-health-bar {
+  display: none;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+}
+
+.agent-health-bar.visible {
+  display: flex;
+}
+
+.agent-health-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.agent-health-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-dim);
+}
+
+/* ok state */
+.agent-health-chip.ok {
+  border-color: rgba(52, 211, 153, 0.25);
+  color: var(--green);
+}
+.agent-health-chip.ok .agent-health-chip-dot {
+  background: var(--green);
+  box-shadow: 0 0 5px var(--green);
+}
+
+/* stale state — amber */
+.agent-health-chip.stale {
+  border-color: rgba(251, 191, 36, 0.3);
+  color: var(--yellow);
+}
+.agent-health-chip.stale .agent-health-chip-dot {
+  background: var(--yellow);
+}
+
+/* dead state — red */
+.agent-health-chip.dead {
+  border-color: rgba(248, 113, 113, 0.3);
+  color: var(--red);
+}
+.agent-health-chip.dead .agent-health-chip-dot {
+  background: var(--red);
+  box-shadow: 0 0 5px var(--red);
+}
+
+.agent-health-last-seen {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-left: 0.15rem;
+}
+
 /* ─── Sub-Agent Failure Drill-Down ─── */
 .sa-failures-panel {
   display: none;

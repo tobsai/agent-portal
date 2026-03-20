@@ -57,4 +57,28 @@ would prevent memory creep in the browser.
 
 ---
 
-*Last updated: NEXT-059 (2026-03-20)*
+---
+
+## 🟡 `agentHealthStatus` is in-memory and volatile — NEXT-061
+
+The agent health map (`agentHealthStatus` in `routes/work.js`) is stored in process memory.
+A Railway deploy or restart resets it, causing all agents to appear as "dead" (>15 min stale)
+until they report again. In practice this resolves within one heartbeat cycle, but it can
+produce false alarms.
+
+**Recommendation:** Persist health reports to a lightweight DB row (`agent_health` table,
+keyed by `agentId`, storing `last_reported_at`). Read from DB on restart. Same upsert pattern
+already used by `agent_status`.
+
+---
+
+## 🟢 `computeStaleness` thresholds not configurable — NEXT-061
+
+The staleness thresholds (5 min / 15 min) are hardcoded in `routes/work.js::computeStaleness`.
+A future improvement would make them configurable per-agent or via an env variable
+(`HEALTH_STALE_MINUTES`, `HEALTH_DEAD_MINUTES`) to accommodate agents with different
+heartbeat cadences.
+
+---
+
+*Last updated: NEXT-061 (2026-03-20)*
