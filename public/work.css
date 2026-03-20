@@ -724,7 +724,15 @@ body {
   padding: 0.75rem 0;
 }
 
-/* ─── Subagent Row — Failure Drill-Down (NEXT-071) ─── */
+/* ─── Subagent Row — Depth Indent (NEXT-087) ─── */
+.sa-depth-prefix {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+/* ─── Subagent Row — Failure Drill-Down (NEXT-071 / NEXT-087) ─── */
 .subagent-row.expandable {
   cursor: pointer;
   flex-wrap: wrap;

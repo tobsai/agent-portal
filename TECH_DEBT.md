@@ -26,6 +26,47 @@ then come from the Gateway session state, not a synthetic signal. See the inline
 
 ---
 
+## [NEXT-087] Inline failure detail falls back silently when id match fails
+
+**File:** `public/work.html` — `rowsEl.innerHTML` map
+**Added:** 2026-03-20
+**Fixed:** NEXT-087 (source convergence pass)
+
+Prior to NEXT-087, the subagent row detail mixed `agent.*` (from the tree node)
+and `failureDetail.*` (from `_currentFailures`) — `startedAt`/`endedAt`/`runtime`
+came from `agent.*` while `lastMessage` came from `failureDetail`. This meant
+timing data could be rendered even when `lastMessage` was unavailable, producing
+the silent `(No error message available)` fallback.
+
+**Fix:** The detail section now derives all fields exclusively from `failureDetail`
+(server-shaped from `data.failures.items`). A row is only rendered as `expandable`
+when `failureDetail !== null`. The `runtime` inline variable from the outer scope
+was retained only for the metric chip (not the drill-down), which avoids a second
+lookup but is a cosmetic duplication worth noting.
+
+**Residual shortcut:** `runtime` for the metric chip still comes from `agent.runtime`
+(tree node), which is computed independently from `failureDetail.runtime`. They
+should be the same value, but they traverse different code paths. If they diverge,
+the chip and the detail panel would show different durations. Acceptable risk
+until the tree builder is replaced with a Gateway session API (see NEXT-086 debt).
+
+---
+
+## [NEXT-087] Accordion behavior split between two surfaces
+
+**File:** `public/work.html` — `toggleSubagentRow` / `toggleFailureRow`
+**Added:** 2026-03-20
+**Fixed:** NEXT-087
+
+The metrics panel used accordion (NEXT-056); the subagent row list used
+independent multi-expand (NEXT-071). Unified in NEXT-087 to per-section
+accordion. The two toggle functions remain separate because they operate on
+different DOM structures (`.sa-failure-item` vs `.subagent-row.expandable`).
+A further pass could extract a single `accordionToggle(el, containerSelector,
+itemSelector)` utility, but the current duplication is minor.
+
+---
+
 ## Signal ordering in tree builder assumes chronological signal arrival
 
 **File:** `routes/agents.js` — signal processing loop

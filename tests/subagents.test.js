@@ -251,6 +251,85 @@ describe('POST /api/subagents', () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// NEXT-087: Failure drill-down source convergence
+//
+// Both the metrics panel and the recent-subagent list derive failure messages
+// from data.failures.items.  Each item.id is the session_key (same value the
+// subagent list uses as agent.id), so the client's find(f => f.id === agent.id)
+// lookup must always succeed when a matching failure exists.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('NEXT-087: failure item id matches session_key used in subagent list', () => {
+  const { app, testAgentKey } = createApp();
+  const SESSION_KEY = 'agent:main:subagent:087-convergence-test';
+
+  beforeAll(async () => {
+    // Seed an error signal for the session key
+    await request(app)
+      .post('/api/signals')
+      .set('Authorization', `Bearer ${testAgentKey}`)
+      .send({
+        session_key: SESSION_KEY,
+        level: 'error',
+        message: 'NEXT-087 convergence test failure message',
+        metadata: {
+          type: 'subagent_error',
+          label: 'convergence-test-agent',
+          status: 'error',
+        },
+      });
+  });
+
+  it('failure item id equals the session_key (enables client-side find())', async () => {
+    const res = await request(app)
+      .get('/api/subagents')
+      .set('Authorization', `Bearer ${testAgentKey}`);
+
+    expect(res.status).toBe(200);
+    const item = res.body.failures.items.find(f => f.id === SESSION_KEY);
+    expect(item).toBeTruthy();
+  });
+
+  it('failure item lastMessage is non-null and matches the error signal message', async () => {
+    const res = await request(app)
+      .get('/api/subagents')
+      .set('Authorization', `Bearer ${testAgentKey}`);
+
+    const item = res.body.failures.items.find(f => f.id === SESSION_KEY);
+    expect(item).toBeTruthy();
+    expect(item.lastMessage).toBe('NEXT-087 convergence test failure message');
+  });
+
+  it('subagent tree node for that session has status=error', async () => {
+    const res = await request(app)
+      .get('/api/subagents')
+      .set('Authorization', `Bearer ${testAgentKey}`);
+
+    const allNodes = flattenTree(res.body.tree);
+    const node = allNodes.find(n => n.id === SESSION_KEY);
+    expect(node).toBeTruthy();
+    expect(node.status).toBe('error');
+  });
+
+  it('failure item exposes all fields needed by both drill-down surfaces', async () => {
+    const res = await request(app)
+      .get('/api/subagents')
+      .set('Authorization', `Bearer ${testAgentKey}`);
+
+    const item = res.body.failures.items.find(f => f.id === SESSION_KEY);
+    expect(item).toBeTruthy();
+    // Fields consumed by the metrics panel accordion
+    expect(item).toHaveProperty('label');
+    expect(item).toHaveProperty('lastMessage');
+    expect(item).toHaveProperty('startedAt');
+    // Fields consumed by the inline row detail
+    // (runtime / endedAt may be null for single-signal sessions — structure must exist)
+    expect(Object.keys(item)).toContain('runtime');
+    expect(Object.keys(item)).toContain('endedAt');
+  });
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Flatten a tree array (depth-first) into a flat list of nodes. */
