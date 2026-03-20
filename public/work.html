@@ -758,6 +758,58 @@
       color: var(--red);
     }
 
+    /* ─── Agent Status Banner ─── */
+    .status-banner {
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      background: rgba(129,140,248,0.08);
+      border: 1px solid rgba(129,140,248,0.22);
+      border-radius: 10px;
+      padding: 0.65rem 1rem;
+      grid-column: 1 / -1;
+    }
+
+    .status-banner.visible {
+      display: flex;
+    }
+
+    .status-banner-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 7px var(--accent);
+      animation: pulse 2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    .status-banner-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .status-banner-task {
+      font-size: 0.84rem;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status-banner-elapsed {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0;
+    }
+
     /* ─── Sub-Agent Chart (CSS-only bars) ─── */
     .sa-chart-container {
       margin: 0.75rem 0;
@@ -857,6 +909,14 @@
         <h1>Work Tracking</h1>
         <p>Initiatives, tasks, and live agent signals.</p>
       </div>
+    </div>
+
+    <!-- Agent Status Banner -->
+    <div class="status-banner" id="status-banner">
+      <span class="status-banner-dot"></span>
+      <span class="status-banner-label">Working</span>
+      <span class="status-banner-task" id="status-banner-task">—</span>
+      <span class="status-banner-elapsed" id="status-banner-elapsed"></span>
     </div>
 
     <!-- Stats -->
@@ -1160,6 +1220,8 @@
 
         if (msg.event === 'work:signal') {
           renderSignal(msg.data, true);
+        } else if (msg.event === 'agent:status') {
+          applyAgentStatus(msg.data);
         } else if (msg.event === 'work:task:created' || msg.event === 'work:task:updated' ||
                    msg.event === 'work:initiative:created' || msg.event === 'work:initiative:updated') {
           // Reload full state on structural changes
@@ -1391,6 +1453,14 @@
         return 0;
       });
 
+      // TODO: Add "Run Now" button when server implements POST /api/scheduled/:id/trigger
+      // The trigger endpoint should:
+      //   1. Validate the task exists and is enabled
+      //   2. Execute the task synchronously or queue it
+      //   3. Update last_run_at, last_status, last_outcome
+      //   4. Return { success: true, outcome: "..." } or { error: "..." }
+      // UI addition: add button in scheduled-card-footer with onclick handler
+      
       grid.innerHTML = items.map(t => {
         const dotClass = t.last_status === 'error' ? 'error' : t.last_status === 'ok' ? 'ok' : 'none';
         const nextRel  = relativeTime(t.next_run_at);
@@ -1435,6 +1505,59 @@
       }
     }
 
+    // ─── Agent Status Banner ─────────────────────────────────────────────────
+    let statusBannerStartedAt = null;
+    let statusElapsedTimer = null;
+
+    function updateStatusElapsed() {
+      if (!statusBannerStartedAt) return;
+      const elEl = document.getElementById('status-banner-elapsed');
+      if (!elEl) return;
+      const elapsed = Math.floor((Date.now() - statusBannerStartedAt) / 1000);
+      const mins = Math.floor(elapsed / 60);
+      const secs = elapsed % 60;
+      elEl.textContent = mins > 0
+        ? `${mins}m ${secs}s`
+        : `${secs}s`;
+    }
+
+    function applyAgentStatus(data) {
+      const banner = document.getElementById('status-banner');
+      const taskEl = document.getElementById('status-banner-task');
+      const elEl   = document.getElementById('status-banner-elapsed');
+      if (!banner || !taskEl || !elEl) return;
+
+      if (data.status === 'thinking' || data.status === 'working') {
+        taskEl.textContent = data.task || 'Working…';
+        banner.classList.add('visible');
+
+        // Use server timestamp if available, else now
+        statusBannerStartedAt = data.timestamp ? new Date(data.timestamp).getTime() : Date.now();
+        updateStatusElapsed();
+
+        if (!statusElapsedTimer) {
+          statusElapsedTimer = setInterval(updateStatusElapsed, 1000);
+        }
+      } else {
+        // idle — hide banner
+        banner.classList.remove('visible');
+        statusBannerStartedAt = null;
+        if (statusElapsedTimer) {
+          clearInterval(statusElapsedTimer);
+          statusElapsedTimer = null;
+        }
+      }
+    }
+
+    async function loadAgentStatus() {
+      try {
+        const r = await fetch('/api/status');
+        if (!r.ok) return;
+        const data = await r.json();
+        applyAgentStatus(data);
+      } catch { /* non-fatal */ }
+    }
+
     // ─── PostHog Analytics ───────────────────────────────────────────────────
     !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageviewId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
     posthog.init('phc_QBrEydH4duDZXg7OeNTpOrCb2lB77yn1S54FrnCt8Pp', { api_host: 'https://analytics.mtree.io', person_profiles: 'identified_only', autocapture: false });
@@ -1455,7 +1578,7 @@
         text.textContent = h.status === 'ok' ? 'All systems OK'
                          : h.status === 'degraded' ? 'Degraded'
                          : 'System down';
-        badge.title = `DB: ${h.checks?.db?.status ?? '?'} · Gateway: ${h.checks?.gateway?.status ?? '?'} · APNS: ${h.checks?.apns?.status ?? '?'}`;
+        badge.title = `DB: ${h.checks?.db?.status ?? '?'} · Gateway: ${h.checks?.gateway?.status ?? '?'} · APNS: ${h.checks?.apns?.status ?? '?'} · Scheduled: ${h.checks?.scheduled?.status ?? '?'}`;
       } catch {
         const badge = document.getElementById('health-badge');
         if (badge) badge.className = 'health-badge down';
@@ -1468,11 +1591,13 @@
     load();
     loadSubAgentWidget();
     loadScheduledWidget();
+    loadAgentStatus();
     connectWs();
     refreshHealthBadge();
     setInterval(loadSubAgentWidget, 30000);   // refresh sub-agent widget every 30s
     setInterval(loadScheduledWidget, 60000);  // refresh scheduled widget every 60s
     setInterval(refreshHealthBadge, 60000);   // refresh health badge every 60s
+    setInterval(loadAgentStatus, 30000);      // poll status every 30s (fallback for missed WS events)
   </script>
 </body>
 </html>
