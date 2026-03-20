@@ -133,7 +133,10 @@
     <div class="signals-panel">
       <div class="signals-header">
         <h2>Live Signals</h2>
-        <span class="signals-live-dot" id="signals-dot"></span>
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <button class="btn-sm" id="signals-mode-btn" onclick="toggleSignalsMode()" title="Toggle digest / all signals" style="font-size:0.7rem;padding:0.2rem 0.5rem">Digest</button>
+          <span class="signals-live-dot" id="signals-dot"></span>
+        </div>
       </div>
       <div class="signals-list" id="signals-list">
         <div class="signal-empty">Waiting for agent signals…</div>
@@ -183,30 +186,119 @@
     let signalCount = 0;
     const MAX_SIGNALS = 80;
 
+    // Digest mode: default collapsed, persisted in localStorage
+    let _signalDigestMode = localStorage.getItem('signals_digest_mode') !== 'false';
+    // All signals buffer for digest re-render
+    let _allSignals = [];
+
+    // ─── Digest mode toggle ─────────────────────────────────────────────────
+    function toggleSignalsMode() {
+      _signalDigestMode = !_signalDigestMode;
+      localStorage.setItem('signals_digest_mode', String(_signalDigestMode));
+      _updateSignalsModeBtn();
+      renderSignalsPanel();
+    }
+
+    function _updateSignalsModeBtn() {
+      const btn = document.getElementById('signals-mode-btn');
+      if (!btn) return;
+      btn.textContent = _signalDigestMode ? 'Digest' : 'All';
+      btn.title = _signalDigestMode ? 'Showing digest — click for all' : 'Showing all — click for digest';
+    }
+
     // ─── Signals rendering ─────────────────────────────────────────────────
-    function renderSignal(sig, isNew = false) {
-      const list = document.getElementById('signals-list');
+    function _signalTaskPill(sig) {
+      if (!sig.task_label) return '';
+      return `<span class="signal-task-pill" title="Task: ${escHtml(sig.task_label)}">${escHtml(sig.task_label)}</span>`;
+    }
 
-      // Remove empty placeholder
-      const empty = list.querySelector('.signal-empty');
-      if (empty) empty.remove();
-
+    function _buildSignalItem(sig, isNew = false) {
       const item = document.createElement('div');
       item.className = 'signal-item' + (isNew ? ' new' : '');
+      item.dataset.sessionKey = sig.session_key || '';
       item.innerHTML = `
         <span class="signal-icon">${signalIcon(sig.level)}</span>
         <div class="signal-body">
-          <div class="signal-msg signal-level-${escHtml(sig.level || 'info')}">${escHtml(sig.message)}</div>
+          <div class="signal-msg signal-level-${escHtml(sig.level || 'info')}">
+            ${escHtml(sig.message)}
+            ${_signalTaskPill(sig)}
+          </div>
           <div class="signal-meta">
             ${sig.agent_id ? `<span>${escHtml(sig.agent_id.slice(0,8))}</span>` : ''}
             ${sig.session_key ? `<span>${escHtml(sig.session_key.slice(0,12))}…</span>` : ''}
             <span>${timeAgo(sig.created_at)}</span>
           </div>
         </div>`;
+      return item;
+    }
 
+    function _buildDigestItem(sessionKey, signals) {
+      // signals sorted newest-first; pick first as "most recent"
+      const latest = signals[0];
+      const count = signals.length;
+      const label = sessionKey
+        ? (sessionKey.length > 20 ? sessionKey.slice(0, 20) + '…' : sessionKey)
+        : '(no session)';
+      const taskPill = _signalTaskPill(latest);
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'signal-digest-group';
+      wrapper.dataset.sessionKey = sessionKey || '';
+
+      const header = document.createElement('div');
+      header.className = 'signal-digest-header';
+      header.innerHTML = `
+        <span class="signal-digest-toggle">▶</span>
+        <span class="signal-icon">${signalIcon(latest.level)}</span>
+        <div class="signal-body">
+          <div class="signal-msg signal-level-${escHtml(latest.level || 'info')}">
+            ${escHtml(latest.message)}
+            ${taskPill}
+          </div>
+          <div class="signal-meta">
+            <span class="signal-session-label">${escHtml(label)}</span>
+            <span class="signal-count-badge">${count} signal${count !== 1 ? 's' : ''}</span>
+            <span>${timeAgo(latest.created_at)}</span>
+          </div>
+        </div>`;
+      header.addEventListener('click', () => {
+        wrapper.classList.toggle('open');
+        header.querySelector('.signal-digest-toggle').textContent =
+          wrapper.classList.contains('open') ? '▼' : '▶';
+      });
+
+      const detail = document.createElement('div');
+      detail.className = 'signal-digest-detail';
+      // chronological order (reverse of the newest-first array)
+      [...signals].reverse().forEach(sig => {
+        detail.appendChild(_buildSignalItem(sig, false));
+      });
+
+      wrapper.appendChild(header);
+      wrapper.appendChild(detail);
+      return wrapper;
+    }
+
+    function renderSignal(sig, isNew = false) {
+      // Keep buffer fresh
+      if (isNew) {
+        _allSignals.unshift(sig);
+        if (_allSignals.length > MAX_SIGNALS) _allSignals.length = MAX_SIGNALS;
+      }
+
+      if (_signalDigestMode) {
+        // Re-render digest panel rather than inserting a single row
+        renderSignalsPanel();
+        return;
+      }
+
+      const list = document.getElementById('signals-list');
+      const empty = list.querySelector('.signal-empty');
+      if (empty) empty.remove();
+
+      const item = _buildSignalItem(sig, isNew);
       if (isNew) {
         list.insertBefore(item, list.firstChild);
-        // Trim old signals
         while (list.children.length > MAX_SIGNALS) {
           list.removeChild(list.lastChild);
         }
@@ -214,20 +306,52 @@
         list.appendChild(item);
       }
 
-      signalCount++;
+      _updateSignalsFooter();
+    }
+
+    function _updateSignalsFooter() {
+      signalCount = _allSignals.length;
       document.getElementById('signals-footer').textContent =
         `${signalCount} signal${signalCount !== 1 ? 's' : ''} — refreshes live`;
     }
 
-    function loadSignals(signals) {
+    function renderSignalsPanel() {
       const list = document.getElementById('signals-list');
       list.innerHTML = '';
-      if (!signals || signals.length === 0) {
+
+      if (!_allSignals.length) {
         list.innerHTML = '<div class="signal-empty">No signals yet. Agents will push updates here.</div>';
+        _updateSignalsFooter();
         return;
       }
-      // signals are already sorted newest-first from API
-      signals.slice(0, MAX_SIGNALS).forEach(s => renderSignal(s, false));
+
+      if (_signalDigestMode) {
+        // Group by session_key (order: most recent signal per group first)
+        const groups = new Map();
+        for (const sig of _allSignals) {
+          const key = sig.session_key || '';
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(sig);
+        }
+        // Groups are in insertion order — first signal encountered per key is newest
+        for (const [sessionKey, sigs] of groups) {
+          list.appendChild(_buildDigestItem(sessionKey, sigs));
+        }
+      } else {
+        // Flat all-signals view
+        _allSignals.slice(0, MAX_SIGNALS).forEach(s => {
+          const item = _buildSignalItem(s, false);
+          list.appendChild(item);
+        });
+      }
+
+      _updateSignalsFooter();
+    }
+
+    function loadSignals(signals) {
+      _allSignals = (signals || []).slice(0, MAX_SIGNALS);
+      _updateSignalsModeBtn();
+      renderSignalsPanel();
     }
 
     // ─── Initiatives + Tasks rendering ─────────────────────────────────────

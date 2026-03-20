@@ -481,6 +481,71 @@ body {
   flex-shrink: 0;
 }
 
+/* ─── Signal task label pill ─── */
+.signal-task-pill {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.4rem;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 9999px;
+  font-size: 0.62rem;
+  color: var(--accent);
+  vertical-align: middle;
+  white-space: nowrap;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Signal digest groups ─── */
+.signal-digest-group {
+  border-bottom: 1px solid var(--border);
+}
+.signal-digest-group:last-child { border-bottom: none; }
+
+.signal-digest-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.signal-digest-header:hover { background: rgba(255,255,255,0.02); }
+
+.signal-digest-toggle {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.signal-session-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+.signal-count-badge {
+  display: inline-block;
+  background: rgba(255,255,255,0.07);
+  border-radius: 9999px;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.62rem;
+  color: var(--text-dim);
+}
+
+.signal-digest-detail {
+  display: none;
+  padding-left: 1rem;
+  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.12);
+}
+.signal-digest-group.open .signal-digest-detail { display: block; }
+.signal-digest-group.open .signal-digest-toggle { content: '▼'; }
+
 /* ─── Sub-Agent Summary Widget ─── */
 .subagent-widget {
   background: var(--surface);

@@ -63,6 +63,7 @@ function createTestDb() {
       initiative_id TEXT,
       agent_id TEXT,
       session_key TEXT,
+      task_label TEXT,
       level TEXT NOT NULL DEFAULT 'info',
       message TEXT NOT NULL,
       metadata TEXT,

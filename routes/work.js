@@ -278,17 +278,25 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
       const initiative_id = req.query.initiative_id || null;
       const level = req.query.level || null;
 
-      let sql = 'SELECT * FROM signals';
+      // JOIN with work_tasks to resolve task_label from session_key match
+      let sql = `
+        SELECT s.*,
+               COALESCE(s.task_label, wt.title) AS task_label
+        FROM signals s
+        LEFT JOIN work_tasks wt
+          ON wt.session_key IS NOT NULL
+         AND wt.session_key != ''
+         AND s.session_key = wt.session_key`;
       const conditions = [];
       const params = [];
       let idx = 1;
 
-      if (task_id) { conditions.push(`task_id = $${idx++}`); params.push(task_id); }
-      if (initiative_id) { conditions.push(`initiative_id = $${idx++}`); params.push(initiative_id); }
-      if (level) { conditions.push(`level = $${idx++}`); params.push(level); }
+      if (task_id) { conditions.push(`s.task_id = $${idx++}`); params.push(task_id); }
+      if (initiative_id) { conditions.push(`s.initiative_id = $${idx++}`); params.push(initiative_id); }
+      if (level) { conditions.push(`s.level = $${idx++}`); params.push(level); }
 
       if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-      sql += ` ORDER BY created_at DESC LIMIT $${idx}`;
+      sql += ` ORDER BY s.created_at DESC LIMIT $${idx}`;
       params.push(limit);
 
       const rows = await db.query(sql, params);
@@ -309,9 +317,19 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
       const agentId = req.agent?.id || null;
       const metaStr = metadata ? JSON.stringify(metadata) : null;
 
+      // Resolve task_label from session_key → work_tasks join (server-side)
+      let taskLabel = null;
+      if (session_key) {
+        const taskRow = await db.get(
+          'SELECT title FROM work_tasks WHERE session_key = $1 LIMIT 1',
+          [session_key]
+        );
+        if (taskRow) taskLabel = taskRow.title;
+      }
+
       await db.run(
-        'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        [id, task_id || null, initiative_id || null, agentId, session_key || null, sigLevel, message, metaStr]
+        'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, task_label, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        [id, task_id || null, initiative_id || null, agentId, session_key || null, taskLabel, sigLevel, message, metaStr]
       );
 
       const row = await db.get('SELECT * FROM signals WHERE id = $1', [id]);
@@ -334,9 +352,20 @@ module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4,
         const sigLevel = validLevels.includes(level) ? level : 'info';
         const id = uuidv4();
         const metaStr = metadata ? JSON.stringify(metadata) : null;
+
+        // Resolve task_label from session_key → work_tasks join (server-side)
+        let taskLabel = null;
+        if (session_key) {
+          const taskRow = await db.get(
+            'SELECT title FROM work_tasks WHERE session_key = $1 LIMIT 1',
+            [session_key]
+          );
+          if (taskRow) taskLabel = taskRow.title;
+        }
+
         await db.run(
-          'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-          [id, task_id || null, initiative_id || null, req.agent?.id || null, session_key || null, sigLevel, message, metaStr]
+          'INSERT INTO signals (id, task_id, initiative_id, agent_id, session_key, task_label, level, message, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [id, task_id || null, initiative_id || null, req.agent?.id || null, session_key || null, taskLabel, sigLevel, message, metaStr]
         );
         const row = await db.get('SELECT * FROM signals WHERE id = $1', [id]);
         broadcast('work:signal', row);
