@@ -589,6 +589,18 @@ body {
   color: var(--text-dim);
 }
 
+/* Human-readable agent name derived from session_key (NEXT-125) */
+.signal-agent-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--indigo-400, #818cf8);
+  background: rgba(129,140,248,0.1);
+  border-radius: 9999px;
+  padding: 0.05rem 0.4rem;
+  letter-spacing: 0.01em;
+}
+
 .signal-count-badge {
   display: inline-block;
   background: rgba(255,255,255,0.07);

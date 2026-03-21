@@ -191,6 +191,42 @@
       return { info: '💬', success: '✅', warning: '⚠️', error: '🔴', progress: '⏳' }[level] || '•';
     }
 
+    /**
+     * Derive a human-readable agent label from a signal's session_key.
+     *
+     * Session keys follow several patterns observed in the wild:
+     *   "agent:pascal:main"     → "Pascal"
+     *   "agent:echo:main"       → "Echo"
+     *   "agent:lewis:cron:abc"  → "Lewis"
+     *   "marty"                 → "Marty"
+     *   "mt-180-init"           → "mt-180-init" (verbatim, no match)
+     *   null / ""               → null
+     *
+     * Returns null when no useful label can be derived (caller decides fallback).
+     *
+     * @param {object} sig - Signal row from /api/signals
+     * @returns {string|null}
+     */
+    function resolveAgentLabel(sig) {
+      const key = sig.session_key;
+      if (!key) return null;
+
+      // Pattern: "agent:<name>:<...>" — extract <name> and capitalise
+      const agentMatch = key.match(/^agent:([^:]+)/i);
+      if (agentMatch) {
+        const name = agentMatch[1];
+        return name.charAt(0).toUpperCase() + name.slice(1);
+      }
+
+      // Plain single-word identifier (letters/digits only, e.g. "marty")
+      if (/^[a-z][a-z0-9]{1,19}$/i.test(key)) {
+        return key.charAt(0).toUpperCase() + key.slice(1);
+      }
+
+      // Anything else: return verbatim but trimmed to 20 chars
+      return key.length > 20 ? key.slice(0, 20) + '…' : key;
+    }
+
     // ─── State ─────────────────────────────────────────────────────────────
     let signalCount = 0;
     const MAX_SIGNALS = 80;
@@ -278,6 +314,14 @@
       const item = document.createElement('div');
       item.className = 'signal-item' + (isNew ? ' new' : '');
       item.dataset.sessionKey = sig.session_key || '';
+
+      // Prefer a resolved agent label over raw UUIDs/session keys.
+      // resolveAgentLabel() parses "agent:pascal:main" → "Pascal" etc.
+      const agentLabel = resolveAgentLabel(sig);
+      const metaHtml = agentLabel
+        ? `<span class="signal-agent-label">${escHtml(agentLabel)}</span>`
+        : (sig.agent_id ? `<span class="signal-agent-label">${escHtml(sig.agent_id.slice(0,8))}</span>` : '');
+
       item.innerHTML = `
         <span class="signal-icon">${signalIcon(sig.level)}</span>
         <div class="signal-body">
@@ -286,8 +330,7 @@
             ${_signalTaskPill(sig)}
           </div>
           <div class="signal-meta">
-            ${sig.agent_id ? `<span>${escHtml(sig.agent_id.slice(0,8))}</span>` : ''}
-            ${sig.session_key ? `<span>${escHtml(sig.session_key.slice(0,12))}…</span>` : ''}
+            ${metaHtml}
             <span>${timeAgo(sig.created_at)}</span>
           </div>
         </div>`;
@@ -298,9 +341,10 @@
       // signals sorted newest-first; pick first as "most recent"
       const latest = signals[0];
       const count = signals.length;
-      const label = sessionKey
-        ? (sessionKey.length > 20 ? sessionKey.slice(0, 20) + '…' : sessionKey)
-        : '(no session)';
+      // Use resolveAgentLabel on the latest signal so digest headers show
+      // "Pascal", "Echo", etc. rather than raw "agent:pascal:main" keys.
+      const label = resolveAgentLabel(latest) || sessionKey
+        || '(no session)';
       const taskPill = _signalTaskPill(latest);
 
       const wrapper = document.createElement('div');
