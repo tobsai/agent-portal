@@ -19,6 +19,29 @@ const path = require('path');
 // emit signals without creating a circular lib → routes dependency.
 const { insertSignal } = require('../lib/signals');
 
+/**
+ * Signal write-path routing map (NEXT-103 audit, 2026-03-21)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ALL signal inserts go through insertSignal() from lib/signals.js. There is
+ * exactly one write path. Verified callers:
+ *
+ *   routes/work.js       POST /api/signals          → insertSignal()
+ *   routes/work.js       POST /api/work {type:signal}→ insertSignal()
+ *   routes/work.js       POST /api/subagents         → insertSignal()
+ *   routes/work.js       POST /api/status (auto-exp) → insertSignal() (best-effort)
+ *   lib/webhook-delivery deliverInboundWebhook()      → insertSignal() (best-effort)
+ *   lib/push             pushToAllDevices()            → insertSignal() (best-effort)
+ *
+ * Deprecated endpoints:
+ *   GET /api/activity    → routes/activity.js → HTTP 410 Gone (NEXT-088)
+ *                          No internal callers; no public asset calls this path.
+ *
+ * Canonical read endpoint:
+ *   GET /api/signals     → routes/work.js (below) — JOIN with work_tasks,
+ *                          filter by level/task_id/initiative_id, paginated.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 module.exports = function workRouter({ db, requireAuth, requireAgentKey, uuidv4, broadcast, publicDir }) {
   const router = Router();
 

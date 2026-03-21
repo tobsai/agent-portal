@@ -29,6 +29,55 @@ Track shortcuts and deferred architectural work here. Do not build on top of the
 
 ---
 
+## [NEXT-088 routing] GET /api/activity 410 wiring ✅
+
+**Files:** `routes/activity.js`, `server.js`
+**Added:** 2026-03-21
+**Resolved:** 2026-03-21 (NEXT-103)
+
+Concern: after NEXT-088 deprecated `/api/activity`, it was unclear whether the
+410 was properly wired or whether any internal callers (work.html, lib modules,
+other routes) still called the old path.
+
+**Confirmed by NEXT-103 audit:**
+- `routes/activity.js` returns HTTP 410 Gone with `{ error, message, replacement }`.
+  Auth middleware fires first — unauthenticated callers get 401, not 410, which
+  preserves the auth contract and avoids leaking endpoint existence to scanners.
+- No public assets (work.html or any HTML/JS file under `public/`) reference
+  `/api/activity` — grep of the entire public directory returns zero matches.
+- No route or lib module calls `/api/activity` internally.
+- All four deprecation tests in `tests/activity.test.js` pass (401, 410, body
+  shape, replacement field).
+
+No code changes required. Concern closed.
+
+---
+
+## [NEXT-094 routing] insertSignal() as single signal write path ✅
+
+**Files:** `lib/signals.js`, `routes/work.js`, `lib/webhook-delivery.js`, `lib/push.js`
+**Added:** 2026-03-21
+**Resolved:** 2026-03-21 (NEXT-103)
+
+Concern: after NEXT-094 extracted `insertSignal()` into `lib/signals.js`, it was
+unconfirmed whether all signal insert call sites had been consolidated or whether
+any raw `INSERT INTO signals` SQL still existed outside the helper.
+
+**Confirmed by NEXT-103 audit:**
+- Zero raw `INSERT INTO signals` SQL exists outside `lib/signals.js`.
+- All six call sites use `insertSignal()` from `lib/signals.js`:
+    1. `routes/work.js`  POST /api/signals
+    2. `routes/work.js`  POST /api/work { type: 'signal' }
+    3. `routes/work.js`  POST /api/subagents
+    4. `routes/work.js`  POST /api/status (auto-expire, best-effort)
+    5. `lib/webhook-delivery.js`  deliverInboundWebhook() (best-effort)
+    6. `lib/push.js`     pushToAllDevices() (best-effort)
+- Routing map documented as inline JSDoc comment in `routes/work.js` (NEXT-103).
+
+No code changes required. Concern closed.
+
+---
+
 ## [NEXT-086] Sub-agent tree is signal-derived, not session-native
 
 **File:** `routes/agents.js` — `GET /api/subagents`
