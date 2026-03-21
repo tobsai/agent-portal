@@ -92,10 +92,11 @@ itemSelector)` utility, but the current duplication is minor.
 
 ---
 
-## Signal ordering in tree builder assumes chronological signal arrival
+## Signal ordering in tree builder assumes chronological signal arrival ✅
 
 **File:** `routes/agents.js` — signal processing loop
 **Added:** 2026-03-20
+**Resolved:** 2026-03-21 (NEXT-102)
 
 Signals are fetched `ORDER BY created_at ASC` (after the DESC→ASC fix made in
 NEXT-086), but the in-memory loop applies status updates in iteration order.
@@ -104,8 +105,7 @@ retry inserts a `registered` signal after a `done` signal), the terminal-status
 guard (`TERMINAL_STATUSES` set) prevents regression, but the `startedAt` timing
 could still be wrong.
 
-**Correct fix:** After collecting all signals into nodes, derive `startedAt` from
-`MIN(created_at)` across signals, not from the first-seen signal. This would
-require a second aggregation pass or a DB-level `GROUP BY session_key` query.
-Deferred because signal ordering is reliable in practice (Gateway emits in order)
-and the impact is cosmetic (displayed timing only).
+**Fix applied:** Added a second aggregation pass after all signals are collected.
+For each node, `startedAt` is now set to `MIN(sig.createdAt)` across all signals
+in `node.signals[]`, ensuring correctness regardless of insertion order.
+cosmetic (displayed timing only).

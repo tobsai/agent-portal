@@ -281,6 +281,22 @@ module.exports = function agentsRouter({ db, AGENTS, requireAuth, requireAdmin, 
         node._hasErrors = parseInt(row.error_count, 10) > 0;
       }
 
+      // Second aggregation pass: enforce startedAt = MIN(created_at) across all signals
+      // for each node, regardless of insertion order (NEXT-102).
+      // This ensures startedAt is always the earliest signal's created_at, not the
+      // first-seen signal in the iteration loop above.
+      for (const node of nodeMap.values()) {
+        if (node.signals.length === 0) continue;
+        const minCreatedAt = node.signals.reduce((earliest, sig) => {
+          return !earliest || new Date(sig.createdAt) < new Date(earliest)
+            ? sig.createdAt
+            : earliest;
+        }, null);
+        if (minCreatedAt) {
+          node.startedAt = minCreatedAt;
+        }
+      }
+
       // Build tree structure: find roots (nodes with no parent or parent not in map)
       const roots = [];
       for (const [key, node] of nodeMap) {
