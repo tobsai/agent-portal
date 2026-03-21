@@ -222,4 +222,24 @@ describe('PATCH /api/scheduled/:id — outcome write-back (NEXT-079)', () => {
       .send({ last_status: 'kaboom' });
     expect(res.status).toBe(400);
   });
+
+  it('returns 400 for an invalid last_run_at timestamp', async () => {
+    const { app, testAgentKey } = createApp();
+    const id = await registerTask(app, testAgentKey);
+    const res = await request(app)
+      .patch(`/api/scheduled/${id}`)
+      .set('Authorization', `Bearer ${testAgentKey}`)
+      .send({ last_run_at: 'not-a-date' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for an invalid next_run_at timestamp', async () => {
+    const { app, testAgentKey } = createApp();
+    const id = await registerTask(app, testAgentKey);
+    const res = await request(app)
+      .patch(`/api/scheduled/${id}`)
+      .set('Authorization', `Bearer ${testAgentKey}`)
+      .send({ next_run_at: 12345 });
+    expect(res.status).toBe(400);
+  });
 });
