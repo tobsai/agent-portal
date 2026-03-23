@@ -373,6 +373,7 @@ app.use('/api', require('./routes/activity')({ db, requireAuth }));
 
 // ============ HEALTH CHECK ============
 app.use('/api', require('./routes/health')({
+  db,
   gatewayClient,
   getChatState: () => chatGateway.getGatewayState(),
 }));
