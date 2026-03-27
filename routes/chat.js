@@ -586,7 +586,10 @@ module.exports = function chatRouter(deps) {
       if (!gatewayClient.isReady) return res.json([]);
       const sessions = await gatewayClient.listSessions();
       // Normalize: ensure sessionKey is always set (gateway returns `key`, UI expects `sessionKey`)
-      const normalized = sessions.map(s => ({ ...s, sessionKey: s.sessionKey || s.key }));
+      // Only expose portal: sessions to the webchat UI — never expose iMessage/cron/subagent sessions
+      const normalized = sessions
+        .map(s => ({ ...s, sessionKey: s.sessionKey || s.key }))
+        .filter(s => s.sessionKey && s.sessionKey.startsWith('portal:'));
       res.json(normalized);
     } catch (err) {
       res.status(502).json({ error: err.message });
