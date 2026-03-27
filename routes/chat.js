@@ -493,7 +493,7 @@ module.exports = function chatRouter(deps) {
             if (gatewayClient.isReady) {
               try {
                 trackUserSend(content);
-                await gatewayClient.sendUserMessage(dmSessionKey, content, message.id);
+                await gatewayClient.sendMessage(dmSessionKey, content, message.id);
                 console.log('[channels] DM routed via native gateway client to', dmAgent.id, '(sessionKey:', dmSessionKey + ')');
               } catch (err) {
                 console.error('[channels] Native client DM failed, falling back:', err.message);
