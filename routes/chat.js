@@ -585,7 +585,9 @@ module.exports = function chatRouter(deps) {
     try {
       if (!gatewayClient.isReady) return res.json([]);
       const sessions = await gatewayClient.listSessions();
-      res.json(sessions);
+      // Normalize: ensure sessionKey is always set (gateway returns `key`, UI expects `sessionKey`)
+      const normalized = sessions.map(s => ({ ...s, sessionKey: s.sessionKey || s.key }));
+      res.json(normalized);
     } catch (err) {
       res.status(502).json({ error: err.message });
     }

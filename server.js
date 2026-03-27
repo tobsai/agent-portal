@@ -250,6 +250,10 @@ app.use('/downloads', express.static(path.join(__dirname, 'public', 'downloads')
 app.get('/work.css', (req, res) => res.sendFile(path.join(__dirname, 'public', 'work.css')));
 app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.ico')));
 app.get('/favicon.svg', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.svg')));
+app.get('/manifest.json', (req, res) => res.sendFile(path.join(__dirname, 'public', 'manifest.json')));
+app.get('/favicon-16.png', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon-16.png')));
+app.get('/favicon-32.png', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon-32.png')));
+app.get('/favicon-192.png', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon-192.png')));
 
 app.get('/download', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'download.html'));
