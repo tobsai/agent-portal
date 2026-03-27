@@ -28,7 +28,7 @@ const jwt = require('jsonwebtoken');
 const { JWT_SECRET, configurePassport, jwtMiddleware, requireAuth, requireAgentKey, requireAdmin } = require('./lib/auth');
 
 // ── Native Gateway Client (Phase 1: OpenClaw channel integration) ──────────
-const { gatewayClient, sessionKeyForAgent, agentIdForSessionKey } = require('./lib/gateway-client');
+const { gatewayClient } = require('./lib/gateway-client');
 
 // ── Extracted modules (NEXT-027 Part 1) ────────────────────────────────────
 const createChatState = require('./lib/chat-state');
@@ -337,39 +337,12 @@ app.get('/api/me', (req, res) => {
 
 
 
-// ============ WORK, STATUS, SIGNALS ============
-app.use('/api', require('./routes/work')({
-  db,
-  requireAuth,
-  requireAgentKey,
-  uuidv4,
-  broadcast,
-  publicDir: path.join(__dirname, 'public'),
-}));
-
-app.get('/work', requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'work.html'));
-});
-
-// ============ AGENTS, DM, SUBAGENTS ============
-app.use('/api', require('./routes/agents')({
-  db,
-  AGENTS,
-  requireAuth,
-  requireAdmin,
-  uuidv4,
-  publicDir: path.join(__dirname, 'public'),
-}));
-
-app.get('/subagents', requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'subagents.html'));
-});
-
-// ============ SCHEDULED TASKS ============
-app.use('/api', require('./routes/scheduled')({ db, requireAuth, requireAgentKey }));
-
-// ============ ACTIVITY FEED ============
-app.use('/api', require('./routes/activity')({ db, requireAuth }));
+// Routes removed in Phase 1 (OpenClaw channel refactor):
+// - /api/work, /api/signals, /api/subagents (routes/work.js)
+// - /api/agents, /api/dm (routes/agents.js)
+// - /api/scheduled (routes/scheduled.js)
+// - /api/activity (routes/activity.js)
+// Lib files kept for Phase 2 cleanup: chat-state.js, db.js, signals.js
 
 // ============ HEALTH CHECK ============
 app.use('/api', require('./routes/health')({
@@ -391,17 +364,6 @@ app.use((err, req, res, next) => {
 // ============ START ============
 async function start() {
   await db.init();
-
-  // Auto-create general channel
-  const generalChannel = await db.get("SELECT id FROM channels WHERE name = 'general'");
-  if (!generalChannel) {
-    await db.run(
-      "INSERT INTO channels (id, name, description, is_default) VALUES ($1, 'general', 'General discussion', true)",
-      [uuidv4()]
-    );
-    console.log('✅ Created default #general channel');
-  }
-
   dbReady = true;
 
   server.listen(PORT, () => {

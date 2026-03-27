@@ -89,12 +89,13 @@ module.exports = function chatRouter(deps) {
     connectChatGateway();
     const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
     if (!message) return res.status(400).json({ error: 'message is required' });
+    const sessionKey = (typeof req.body?.sessionKey === 'string' && req.body.sessionKey) ? req.body.sessionKey : CHAT_SESSION_KEY;
     const { authenticated: chatGatewayAuthenticated } = getChatState();
     if (!chatGatewayAuthenticated) return res.status(503).json({ error: 'Gateway unavailable' });
 
     const idempotencyKey = req.body?.idempotencyKey || `idemp-${uuidv4()}`;
     try {
-      await chatGatewayRequest('chat.send', { sessionKey: CHAT_SESSION_KEY, message, idempotencyKey });
+      await chatGatewayRequest('chat.send', { sessionKey, message, idempotencyKey });
       const entry = { id: `msg-${uuidv4()}`, role: 'user', text: message, timestamp: new Date().toISOString(), status: 'delivered' };
       trackUserSend(message);
       const added = pushChatMessage(entry);
@@ -576,6 +577,45 @@ module.exports = function chatRouter(deps) {
     req.on('close', () => {
       channelSseClients.get(channelId)?.delete(client);
     });
+  });
+
+  // ============ SESSIONS (OpenClaw channels) ============
+  // GET /api/sessions — list gateway sessions to populate sidebar
+  router.get('/sessions', requireAuth, async (req, res) => {
+    try {
+      if (!gatewayClient.isReady) return res.json([]);
+      const sessions = await gatewayClient.listSessions();
+      res.json(sessions);
+    } catch (err) {
+      res.status(502).json({ error: err.message });
+    }
+  });
+
+  // POST /api/sessions — create a new gateway session (channel)
+  router.post('/sessions', requireAuth, async (req, res) => {
+    const label = typeof req.body?.label === 'string' ? req.body.label.trim() : '';
+    if (!label) return res.status(400).json({ error: 'label required' });
+    try {
+      if (!gatewayClient.isReady) return res.status(503).json({ error: 'Gateway unavailable' });
+      const session = await gatewayClient.createSession(label);
+      res.status(201).json(session);
+    } catch (err) {
+      res.status(502).json({ error: err.message });
+    }
+  });
+
+  // GET /api/chat/history — fetch session history from gateway
+  router.get('/chat/history', requireAuth, async (req, res) => {
+    const sessionKey = typeof req.query?.sessionKey === 'string' ? req.query.sessionKey : '';
+    if (!sessionKey) return res.status(400).json({ error: 'sessionKey required' });
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    try {
+      if (!gatewayClient.isReady) return res.json({ messages: [] });
+      const result = await gatewayClient.requestHistory(sessionKey, limit);
+      res.json(result);
+    } catch (err) {
+      res.status(502).json({ error: err.message });
+    }
   });
 
   // NOTE: Push device routes (POST /devices/register, DELETE /devices/unregister)

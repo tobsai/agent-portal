@@ -23,7 +23,6 @@
   <link rel="apple-touch-icon" href="/favicon-192.png">
   <link rel="manifest" href="/manifest.json">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --bg: #0a0a0f;
@@ -1326,44 +1325,8 @@
       <!-- Channels populated via JS -->
     </div>
 
-    <!-- Direct Messages section -->
-    <div class="dm-section-header">
-      <span>Direct Messages</span>
-    </div>
-    <div class="dm-list" id="dm-list">
-      <!-- DM items populated via JS -->
-    </div>
-
-    <div class="sidebar-nav" style="padding:0.25rem 0.75rem 0; display:flex; flex-direction:column; gap:2px; flex-shrink:0;">
-      <a href="/work" class="channel-item" style="text-decoration:none; display:flex; align-items:center; gap:0.5rem;">
-        <span style="font-size:0.9rem;">📋</span>
-        <span class="channel-name">Work</span>
-      </a>
-      <a href="/subagents" class="channel-item" style="text-decoration:none; display:flex; align-items:center; gap:0.5rem;">
-        <span style="font-size:0.9rem;">🌲</span>
-        <span class="channel-name">Agents</span>
-      </a>
-    </div>
-
-    <!-- ─── Active Work Widget ─── -->
-    <div id="work-widget" style="display:none; padding:0.5rem 0.75rem; flex-shrink:0;">
-      <div style="font-size:0.65rem; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; padding:0.4rem 0.25rem 0.3rem;">Active Work</div>
-      <div id="work-widget-items" style="display:flex; flex-direction:column; gap:2px;"></div>
-      <a href="/work" style="display:block; font-size:0.7rem; color:var(--text-dim); text-align:center; padding:0.4rem 0; text-decoration:none; margin-top:2px;" onmouseover="this.style.color='var(--text-muted)'" onmouseout="this.style.color='var(--text-dim)'">View all →</a>
-    </div>
-    <div style="border-top:1px solid var(--border); flex-shrink:0;"></div>
-
-    <!-- ─── Sub-Agent Activity Widget ─── -->
-    <div id="subagent-widget" style="display:none; padding:0.5rem 0.75rem; flex-shrink:0;">
-      <div style="font-size:0.65rem; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; padding:0.4rem 0.25rem 0.3rem;">Sub-Agent Activity</div>
-      <div id="subagent-widget-stats" style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; padding:0.25rem; margin-bottom:0.5rem; font-size:0.72rem;"></div>
-      <div id="subagent-widget-chart" style="padding:0.25rem; margin-bottom:0.5rem;">
-        <canvas id="subagent-chart" style="max-height:120px;"></canvas>
-      </div>
-      <div id="subagent-widget-recent" style="display:flex; flex-direction:column; gap:2px; margin-bottom:0.25rem;"></div>
-      <a href="/subagents" style="display:block; font-size:0.7rem; color:var(--text-dim); text-align:center; padding:0.4rem 0; text-decoration:none;" onmouseover="this.style.color='var(--text-muted)'" onmouseout="this.style.color='var(--text-dim)'">View full tree →</a>
-    </div>
-    <div style="border-top:1px solid var(--border); flex-shrink:0;"></div>
+    <!-- Spacer before footer -->
+    <div style="flex:1;"></div>
 
     <div class="sidebar-footer">
       <div class="sidebar-user" id="sidebar-user-info">
@@ -1411,7 +1374,7 @@
         <div class="empty-state">
           <div class="icon">💬</div>
           <h2>Pick up where you left off</h2>
-          <p>Select a channel or open a DM to chat with your agents.</p>
+          <p>Select a channel to start chatting.</p>
         </div>
       </div>
 
@@ -1484,14 +1447,10 @@
   <!-- Create Channel Modal -->
   <div class="modal-overlay" id="create-channel-modal">
     <div class="modal-box">
-      <h3>Create Channel</h3>
+      <h3>New Session</h3>
       <div class="modal-field">
         <label for="new-channel-name">Name</label>
-        <input type="text" id="new-channel-name" placeholder="general" maxlength="50" autocomplete="off">
-      </div>
-      <div class="modal-field">
-        <label for="new-channel-desc">Description (optional)</label>
-        <input type="text" id="new-channel-desc" placeholder="What's this channel about?" maxlength="200" autocomplete="off">
+        <input type="text" id="new-channel-name" placeholder="e.g. Fort, Finance, Quick question" maxlength="50" autocomplete="off">
       </div>
       <div class="modal-actions">
         <button class="modal-btn" onclick="closeCreateChannelModal()">Cancel</button>
@@ -1520,11 +1479,15 @@
     let pendingImage = null;
     const renderedMessageKeys = new Set();
 
-    // Channel state
+    // Channel state — channels are OpenClaw sessions
     let channels = [];
-    let activeChannelId = null;
-    let activeDmAgent = null;      // agent info when in a DM channel
-    let agents = [];               // from /api/agents
+    let activeChannelId = null;    // sessionKey of active channel
+    let activeSessionKey = null;   // mirrors activeChannelId for gateway routing
+
+    // Agent info for avatar rendering (Lewis is the primary agent)
+    const agents = [
+      { id: 'lewis', name: 'Lewis', emoji: '📚', avatarUrl: '/assets/lewis-avatar.png' },
+    ];
 
     // @-mention state
     let mentionActive = false;
@@ -1619,9 +1582,7 @@
     // ─── Init ────────────────────────────────────────────────────────────────
     async function init() {
       await loadUser();
-      await loadAgents();
       await loadChannels();
-      renderDmList();
       connectEventStream();
       setupInputListeners();
       setupNotifBanner();
@@ -1644,51 +1605,29 @@
       } catch (err) { console.error('Failed to load user:', err); }
     }
 
-    // ─── Agents ──────────────────────────────────────────────────────────────
-    async function loadAgents() {
-      try {
-        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
-        const res = await fetch('/api/agents', { headers });
-        if (res.ok) {
-          const data = await res.json();
-          agents = Array.isArray(data) ? data : (data.agents || []);
-        }
-      } catch (err) {
-        console.warn('Failed to load agents:', err);
-        // Fallback agents
-        agents = [{ id: 'lewis', name: 'Lewis', emoji: '📚' }];
-      }
-    }
-
-    function getAgentInfo(nameOrId) {
-      if (!nameOrId) return null;
-      const lower = nameOrId.toLowerCase();
-      return agents.find(a => a.id?.toLowerCase() === lower || a.name?.toLowerCase() === lower);
-    }
-
-    // ─── Channels ────────────────────────────────────────────────────────────
+    // ─── Channels (OpenClaw sessions) ────────────────────────────────────────
     async function loadChannels() {
       try {
         const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
-        const res = await fetch('/api/channels', { headers });
+        const res = await fetch('/api/sessions', { headers });
         if (res.ok) {
           const data = await res.json();
-          channels = Array.isArray(data) ? data : (data.channels || []);
+          channels = Array.isArray(data) ? data : (data.sessions || []);
         }
       } catch (err) {
-        console.warn('Failed to load channels:', err);
+        console.warn('Failed to load sessions:', err);
       }
 
-      // If no channels from API, create a virtual #general
+      // If no channels from API, create a virtual general channel
       if (channels.length === 0) {
-        channels = [{ id: 'general', name: 'general', description: 'General chat', is_default: true }];
+        channels = [{ id: 'general', sessionKey: 'portal:general', label: 'General', name: 'general', description: 'General chat' }];
       }
 
       renderChannelList();
 
-      // Select default channel
-      const defaultCh = channels.find(c => c.is_default) || channels[0];
-      if (defaultCh) switchChannel(defaultCh.id);
+      // Select first channel
+      const defaultCh = channels[0];
+      if (defaultCh) switchChannel(defaultCh.sessionKey || defaultCh.id);
     }
 
     function updateChatHeader() {
@@ -1697,67 +1636,62 @@
       const subEl = document.getElementById('chat-header-sub');
       if (!emojiEl || !titleEl) return;
 
-      if (activeDmAgent) {
-        emojiEl.textContent = activeDmAgent.emoji || '🤖';
-        titleEl.textContent = activeDmAgent.name;
-        subEl.textContent = 'Direct Message';
-      } else {
-        const ch = channels.find(c => c.id === activeChannelId);
-        emojiEl.textContent = '#';
-        titleEl.textContent = ch ? ch.name : '';
-        subEl.textContent = ch?.description || '';
-      }
+      const ch = channels.find(c => (c.sessionKey || c.id) === activeChannelId);
+      emojiEl.textContent = '💬';
+      titleEl.textContent = ch ? (ch.label || ch.name) : '';
+      subEl.textContent = ch?.description || '';
     }
 
     function renderChannelList() {
       const list = document.getElementById('channel-list');
       list.innerHTML = '';
-      // Filter out DM channels — they belong in the Direct Messages section
-      const publicChannels = channels.filter(ch => !ch.is_dm);
-      publicChannels.forEach(ch => {
+      channels.forEach(ch => {
+        const channelKey = ch.sessionKey || ch.id;
         const item = document.createElement('div');
-        item.className = 'channel-item' + (ch.id === activeChannelId ? ' active' : '');
-        item.dataset.channelId = ch.id;
-        item.onclick = () => switchChannel(ch.id);
+        item.className = 'channel-item' + (channelKey === activeChannelId ? ' active' : '');
+        item.dataset.channelId = channelKey;
+        item.onclick = () => switchChannel(channelKey);
 
         const name = document.createElement('span');
         name.className = 'channel-name';
-        name.textContent = '# ' + ch.name;
+        name.textContent = ch.label || ch.name || channelKey;
+
+        // Last message preview
+        if (ch.lastMessage) {
+          const preview = document.createElement('div');
+          preview.className = 'channel-preview';
+          preview.style.cssText = 'font-size:0.7rem;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;';
+          preview.textContent = ch.lastMessage.slice(0, 60);
+          const wrapper = document.createElement('div');
+          wrapper.appendChild(name);
+          wrapper.appendChild(preview);
+          item.appendChild(wrapper);
+        } else {
+          item.appendChild(name);
+        }
 
         const badge = document.createElement('span');
         badge.className = 'channel-badge hidden';
         badge.textContent = '0';
-        badge.id = 'badge-' + ch.id;
-
-        item.appendChild(name);
+        badge.id = 'badge-' + channelKey;
         item.appendChild(badge);
+
         list.appendChild(item);
       });
     }
 
-    async function switchChannel(channelId, opts = {}) {
+    async function switchChannel(channelId) {
       if (channelId === activeChannelId) return;
       activeChannelId = channelId;
-      posthog.capture('agent_tab_viewed', { channel_id: channelId, is_dm: !!(opts && opts.dm) });
-
-      // Update active DM agent context (used for header)
-      if (opts.dm && opts.agent) {
-        activeDmAgent = opts.agent;
-      } else if (!opts.dm) {
-        activeDmAgent = null;
-      }
+      activeSessionKey = channelId;
 
       // Update chat header
       updateChatHeader();
 
       // Update sidebar active state
-      if (!opts.dm) {
-        document.querySelectorAll('.channel-item').forEach(el => {
-          el.classList.toggle('active', el.dataset.channelId === channelId);
-        });
-        // Clear DM active states when switching to a regular channel
-        document.querySelectorAll('.dm-item').forEach(el => el.classList.remove('active'));
-      }
+      document.querySelectorAll('.channel-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.channelId === channelId);
+      });
 
       // Clear messages
       clearMessages();
@@ -1766,20 +1700,21 @@
       // Hide typing indicator
       hideAgentTyping();
 
-      // Load channel messages
+      // Load history from gateway
       await loadChannelMessages(channelId);
 
-      // Connect channel SSE
+      // Connect channel SSE for live updates
       connectChannelStream(channelId);
 
       // Close mobile sidebar
       closeSidebar();
     }
 
-    async function loadChannelMessages(channelId) {
+    async function loadChannelMessages(sessionKey) {
       try {
         const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
-        const res = await fetch(`/api/channels/${channelId}/messages?limit=200`, { headers, cache: 'no-store' });
+        // Request history from gateway via chat.history
+        const res = await fetch(`/api/chat/history?sessionKey=${encodeURIComponent(sessionKey)}&limit=200`, { headers, cache: 'no-store' });
         if (res.ok) {
           const payload = await res.json();
           const msgs = Array.isArray(payload?.messages) ? payload.messages.slice() : (Array.isArray(payload) ? payload : []);
@@ -1805,7 +1740,7 @@
         console.warn('Failed to load channel messages, falling back to gateway history:', err);
       }
 
-      // Fallback: load from gateway chat history
+      // Fallback: load from legacy gateway chat history
       await loadGatewayHistory();
     }
 
@@ -1903,29 +1838,12 @@
     let typingTimeout = null;
 
     function showAgentTyping(agentId, agentName, agentEmoji) {
-      // Try to resolve agent info
       let emoji = agentEmoji || '';
-      let name = agentName || agentId || 'Agent';
+      let name = agentName || agentId || 'Lewis';
 
-      if (!emoji || !agentName) {
-        const info = getAgentInfo(agentId || agentName);
-        if (info) {
-          emoji = emoji || info.emoji || '';
-          name = info.name || name;
-        }
-      }
+      window._typingAgentId = agentId || 'lewis';
 
-      // Track typing agent for streaming avatar
-      const typingAgentInfo = getAgentInfo(agentId || agentName);
-      window._typingAgentId = typingAgentInfo?.id || agentId || 'lewis';
-
-      // Use avatar image if available
-      const typingAvatarUrl = typingAgentInfo?.avatarUrl;
-      if (typingAvatarUrl) {
-        agentTypingText.innerHTML = `<img src="${typingAvatarUrl}" alt="${name}" style="width:18px;height:18px;object-fit:cover;border-radius:50%;vertical-align:middle;margin-right:4px;"> ${name} is typing`;
-      } else {
-        agentTypingText.textContent = `${emoji} ${name} is typing`;
-      }
+      agentTypingText.textContent = `${emoji} ${name} is typing`.trim();
       agentTypingBar.classList.add('visible');
 
       // Remove any loading bubble — the typing bar is sufficient
@@ -1954,22 +1872,22 @@
     }
 
     async function createChannel() {
-      const name = document.getElementById('new-channel-name').value.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-');
-      const description = document.getElementById('new-channel-desc').value.trim();
-      if (!name) return;
+      const label = document.getElementById('new-channel-name').value.trim();
+      if (!label) return;
 
       try {
         const headers = { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) };
-        const res = await fetch('/api/channels', {
+        const res = await fetch('/api/sessions', {
           method: 'POST',
           headers,
-          body: JSON.stringify({ name, description })
+          body: JSON.stringify({ label })
         });
         if (res.ok) {
-          const ch = await res.json();
+          const session = await res.json();
+          const ch = { id: session.sessionKey, sessionKey: session.sessionKey, label: session.label, name: session.label };
           channels.push(ch);
           renderChannelList();
-          switchChannel(ch.id);
+          switchChannel(ch.sessionKey);
           closeCreateChannelModal();
         } else {
           const err = await res.json().catch(() => ({}));
@@ -1999,73 +1917,7 @@
       document.getElementById('sidebar-overlay').classList.remove('open');
     }
 
-    // ─── DM Sidebar ──────────────────────────────────────────────────────────
-    // DM list is driven by /api/agents (the `agents` array loaded at init)
-
-    function renderDmList() {
-      const list = document.getElementById('dm-list');
-      if (!list) return;
-      list.innerHTML = '';
-      agents.forEach(agent => {
-        const item = document.createElement('div');
-        item.className = 'dm-item';
-        item.dataset.agentId = agent.id;
-        item.title = 'DM with ' + agent.name;
-        item.onclick = () => openDmWithAgent(agent.id);
-
-        const avatar = document.createElement('span');
-        avatar.className = 'dm-avatar';
-        if (agent.avatarUrl) {
-          avatar.innerHTML = `<img src="${agent.avatarUrl}" alt="${agent.name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.parentNode.textContent='${agent.emoji}'">`;
-        } else {
-          avatar.textContent = agent.emoji;
-        }
-
-        const name = document.createElement('span');
-        name.className = 'dm-name';
-        name.textContent = agent.name;
-
-        const dot = document.createElement('span');
-        dot.className = 'dm-status-dot';
-        dot.title = 'Online';
-
-        item.appendChild(avatar);
-        item.appendChild(name);
-        item.appendChild(dot);
-        list.appendChild(item);
-      });
-    }
-
-    async function openDmWithAgent(agentId) {
-      closeSidebar();
-      try {
-        const headers = { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) };
-        const res = await fetch(`/api/dm/${agentId}`, { headers });
-        if (!res.ok) { console.error('Failed to open DM:', await res.text()); return; }
-        const dmChannel = await res.json();
-
-        // Add to channels list if not already there (DMs aren't in /api/channels)
-        if (!channels.find(c => c.id === dmChannel.id)) {
-          channels.push(dmChannel);
-        }
-
-        // Mark active DM agent for header display
-        activeDmAgent = dmChannel.agent || null;
-
-        // Update DM list active state
-        document.querySelectorAll('.dm-item').forEach(el => {
-          el.classList.toggle('active', el.dataset.agentId === agentId);
-        });
-        // Clear channel active state
-        document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
-
-        await switchChannel(dmChannel.id, { dm: true, agent: dmChannel.agent });
-      } catch (err) {
-        console.error('openDmWithAgent error:', err);
-      }
-    }
-
-    // ─── Gateway SSE (existing) ──────────────────────────────────────────────
+    // ─── Gateway SSE ──────────────────────────────────────────────────────────
     function connectEventStream() {
       updateConnectionStatus('reconnecting', 'Connecting...');
       try {
@@ -2872,40 +2724,25 @@
     async function dispatchMessage(text, mentions) {
       const sendId = 'send-' + Date.now();
       const headers = { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) };
+      const sessionKey = activeSessionKey || activeChannelId;
 
-      // Try channel API first, then fall back to gateway
-      let sent = false;
-      if (activeChannelId) {
-        try {
-          const res = await fetch(`/api/channels/${activeChannelId}/messages`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ content: text, message: text, mentions: mentions?.map(m => m.id) || [] })
-          });
-          if (res.ok) sent = true;
-        } catch (err) {
-          console.warn('Channel message send failed, falling back to gateway:', err);
+      // Send via gateway chat.send with the active session key
+      try {
+        const response = await fetch('/api/chat/send', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ message: text, sessionKey, idempotencyKey: sendId })
+        });
+        if (!response.ok) {
+          const errorPayload = await response.json().catch(() => ({}));
+          throw new Error(errorPayload.error || 'Send failed');
         }
-      }
-
-      if (!sent) {
-        try {
-          const response = await fetch('/api/chat/send', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ message: text, idempotencyKey: sendId })
-          });
-          if (!response.ok) {
-            const errorPayload = await response.json().catch(() => ({}));
-            throw new Error(errorPayload.error || 'Send failed');
-          }
-        } catch (err) {
-          showError(err.message || 'Send failed');
-          isWaitingForResponse = false;
-          markMessageDone(activeUserMsg);
-          processQueue();
-          return;
-        }
+      } catch (err) {
+        showError(err.message || 'Send failed');
+        isWaitingForResponse = false;
+        markMessageDone(activeUserMsg);
+        processQueue();
+        return;
       }
 
       addLoadingIndicator();
@@ -3413,268 +3250,6 @@
     init();
   </script>
 
-  <!-- ─── Work Widget (MT-180) ─── -->
-  <script>
-    // Polls /api/work on load, then listens on SSE for live updates.
-    // Shows active/in-progress tasks in the sidebar.
-
-    const WORK_WIDGET_MAX = 5; // max tasks shown in sidebar
-
-    function escW(s) {
-      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
-
-    function workStatusDot(status) {
-      const colors = {
-        active: '#60a5fa', 'in-progress': '#818cf8',
-        blocked: '#f87171', done: '#34d399', complete: '#34d399',
-        paused: '#fbbf24', backlog: '#52525b', planned: '#52525b'
-      };
-      const c = colors[status] || '#52525b';
-      return `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${c};flex-shrink:0;margin-top:2px;"></span>`;
-    }
-
-    function renderWorkWidget(initiatives, tasks) {
-      const widget = document.getElementById('work-widget');
-      const items  = document.getElementById('work-widget-items');
-      if (!widget || !items) return;
-
-      // Show active tasks first, then in-progress, then backlog
-      const priority = ['active', 'in-progress'];
-      const active = tasks.filter(t => priority.includes(t.status));
-      const shown  = active.length > 0 ? active : tasks.filter(t => t.status !== 'done' && t.status !== 'complete' && t.status !== 'cancelled');
-      const display = shown.slice(0, WORK_WIDGET_MAX);
-
-      if (display.length === 0) {
-        widget.style.display = 'none';
-        return;
-      }
-
-      widget.style.display = 'block';
-      items.innerHTML = display.map(t => {
-        const ini = initiatives.find(i => i.id === t.initiative_id);
-        return `
-          <a href="/work" style="display:flex;align-items:flex-start;gap:0.4rem;padding:0.3rem 0.25rem;border-radius:5px;text-decoration:none;transition:background 0.1s;" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background='transparent'">
-            ${workStatusDot(t.status)}
-            <div style="min-width:0;flex:1;">
-              <div style="font-size:0.78rem;color:var(--text-muted);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escW(t.title)}">${escW(t.title)}</div>
-              ${ini ? `<div style="font-size:0.65rem;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escW(ini.title)}</div>` : ''}
-            </div>
-          </a>`;
-      }).join('');
-    }
-
-    async function loadWorkWidget() {
-      try {
-        const res = await fetch('/api/work');
-        if (!res.ok) return;
-        const data = await res.json();
-        renderWorkWidget(data.initiatives || [], data.tasks || []);
-      } catch { /* silent fail — widget is optional */ }
-    }
-
-    // Hook into the existing SSE event source to receive live work events.
-    // Listen for work:* events on the channel SSE after it connects.
-    // We use a MutationObserver-style approach: poll for eventSource readiness.
-    (function attachWorkEvents() {
-      let attached = false;
-      setInterval(() => {
-        if (attached || !eventSource) return;
-        attached = true;
-        const src = eventSource;
-        src.addEventListener('work:task:created', () => loadWorkWidget());
-        src.addEventListener('work:task:updated', () => loadWorkWidget());
-        src.addEventListener('work:initiative:created', () => loadWorkWidget());
-        src.addEventListener('work:initiative:updated', () => loadWorkWidget());
-        // Reset if eventSource changes (reconnect)
-        const check = setInterval(() => {
-          if (eventSource !== src) { attached = false; clearInterval(check); }
-        }, 2000);
-      }, 500);
-    })();
-
-    // Load on page init — defer slightly to not block critical path
-    setTimeout(loadWorkWidget, 1500);
-
-    // ─── Sub-Agent Activity Widget ────────────────────────────────────────────
-    let subagentChart = null;
-
-    function subagentStatusBadge(status) {
-      const colors = {
-        'done': '#34d399',
-        'complete': '#34d399',
-        'active': '#fbbf24',
-        'running': '#fbbf24',
-        'error': '#f87171',
-        'failed': '#f87171',
-      };
-      const labels = {
-        'done': 'completed',
-        'complete': 'completed',
-        'active': 'running',
-        'running': 'running',
-        'error': 'failed',
-        'failed': 'failed',
-      };
-      const c = colors[status] || '#71717a';
-      const l = labels[status] || status;
-      return `<span style="display:inline-block;padding:1px 6px;border-radius:8px;background:${c};color:#000;font-size:0.6rem;font-weight:600;text-transform:uppercase;line-height:1.4;">${l}</span>`;
-    }
-
-    function relativeTime(isoDate) {
-      const now = Date.now();
-      const then = new Date(isoDate).getTime();
-      const diff = Math.floor((now - then) / 1000);
-      if (diff < 60) return 'just now';
-      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-      return Math.floor(diff / 86400) + 'd ago';
-    }
-
-    function extractAgentName(sessionKey) {
-      // Extract agent name from session_key patterns like "agent:main:subagent:uuid"
-      // Look for metadata or parse from key
-      const match = sessionKey.match(/agent:([^:]+):/);
-      return match ? match[1] : 'agent';
-    }
-
-    function renderSubagentWidget(data) {
-      const widget = document.getElementById('subagent-widget');
-      const stats = document.getElementById('subagent-widget-stats');
-      const chartContainer = document.getElementById('subagent-widget-chart');
-      const recent = document.getElementById('subagent-widget-recent');
-      if (!widget || !stats || !recent) return;
-
-      const tree = data.tree || [];
-      const allNodes = [];
-      function collect(nodes) {
-        nodes.forEach(n => { allNodes.push(n); collect(n.children || []); });
-      }
-      collect(tree);
-
-      if (allNodes.length === 0) {
-        widget.style.display = 'none';
-        return;
-      }
-
-      widget.style.display = 'block';
-
-      // Stats: total today, avg duration, most active agent
-      const today = new Date().toISOString().slice(0, 10);
-      const todayNodes = allNodes.filter(n => n.startedAt && n.startedAt.startsWith(today));
-      const completedNodes = allNodes.filter(n => ['done', 'complete'].includes(n.status) && n.runtime);
-      const avgDuration = completedNodes.length > 0
-        ? (completedNodes.reduce((sum, n) => sum + n.runtime, 0) / completedNodes.length / 60).toFixed(1)
-        : '0.0';
-
-      // Most active agent: count spawns by agent name
-      const agentCounts = {};
-      todayNodes.forEach(n => {
-        const name = n.label || extractAgentName(n.id);
-        agentCounts[name] = (agentCounts[name] || 0) + 1;
-      });
-      const mostActive = Object.entries(agentCounts).sort((a, b) => b[1] - a[1])[0];
-      const mostActiveLabel = mostActive ? `${mostActive[0]} (${mostActive[1]})` : 'None';
-
-      stats.innerHTML = `
-        <div style="display:flex;flex-direction:column;">
-          <div style="color:var(--text-dim);">Spawned Today</div>
-          <div style="color:var(--text);font-weight:600;font-size:1rem;">${todayNodes.length}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;">
-          <div style="color:var(--text-dim);">Avg Duration</div>
-          <div style="color:var(--text);font-weight:600;font-size:1rem;">${avgDuration}m</div>
-        </div>
-        <div style="display:flex;flex-direction:column;grid-column:span 2;">
-          <div style="color:var(--text-dim);">Most Active</div>
-          <div style="color:var(--text);font-weight:600;font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escW(mostActiveLabel)}</div>
-        </div>
-      `;
-
-      // Chart: spawn count by agent name for today
-      const chartLabels = Object.keys(agentCounts).slice(0, 5);
-      const chartData = chartLabels.map(l => agentCounts[l]);
-
-      const canvas = document.getElementById('subagent-chart');
-      if (canvas && chartLabels.length > 0) {
-        chartContainer.style.display = 'block';
-        if (subagentChart) subagentChart.destroy();
-        subagentChart = new Chart(canvas, {
-          type: 'bar',
-          data: {
-            labels: chartLabels,
-            datasets: [{
-              label: 'Spawns',
-              data: chartData,
-              backgroundColor: 'rgba(129,140,248,0.6)',
-              borderColor: 'rgba(129,140,248,0.8)',
-              borderWidth: 1
-            }]
-          },
-          options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: { enabled: true }
-            },
-            scales: {
-              x: {
-                beginAtZero: true,
-                ticks: { color: '#71717a', font: { size: 9 } },
-                grid: { color: 'rgba(255,255,255,0.05)' }
-              },
-              y: {
-                ticks: { color: '#71717a', font: { size: 9 } },
-                grid: { display: false }
-              }
-            }
-          }
-        });
-      } else {
-        chartContainer.style.display = 'none';
-      }
-
-      // Recent activity: last 3 sub-agents
-      const recentNodes = allNodes
-        .filter(n => n.startedAt)
-        .sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
-        .slice(0, 3);
-
-      recent.innerHTML = recentNodes.map(n => {
-        const label = n.label || extractAgentName(n.id);
-        const taskSummary = (n.signals && n.signals[0]?.message) || 'No description';
-        const shortTask = taskSummary.length > 40 ? taskSummary.slice(0, 40) + '…' : taskSummary;
-        return `
-          <a href="/subagents" style="display:flex;align-items:flex-start;gap:0.4rem;padding:0.3rem 0.25rem;border-radius:5px;text-decoration:none;transition:background 0.1s;" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background='transparent'">
-            <div style="min-width:0;flex:1;">
-              <div style="display:flex;align-items:center;gap:0.3rem;margin-bottom:2px;">
-                <div style="font-size:0.75rem;color:var(--text-muted);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escW(label)}</div>
-                ${subagentStatusBadge(n.status)}
-              </div>
-              <div style="font-size:0.65rem;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escW(taskSummary)}">${escW(shortTask)}</div>
-              <div style="font-size:0.6rem;color:var(--text-dim);margin-top:2px;">${relativeTime(n.startedAt)}</div>
-            </div>
-          </a>`;
-      }).join('');
-    }
-
-    async function loadSubagentWidget() {
-      try {
-        const today = new Date().toISOString().slice(0, 10);
-        const res = await fetch('/api/subagents?date=' + today + '&limit=500');
-        if (!res.ok) return;
-        const data = await res.json();
-        renderSubagentWidget(data);
-      } catch { /* silent fail — widget is optional */ }
-    }
-
-    // Auto-refresh every 60 seconds
-    setInterval(loadSubagentWidget, 60000);
-
-    // Load on page init — defer slightly to not block critical path
-    setTimeout(loadSubagentWidget, 2000);
   </script>
 </body>
 </html>

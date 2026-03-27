@@ -33,42 +33,6 @@ function createTestDb() {
       created_by TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
-    CREATE TABLE IF NOT EXISTS initiatives (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      description TEXT,
-      status TEXT NOT NULL DEFAULT 'planned',
-      priority TEXT NOT NULL DEFAULT 'P2',
-      owner TEXT,
-      target_date TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS work_tasks (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      description TEXT,
-      initiative_id TEXT,
-      status TEXT NOT NULL DEFAULT 'backlog',
-      assigned_to TEXT,
-      requested_by TEXT,
-      session_key TEXT,
-      parent_task_id TEXT,
-      started_at TEXT,
-      completed_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS signals (
-      id TEXT PRIMARY KEY,
-      task_id TEXT,
-      initiative_id TEXT,
-      agent_id TEXT,
-      session_key TEXT,
-      task_label TEXT,
-      level TEXT NOT NULL DEFAULT 'info',
-      message TEXT NOT NULL,
-      metadata TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
     CREATE TABLE IF NOT EXISTS channels (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
@@ -92,41 +56,6 @@ function createTestDb() {
       reply_to TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
-    CREATE TABLE IF NOT EXISTS channel_members (
-      channel_id TEXT,
-      user_id TEXT,
-      joined_at TEXT DEFAULT (datetime('now')),
-      PRIMARY KEY (channel_id, user_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at DESC);
-
-    CREATE TABLE IF NOT EXISTS scheduled_tasks (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      schedule TEXT NOT NULL,
-      schedule_human TEXT,
-      enabled INTEGER DEFAULT 1,
-      next_run_at TEXT,
-      last_run_at TEXT,
-      last_status TEXT,
-      last_outcome TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_tasks_dedup ON scheduled_tasks(name, schedule);
-
-    CREATE TABLE IF NOT EXISTS agent_status (
-      id INTEGER PRIMARY KEY DEFAULT 1,
-      status TEXT NOT NULL DEFAULT 'idle',
-      task TEXT,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS agent_health (
-      agent_id    TEXT PRIMARY KEY,
-      health_data TEXT NOT NULL,
-      updated_at  INTEGER NOT NULL
-    );
   `);
 
   return {
@@ -146,13 +75,6 @@ function createTestDb() {
     },
   };
 }
-
-// ── Static agents registry (mirrors server.js) ────────────────────────────────
-
-const AGENTS = [
-  { id: 'lewis',  name: 'Lewis',  emoji: '📚', sessionKey: 'agent:main:main',   avatarUrl: '/assets/lewis-avatar.png' },
-  { id: 'pascal', name: 'Pascal', emoji: '⚙️',  sessionKey: 'agent:pascal:main', avatarUrl: '/assets/pascal-avatar.jpg' },
-];
 
 // ── App factory ───────────────────────────────────────────────────────────────
 
@@ -192,13 +114,6 @@ function createApp(opts = {}) {
     next();
   };
 
-  const requireAdmin = (req, res, next) => {
-    if (req.user?.is_admin) return next();
-    res.status(403).json({ error: 'Admin access required' });
-  };
-
-  const broadcast = () => {}; // no-op in tests
-
   const app = express();
   app.use(express.json());
 
@@ -208,12 +123,8 @@ function createApp(opts = {}) {
     next();
   });
 
-  // Mount routes
-  const healthRouter    = require('../../routes/health');
-  const agentsRouter    = require('../../routes/agents');
-  const workRouter      = require('../../routes/work');
-  const scheduledRouter = require('../../routes/scheduled');
-  const activityRouter  = require('../../routes/activity');
+  // Mount routes — only health survives Phase 1
+  const healthRouter = require('../../routes/health');
 
   app.use('/api', healthRouter({
     gatewayClient: { isReady: false, ws: null },
@@ -221,27 +132,10 @@ function createApp(opts = {}) {
     db,
   }));
 
-  app.use('/api', agentsRouter({
-    db,
-    AGENTS,
-    requireAuth,
-    requireAdmin,
-    uuidv4,
-    publicDir: __dirname,
-  }));
-
-  app.use('/api', workRouter({
-    db,
-    requireAuth,
-    requireAgentKey,
-    uuidv4,
-    broadcast,
-    publicDir: __dirname,
-  }));
-
-  app.use('/api', scheduledRouter({ db, requireAuth, requireAgentKey }));
-
-  app.use('/api', activityRouter({ db, requireAuth }));
+  // Test-only protected route for auth middleware tests
+  app.get('/api/test-protected', requireAuth, (req, res) => {
+    res.json({ ok: true, agent: req.agent?.name });
+  });
 
   return { app, db, testAgentKey };
 }
