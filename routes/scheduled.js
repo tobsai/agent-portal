@@ -188,5 +188,21 @@ module.exports = function scheduledRouter({ db, requireAuth, requireAgentKey }) 
     }
   });
 
+  // DELETE /api/scheduled/:id — remove a scheduled task
+  router.delete('/scheduled/:id', requireAgentKey, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await db.get('SELECT * FROM scheduled_tasks WHERE id = $1', [id]);
+      if (!existing) {
+        return res.status(404).json({ error: 'Scheduled task not found' });
+      }
+      await db.run('DELETE FROM scheduled_tasks WHERE id = $1', [id]);
+      res.json({ success: true, deleted: id });
+    } catch (err) {
+      console.error('[scheduled] DELETE error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return router;
 };

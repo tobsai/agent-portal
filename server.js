@@ -344,9 +344,11 @@ app.get('/api/me', (req, res) => {
 // Routes removed in Phase 1 (OpenClaw channel refactor):
 // - /api/work, /api/signals, /api/subagents (routes/work.js)
 // - /api/agents, /api/dm (routes/agents.js)
-// - /api/scheduled (routes/scheduled.js)
 // - /api/activity (routes/activity.js)
 // Lib files kept for Phase 2 cleanup: chat-state.js, db.js, signals.js
+
+// ============ SCHEDULED TASKS ============
+app.use('/api', require('./routes/scheduled')({ db, requireAuth, requireAgentKey }));
 
 // ============ HEALTH CHECK ============
 app.use('/api', require('./routes/health')({
