@@ -37,6 +37,54 @@ const { Router } = require('express');
 const path = require('path');
 const fs = require('fs');
 
+// ============ SESSION HELPER FUNCTIONS ============
+
+function titleCase(str) {
+  return str.split(/[-\s]+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+function autoDisplayName(sessionKey, gatewayLabel) {
+  if (!sessionKey) return sessionKey;
+
+  // portal:dm-<agent> → title-cased agent name (portal:dm-lewis → 'Lewis')
+  const dmMatch = sessionKey.match(/^portal:dm-(.+)$/);
+  if (dmMatch) return titleCase(dmMatch[1]);
+
+  // anything containing 'heartbeat'
+  if (sessionKey.includes('heartbeat')) return 'Heartbeat';
+
+  // cron:<name> pattern
+  const cronMatch = sessionKey.match(/cron:([^:]+)(?:$|:)/);
+  if (cronMatch) return `Cron: ${cronMatch[1]}`;
+
+  // subagent:<uuid>
+  const subagentMatch = sessionKey.match(/subagent:([^:]+)$/);
+  if (subagentMatch) {
+    if (gatewayLabel) return gatewayLabel;
+    return `Sub-agent ${subagentMatch[1].substring(0, 8)}`;
+  }
+
+  // portal:<slug> → title-cased slug
+  const portalMatch = sessionKey.match(/^portal:(.+)$/);
+  if (portalMatch) return titleCase(portalMatch[1]);
+
+  return sessionKey;
+}
+
+function autoCategory(sessionKey) {
+  if (sessionKey.includes('subagent')) return 'subagent';
+  if (sessionKey.includes('heartbeat') || sessionKey.includes('cron')) return 'system';
+  return 'conversation';
+}
+
+function slugify(displayName) {
+  return displayName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/[\s-]+/g, '-');
+}
+
 module.exports = function chatRouter(deps) {
   const {
     db, AGENTS, CHAT_SESSION_KEY, CHAT_BUFFER_LIMIT,
@@ -580,32 +628,195 @@ module.exports = function chatRouter(deps) {
   });
 
   // ============ SESSIONS (OpenClaw channels) ============
-  // GET /api/sessions — list gateway sessions to populate sidebar
+  // GET /api/sessions — merged view: gateway sessions + portal metadata
   router.get('/sessions', requireAuth, async (req, res) => {
     try {
-      if (!gatewayClient.isReady) return res.json([]);
-      const sessions = await gatewayClient.listSessions();
-      // Normalize: ensure sessionKey is always set (gateway returns `key`, UI expects `sessionKey`)
-      // Only expose portal: sessions to the webchat UI — never expose iMessage/cron/subagent sessions
-      const normalized = sessions
-        .map(s => ({ ...s, sessionKey: s.sessionKey || s.key }))
-        .filter(s => s.sessionKey && s.sessionKey.startsWith('portal:'));
-      res.json(normalized);
+      if (!gatewayClient.isReady) return res.json({ sessions: [] });
+
+      const [gatewaySessions, metaRows] = await Promise.all([
+        gatewayClient.listSessions(),
+        db.query('SELECT * FROM session_meta', []),
+      ]);
+
+      const metaMap = new Map(metaRows.map(r => [r.session_key, r]));
+      const includeHidden = req.query.hidden === 'true';
+      const categoryFilter = req.query.category;
+
+      const sessions = gatewaySessions
+        .map(s => {
+          const sessionKey = s.sessionKey || s.key;
+          if (!sessionKey) return null;
+
+          const meta = metaMap.get(sessionKey);
+          const gatewayLabel = s.label || s.name || null;
+
+          const displayName = (meta && meta.display_name) ? meta.display_name : autoDisplayName(sessionKey, gatewayLabel);
+          const category = (meta && meta.category) ? meta.category : autoCategory(sessionKey);
+          const hidden = meta ? !!meta.hidden : false;
+          const pinned = meta ? !!meta.pinned : false;
+
+          return {
+            sessionKey,
+            displayName,
+            category,
+            hidden,
+            pinned,
+            icon: meta?.icon || null,
+            sortOrder: meta?.sort_order ?? 0,
+            lastMessage: s.lastMessage || null,
+            lastMessageAt: s.lastMessageAt || s.updatedAt || null,
+            isSubagent: category === 'subagent',
+            parentSessionKey: meta?.parent_session_key || null,
+          };
+        })
+        .filter(s => s !== null)
+        .filter(s => includeHidden || !s.hidden)
+        .filter(s => !categoryFilter || s.category === categoryFilter);
+
+      res.json({ sessions });
     } catch (err) {
+      console.error('[sessions] GET error:', err.message);
       res.status(502).json({ error: err.message });
     }
   });
 
-  // POST /api/sessions — create a new gateway session (channel)
+  // POST /api/sessions — create a new session with display metadata
   router.post('/sessions', requireAuth, async (req, res) => {
-    const label = typeof req.body?.label === 'string' ? req.body.label.trim() : '';
-    if (!label) return res.status(400).json({ error: 'label required' });
+    const { displayName, icon, category } = req.body || {};
+    if (!displayName || typeof displayName !== 'string' || !displayName.trim()) {
+      return res.status(400).json({ error: 'displayName required' });
+    }
+
+    const slug = slugify(displayName.trim());
+    const sessionKey = `portal:${slug}`;
+    const now = new Date().toISOString();
+
     try {
-      if (!gatewayClient.isReady) return res.status(503).json({ error: 'Gateway unavailable' });
-      const session = await gatewayClient.createSession(label);
-      res.status(201).json(session);
+      // Upsert session_meta row
+      await db.run(
+        `INSERT INTO session_meta (session_key, display_name, icon, category, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (session_key) DO UPDATE SET
+           display_name = $2, icon = $3, category = $4, updated_at = $6`,
+        [sessionKey, displayName.trim(), icon || null, category || 'conversation', now, now]
+      );
+
+      // Create the gateway session lazily by sending first chat.send
+      if (gatewayClient.isReady) {
+        try {
+          await chatGatewayRequest('chat.send', {
+            sessionKey,
+            message: `Session "${displayName.trim()}" initialized.`,
+            idempotencyKey: `init-${uuidv4()}`,
+          });
+        } catch (err) {
+          console.warn('[sessions] POST: gateway chat.send failed (non-fatal):', err.message);
+        }
+
+        // Push displayName as label to gateway
+        try {
+          await chatGatewayRequest('sessions.patch', { sessionKey, label: displayName.trim() });
+        } catch (err) {
+          console.warn('[sessions] POST: sessions.patch failed (non-fatal):', err.message);
+        }
+      }
+
+      const meta = await db.get('SELECT * FROM session_meta WHERE session_key = $1', [sessionKey]);
+
+      res.status(201).json({
+        sessionKey,
+        displayName: meta?.display_name || displayName.trim(),
+        category: meta?.category || category || 'conversation',
+        hidden: meta ? !!meta.hidden : false,
+        pinned: meta ? !!meta.pinned : false,
+        icon: meta?.icon || icon || null,
+        sortOrder: meta?.sort_order ?? 0,
+        lastMessage: null,
+        lastMessageAt: null,
+        isSubagent: false,
+        parentSessionKey: meta?.parent_session_key || null,
+      });
     } catch (err) {
-      res.status(502).json({ error: err.message });
+      console.error('[sessions] POST error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/sessions/:sessionKey — update session metadata
+  router.patch('/sessions/:sessionKey', requireAuth, async (req, res) => {
+    const sessionKey = decodeURIComponent(req.params.sessionKey);
+    const { displayName, hidden, pinned, icon, sortOrder } = req.body || {};
+    const now = new Date().toISOString();
+
+    try {
+      const existing = await db.get('SELECT * FROM session_meta WHERE session_key = $1', [sessionKey]);
+
+      const newDisplayName = displayName !== undefined ? displayName : (existing?.display_name || null);
+      const newHidden      = hidden !== undefined ? !!hidden : (existing ? !!existing.hidden : false);
+      const newPinned      = pinned !== undefined ? !!pinned : (existing ? !!existing.pinned : false);
+      const newIcon        = icon !== undefined ? icon : (existing?.icon || null);
+      const newSortOrder   = sortOrder !== undefined ? Number(sortOrder) : (existing?.sort_order ?? 0);
+      const newCategory    = existing?.category || autoCategory(sessionKey);
+      const createdAt      = existing?.created_at || now;
+
+      await db.run(
+        `INSERT INTO session_meta (session_key, display_name, hidden, pinned, icon, sort_order, category, parent_session_key, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (session_key) DO UPDATE SET
+           display_name = $2, hidden = $3, pinned = $4, icon = $5, sort_order = $6, updated_at = $10`,
+        [sessionKey, newDisplayName, newHidden, newPinned, newIcon, newSortOrder, newCategory, existing?.parent_session_key || null, createdAt, now]
+      );
+
+      // Push updated displayName to gateway if changed
+      if (displayName !== undefined && displayName !== existing?.display_name && gatewayClient.isReady) {
+        try {
+          await chatGatewayRequest('sessions.patch', { sessionKey, label: displayName });
+        } catch (err) {
+          console.warn('[sessions] PATCH: sessions.patch failed (non-fatal):', err.message);
+        }
+      }
+
+      const meta = await db.get('SELECT * FROM session_meta WHERE session_key = $1', [sessionKey]);
+
+      res.json({
+        sessionKey,
+        displayName: meta?.display_name || autoDisplayName(sessionKey, null),
+        category: meta?.category || autoCategory(sessionKey),
+        hidden: !!meta?.hidden,
+        pinned: !!meta?.pinned,
+        icon: meta?.icon || null,
+        sortOrder: meta?.sort_order ?? 0,
+        isSubagent: (meta?.category || autoCategory(sessionKey)) === 'subagent',
+        parentSessionKey: meta?.parent_session_key || null,
+      });
+    } catch (err) {
+      console.error('[sessions] PATCH error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/sessions/:sessionKey — soft delete (hidden = true)
+  router.delete('/sessions/:sessionKey', requireAuth, async (req, res) => {
+    const sessionKey = decodeURIComponent(req.params.sessionKey);
+    const now = new Date().toISOString();
+
+    try {
+      const existing = await db.get('SELECT session_key FROM session_meta WHERE session_key = $1', [sessionKey]);
+      if (existing) {
+        await db.run(
+          'UPDATE session_meta SET hidden = $1, updated_at = $2 WHERE session_key = $3',
+          [true, now, sessionKey]
+        );
+      } else {
+        await db.run(
+          'INSERT INTO session_meta (session_key, hidden, created_at, updated_at) VALUES ($1, $2, $3, $4)',
+          [sessionKey, true, now, now]
+        );
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('[sessions] DELETE error:', err.message);
+      res.status(500).json({ error: err.message });
     }
   });
 
