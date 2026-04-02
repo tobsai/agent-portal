@@ -1726,7 +1726,7 @@
           clearMessages();
           msgs.forEach(msg => {
             const role = msg.sender_type === 'agent' ? 'assistant' : (msg.role || 'user');
-            const content = msg.content || msg.text || extractText(msg.content);
+            const content = extractText(msg.content) || (typeof msg.content === 'string' ? msg.content : '') || msg.text || '';
             if (!content) return;
             if (shouldFilter(role, content)) return;
             addMessage(role, content, msg.created_at || msg.timestamp, undefined, msg.id, msg.sender_name, msg.sender_emoji);
@@ -2026,9 +2026,10 @@
 
     function addMessage(role, content, timestamp, statusType, id, senderName, senderEmoji) {
       // Suppress internal control tokens
-      if (role === 'assistant' && content && (
-          content === 'NO_REPLY' || content === 'HEARTBEAT_OK' ||
-          content.trimStart().startsWith('NO_REPLY') || content.trimStart().startsWith('HEARTBEAT_OK')
+      const contentStr = typeof content === 'string' ? content : String(content || '');
+      if (role === 'assistant' && contentStr && (
+          contentStr === 'NO_REPLY' || contentStr === 'HEARTBEAT_OK' ||
+          contentStr.trimStart().startsWith('NO_REPLY') || contentStr.trimStart().startsWith('HEARTBEAT_OK')
       )) return null;
 
       // Dedup
