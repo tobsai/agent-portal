@@ -144,7 +144,7 @@ module.exports = function chatRouter(deps) {
     const idempotencyKey = req.body?.idempotencyKey || `idemp-${uuidv4()}`;
     try {
       await chatGatewayRequest('chat.send', { sessionKey, message, idempotencyKey });
-      const entry = { id: `msg-${uuidv4()}`, role: 'user', text: message, timestamp: new Date().toISOString(), status: 'delivered' };
+      const entry = { id: `msg-${uuidv4()}`, role: 'user', text: message, timestamp: new Date().toISOString(), status: 'delivered', sessionKey };
       trackUserSend(message);
       const added = pushChatMessage(entry);
       if (added) broadcastChatEvent('message', entry);

@@ -1957,6 +1957,8 @@
         eventSource.addEventListener('message', (event) => {
           try {
             const msg = JSON.parse(event.data || '{}');
+            // Filter by active session — only show messages for the current channel
+            if (msg.sessionKey && msg.sessionKey !== activeChannelId) return;
             const content = msg.text || extractText(msg.content);
             if (!content) return;
             if (msg.role === 'user') {
