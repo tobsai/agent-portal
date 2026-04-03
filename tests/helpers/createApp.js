@@ -56,22 +56,39 @@ function createTestDb() {
       reply_to TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS session_meta (
+      session_key TEXT PRIMARY KEY,
+      display_name TEXT,
+      hidden INTEGER DEFAULT 0,
+      pinned INTEGER DEFAULT 0,
+      icon TEXT,
+      sort_order INTEGER DEFAULT 0,
+      category TEXT,
+      parent_session_key TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
   `);
+
+  // SQLite via better-sqlite3 doesn't accept JS booleans — coerce to 0/1
+  function coerce(params) {
+    return params.map(p => (typeof p === 'boolean' ? (p ? 1 : 0) : p));
+  }
 
   return {
     isProduction: false,
     async init() { /* already done above */ },
     async query(sql, params = []) {
       const sqliteSql = sql.replace(/\$(\d+)/g, '?');
-      return sqliteDb.prepare(sqliteSql).all(...params);
+      return sqliteDb.prepare(sqliteSql).all(...coerce(params));
     },
     async get(sql, params = []) {
       const sqliteSql = sql.replace(/\$(\d+)/g, '?');
-      return sqliteDb.prepare(sqliteSql).get(...params) || null;
+      return sqliteDb.prepare(sqliteSql).get(...coerce(params)) || null;
     },
     async run(sql, params = []) {
       const sqliteSql = sql.replace(/\$(\d+)/g, '?');
-      sqliteDb.prepare(sqliteSql).run(...params);
+      sqliteDb.prepare(sqliteSql).run(...coerce(params));
     },
   };
 }

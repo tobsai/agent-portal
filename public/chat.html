@@ -1269,6 +1269,84 @@
 
     .modal-btn.danger:hover { filter: brightness(1.15); }
 
+    /* ─── Manage Sessions Modal ──────────────────────────────── */
+    .manage-modal-box {
+      background: #13131a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      width: 560px;
+      max-width: 95vw;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+    }
+
+    .manage-session-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .manage-session-row:last-child { border-bottom: none; }
+
+    .manage-name-input {
+      flex: 1;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 0.28rem 0.5rem;
+      font-size: 0.82rem;
+      color: var(--text);
+      font-family: inherit;
+    }
+
+    .manage-name-input:hover { border-color: var(--border); }
+
+    .manage-name-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--surface);
+    }
+
+    /* Toggle switch */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 32px;
+      height: 18px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 18px;
+      transition: background 0.2s;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      left: 3px;
+      top: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(14px); }
+
     /* ─── Context Menu ────────────────────────────────────────── */
     .ctx-menu {
       display: none;
@@ -1366,7 +1444,10 @@
 
     <div class="sidebar-section-header">
       <span>Channels</span>
-      <button class="sidebar-add-btn" onclick="openCreateChannelModal()" title="Create channel">+</button>
+      <div style="display:flex;gap:4px;">
+        <button class="sidebar-add-btn" onclick="openManageModal()" title="Manage sessions">⚙</button>
+        <button class="sidebar-add-btn" onclick="openCreateChannelModal()" title="Create channel">+</button>
+      </div>
     </div>
 
     <div class="channel-list" id="channel-list">
@@ -1526,6 +1607,30 @@
       <div class="modal-actions">
         <button class="modal-btn" onclick="closeCreateChannelModal()">Cancel</button>
         <button class="modal-btn primary" onclick="createChannel()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manage Sessions Modal -->
+  <div class="modal-overlay" id="manage-sessions-modal">
+    <div class="manage-modal-box">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <h3 style="margin:0;font-size:1rem;font-weight:600;">⚙ Manage Sessions</h3>
+        <button class="modal-btn" onclick="closeManageModal()" style="padding:0.25rem 0.6rem;">✕</button>
+      </div>
+      <div style="display:flex;gap:0.5rem;margin-bottom:0.6rem;">
+        <button class="modal-btn" onclick="bulkHideAll()">Hide All</button>
+        <button class="modal-btn" onclick="bulkShowAll()">Show All</button>
+        <input type="text" id="manage-search" placeholder="Filter sessions..." autocomplete="off"
+          style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.35rem 0.6rem;font-size:0.82rem;color:var(--text);font-family:inherit;"
+          oninput="renderManageSessions()">
+      </div>
+      <div id="manage-sessions-list" style="overflow-y:auto;flex:1;border:1px solid var(--border);border-radius:8px;min-height:180px;max-height:50vh;">
+        <!-- Populated via JS -->
+      </div>
+      <div class="modal-actions" style="margin-top:0.75rem;">
+        <button class="modal-btn" onclick="closeManageModal()">Close</button>
+        <button class="modal-btn primary" onclick="saveManageSessions()">Save Changes</button>
       </div>
     </div>
   </div>
@@ -3480,6 +3585,174 @@
 
       return el;
     };
+
+    // ─── Manage Sessions Modal ───────────────────────────────────────────────
+    let allSessionsForManage = [];
+    let sessionEdits = {}; // sessionKey → { hidden?, displayName?, pinned? }
+
+    async function openManageModal() {
+      document.getElementById('manage-sessions-modal').classList.add('open');
+      sessionEdits = {};
+      if (document.getElementById('manage-search')) document.getElementById('manage-search').value = '';
+      allSessionsForManage = [];
+      renderManageSessions();
+      await fetchAllSessions();
+    }
+
+    function closeManageModal() {
+      document.getElementById('manage-sessions-modal').classList.remove('open');
+      loadChannels();
+    }
+
+    async function fetchAllSessions() {
+      try {
+        const headers = jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {};
+        const res = await fetch('/api/sessions?hidden=true', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          allSessionsForManage = Array.isArray(data) ? data : (data.sessions || []);
+        }
+      } catch (err) {
+        console.warn('Failed to load all sessions:', err);
+      }
+      renderManageSessions();
+    }
+
+    function renderManageSessions() {
+      const list = document.getElementById('manage-sessions-list');
+      if (!list) return;
+      const query = (document.getElementById('manage-search')?.value || '').toLowerCase();
+
+      const filtered = allSessionsForManage.filter(s => {
+        if (!query) return true;
+        const label = (s.displayName || s.sessionKey || '').toLowerCase();
+        return label.includes(query) || (s.sessionKey || '').toLowerCase().includes(query);
+      });
+
+      if (filtered.length === 0) {
+        list.innerHTML = '<div style="padding:1rem;color:var(--text-dim);text-align:center;font-size:0.85rem;">No sessions found</div>';
+        return;
+      }
+
+      list.innerHTML = '';
+      filtered.forEach(s => {
+        const sk = s.sessionKey;
+        const edit = sessionEdits[sk] || {};
+        const isHidden = edit.hidden !== undefined ? edit.hidden : s.hidden;
+        const isPinned = edit.pinned !== undefined ? edit.pinned : s.pinned;
+        const name = edit.displayName !== undefined ? edit.displayName : (s.displayName || sk);
+
+        const row = document.createElement('div');
+        row.className = 'manage-session-row';
+
+        const toggleLabel = document.createElement('label');
+        toggleLabel.className = 'toggle-switch';
+        toggleLabel.title = isHidden ? 'Hidden — click to show' : 'Visible — click to hide';
+
+        const toggleInput = document.createElement('input');
+        toggleInput.type = 'checkbox';
+        toggleInput.checked = !isHidden;
+        toggleInput.addEventListener('change', function() { toggleSessionVisibility(sk, this.checked); });
+
+        const toggleSlider = document.createElement('span');
+        toggleSlider.className = 'toggle-slider';
+
+        toggleLabel.appendChild(toggleInput);
+        toggleLabel.appendChild(toggleSlider);
+
+        const nameInput = document.createElement('input');
+        nameInput.className = 'manage-name-input';
+        nameInput.type = 'text';
+        nameInput.value = name;
+        nameInput.placeholder = 'Display name';
+        nameInput.maxLength = 60;
+        nameInput.autocomplete = 'off';
+        nameInput.addEventListener('input', function() { setSessionName(sk, this.value); });
+
+        const pinLabel = document.createElement('label');
+        pinLabel.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:0.75rem;color:var(--text-dim);cursor:pointer;flex-shrink:0;';
+        pinLabel.title = 'Pin session';
+
+        const pinInput = document.createElement('input');
+        pinInput.type = 'checkbox';
+        pinInput.checked = isPinned;
+        pinInput.style.margin = '0';
+        pinInput.addEventListener('change', function() { toggleSessionPin(sk, this.checked); });
+
+        pinLabel.appendChild(pinInput);
+        pinLabel.appendChild(document.createTextNode(' 📌'));
+
+        row.appendChild(toggleLabel);
+        row.appendChild(nameInput);
+        row.appendChild(pinLabel);
+        list.appendChild(row);
+      });
+    }
+
+    function toggleSessionVisibility(sessionKey, visible) {
+      if (!sessionEdits[sessionKey]) sessionEdits[sessionKey] = {};
+      sessionEdits[sessionKey].hidden = !visible;
+    }
+
+    function setSessionName(sessionKey, name) {
+      if (!sessionEdits[sessionKey]) sessionEdits[sessionKey] = {};
+      sessionEdits[sessionKey].displayName = name;
+    }
+
+    function toggleSessionPin(sessionKey, pinned) {
+      if (!sessionEdits[sessionKey]) sessionEdits[sessionKey] = {};
+      sessionEdits[sessionKey].pinned = pinned;
+    }
+
+    function bulkHideAll() {
+      allSessionsForManage.forEach(s => {
+        if (!sessionEdits[s.sessionKey]) sessionEdits[s.sessionKey] = {};
+        sessionEdits[s.sessionKey].hidden = true;
+      });
+      renderManageSessions();
+    }
+
+    function bulkShowAll() {
+      allSessionsForManage.forEach(s => {
+        if (!sessionEdits[s.sessionKey]) sessionEdits[s.sessionKey] = {};
+        sessionEdits[s.sessionKey].hidden = false;
+      });
+      renderManageSessions();
+    }
+
+    async function saveManageSessions() {
+      const updates = Object.entries(sessionEdits).map(([sessionKey, edit]) => {
+        const orig = allSessionsForManage.find(s => s.sessionKey === sessionKey);
+        return {
+          sessionKey,
+          hidden: edit.hidden !== undefined ? edit.hidden : (orig?.hidden ?? false),
+          displayName: edit.displayName !== undefined ? edit.displayName : (orig?.displayName || null),
+          pinned: edit.pinned !== undefined ? edit.pinned : (orig?.pinned ?? false),
+        };
+      });
+
+      if (updates.length === 0) {
+        closeManageModal();
+        return;
+      }
+
+      try {
+        const headers = { 'Content-Type': 'application/json', ...(jwtToken ? { 'Authorization': 'Bearer ' + jwtToken } : {}) };
+        const res = await fetch('/api/sessions/bulk', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ updates }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showError(err.error || 'Failed to save changes');
+          return;
+        }
+        closeManageModal();
+      } catch (err) {
+        showError('Failed to save changes');
+      }
+    }
 
     init();
   </script>
