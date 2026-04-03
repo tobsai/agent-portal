@@ -144,6 +144,7 @@ module.exports = function chatRouter(deps) {
     const idempotencyKey = req.body?.idempotencyKey || `idemp-${uuidv4()}`;
     try {
       await chatGatewayRequest('chat.send', { sessionKey, message, idempotencyKey });
+      setChatState({ lastActiveSessionKey: sessionKey });
       const entry = { id: `msg-${uuidv4()}`, role: 'user', text: message, timestamp: new Date().toISOString(), status: 'delivered', sessionKey };
       trackUserSend(message);
       const added = pushChatMessage(entry);
@@ -738,6 +739,43 @@ module.exports = function chatRouter(deps) {
       });
     } catch (err) {
       console.error('[sessions] POST error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/sessions/bulk — batch update session metadata
+  router.patch('/sessions/bulk', requireAuth, async (req, res) => {
+    const { updates } = req.body || {};
+    if (!Array.isArray(updates)) return res.status(400).json({ error: 'updates array required' });
+    const now = new Date().toISOString();
+    let count = 0;
+    try {
+      for (const update of updates) {
+        const { sessionKey, hidden, displayName, pinned } = update;
+        if (!sessionKey || typeof sessionKey !== 'string') continue;
+        const existing = await db.get('SELECT * FROM session_meta WHERE session_key = $1', [sessionKey]);
+        const newDisplayName = displayName !== undefined ? displayName : (existing?.display_name || null);
+        const newHidden      = hidden !== undefined ? !!hidden : (existing ? !!existing.hidden : false);
+        const newPinned      = pinned !== undefined ? !!pinned : (existing ? !!existing.pinned : false);
+        const newIcon        = existing?.icon || null;
+        const newSortOrder   = existing?.sort_order ?? 0;
+        const newCategory    = existing?.category || autoCategory(sessionKey);
+        const createdAt      = existing?.created_at || now;
+        await db.run(
+          `INSERT INTO session_meta (session_key, display_name, hidden, pinned, icon, sort_order, category, parent_session_key, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (session_key) DO UPDATE SET
+             display_name = excluded.display_name,
+             hidden = excluded.hidden,
+             pinned = excluded.pinned,
+             updated_at = excluded.updated_at`,
+          [sessionKey, newDisplayName, newHidden, newPinned, newIcon, newSortOrder, newCategory, existing?.parent_session_key || null, createdAt, now]
+        );
+        count++;
+      }
+      res.json({ updated: count });
+    } catch (err) {
+      console.error('[sessions] PATCH /bulk error:', err.message);
       res.status(500).json({ error: err.message });
     }
   });
