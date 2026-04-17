@@ -390,16 +390,10 @@
       if (isNew) {
         _allSignals.unshift(sig);
         if (_allSignals.length > MAX_SIGNALS) _allSignals.length = MAX_SIGNALS;
-        
-        // Atomically increment _dbTotal to prevent footer drift (NEXT-102).
-        // Handle the zero-value case (first signal ever) — if _dbTotal is 0,
-        // treat it as unknown (the footer will show count without "of M").
-        if (_dbTotal > 0) {
-          _dbTotal++;
-        } else {
-          // First signal ever, or total was never populated. Set to buffer length.
-          _dbTotal = _allSignals.length;
-        }
+
+        // Atomically increment _dbTotal to keep the footer aligned with live pushes,
+        // including the first signal when the prior total was zero.
+        _dbTotal = Math.max(_dbTotal, 0) + 1;
       }
 
       if (_signalDigestMode) {
