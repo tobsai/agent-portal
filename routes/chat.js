@@ -36,6 +36,7 @@ const { deliverInboundWebhook } = require('../lib/webhook-delivery');
 const { Router } = require('express');
 const path = require('path');
 const fs = require('fs');
+const { resolveGatewayToken } = require('../lib/gateway-config');
 
 // ============ SESSION HELPER FUNCTIONS ============
 
@@ -325,7 +326,7 @@ module.exports = function chatRouter(deps) {
   router.post('/chat-sign', requireAuth, (req, res) => {
     console.log('[chat-sign] called with nonce:', req.body?.nonce?.substring(0, 8) || 'none');
     const { nonce } = req.body || {};
-    const token = process.env.GATEWAY_TOKEN || '';
+    const token = resolveGatewayToken();
     const deviceId = process.env.WEBCHAT_DEVICE_ID || '';
     const publicKeyRaw = process.env.WEBCHAT_DEVICE_PUBLIC_KEY || '';
     const privateKeyPem = process.env.WEBCHAT_DEVICE_PRIVATE_KEY || '';

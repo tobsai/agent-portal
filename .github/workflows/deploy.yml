@@ -11,6 +11,22 @@ jobs:
     name: Deploy to Railway
     runs-on: ubuntu-latest
     steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Configure Railway variables
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          PROJECT_ID: 9d7b61b4-c326-4571-873f-cefa31e5ea7f
+          SERVICE_ID: 55dd45a8-0142-4825-a4d8-860c3d559be9
+          GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
+          WEBHOOK_SECRET: ${{ secrets.PORTAL_WEBHOOK_SECRET }}
+        run: |
+          railway variable set GATEWAY_WS_URL=wss://gw.mtree.io --project "$PROJECT_ID" --service "$SERVICE_ID" --skip-deploys
+          railway variable set GATEWAY_ORIGIN=https://gw.mtree.io --project "$PROJECT_ID" --service "$SERVICE_ID" --skip-deploys
+          printf '%s' "$GATEWAY_TOKEN" | railway variable set GATEWAY_TOKEN --stdin --project "$PROJECT_ID" --service "$SERVICE_ID" --skip-deploys
+          printf '%s' "$WEBHOOK_SECRET" | railway variable set WEBHOOK_SECRET --stdin --project "$PROJECT_ID" --service "$SERVICE_ID" --skip-deploys
+
       - name: Trigger Railway deployment
         run: |
           curl -s -X POST https://backboard.railway.app/graphql/v2 \
