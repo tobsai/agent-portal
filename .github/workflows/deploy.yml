@@ -11,22 +11,81 @@ jobs:
     name: Deploy to Railway
     runs-on: ubuntu-latest
     steps:
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
       - name: Configure Railway variables
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           PROJECT_ID: 9d7b61b4-c326-4571-873f-cefa31e5ea7f
           SERVICE_ID: 55dd45a8-0142-4825-a4d8-860c3d559be9
-          ENVIRONMENT: production
+          ENVIRONMENT_NAME: production
           GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
           WEBHOOK_SECRET: ${{ secrets.PORTAL_WEBHOOK_SECRET }}
         run: |
-          railway variable set GATEWAY_WS_URL=wss://gw.mtree.io --project "$PROJECT_ID" --service "$SERVICE_ID" --environment "$ENVIRONMENT" --skip-deploys
-          railway variable set GATEWAY_ORIGIN=https://gw.mtree.io --project "$PROJECT_ID" --service "$SERVICE_ID" --environment "$ENVIRONMENT" --skip-deploys
-          printf '%s' "$GATEWAY_TOKEN" | railway variable set GATEWAY_TOKEN --stdin --project "$PROJECT_ID" --service "$SERVICE_ID" --environment "$ENVIRONMENT" --skip-deploys
-          printf '%s' "$WEBHOOK_SECRET" | railway variable set WEBHOOK_SECRET --stdin --project "$PROJECT_ID" --service "$SERVICE_ID" --environment "$ENVIRONMENT" --skip-deploys
+          node <<'NODE'
+          const endpoint = 'https://backboard.railway.app/graphql/v2';
+
+          async function railway(query, variables) {
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${process.env.RAILWAY_TOKEN}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ query, variables })
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.errors?.length) {
+              const message = payload.errors?.map((error) => error.message).join('; ') || response.statusText;
+              throw new Error(message);
+            }
+            return payload.data;
+          }
+
+          const projectId = process.env.PROJECT_ID;
+          const serviceId = process.env.SERVICE_ID;
+          const environmentName = process.env.ENVIRONMENT_NAME.toLowerCase();
+
+          const data = await railway(`
+            query project($projectId: String!) {
+              project(id: $projectId) {
+                environments {
+                  edges {
+                    node {
+                      id
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          `, { projectId });
+
+          const environments = data.project.environments.edges.map((edge) => edge.node);
+          const environment = environments.find((env) => env.name.toLowerCase() === environmentName);
+          if (!environment) {
+            throw new Error(`Railway environment not found: ${process.env.ENVIRONMENT_NAME}`);
+          }
+
+          await railway(`
+            mutation variableCollectionUpsert($input: VariableCollectionUpsertInput!) {
+              variableCollectionUpsert(input: $input)
+            }
+          `, {
+            input: {
+              projectId,
+              environmentId: environment.id,
+              serviceId,
+              skipDeploys: true,
+              variables: {
+                GATEWAY_WS_URL: 'wss://gw.mtree.io',
+                GATEWAY_ORIGIN: 'https://gw.mtree.io',
+                GATEWAY_TOKEN: process.env.GATEWAY_TOKEN,
+                WEBHOOK_SECRET: process.env.WEBHOOK_SECRET
+              }
+            }
+          });
+
+          console.log(`Configured Railway variables for ${environment.name}.`);
+          NODE
 
       - name: Trigger Railway deployment
         run: |
