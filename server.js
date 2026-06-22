@@ -39,6 +39,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ noServer: true });
 const gwProxy = new WebSocket.Server({ noServer: true });
+const publicDir = path.join(__dirname, 'public');
 
 // Manual upgrade handling for multiple WS paths
 server.on('upgrade', (req, socket, head) => {
@@ -339,9 +340,19 @@ app.get('/api/me', (req, res) => {
 
 
 
+// ============ AGENTS / DM CHANNELS ============
+app.use('/api', require('./routes/agents')({
+  db,
+  AGENTS,
+  requireAuth,
+  requireAdmin,
+  uuidv4,
+  publicDir,
+}));
+
+
 // Routes removed in Phase 1 (OpenClaw channel refactor):
 // - /api/work, /api/signals, /api/subagents (routes/work.js)
-// - /api/agents, /api/dm (routes/agents.js)
 // - /api/activity (routes/activity.js)
 // Lib files kept for Phase 2 cleanup: chat-state.js, db.js, signals.js
 
