@@ -82,7 +82,8 @@ module.exports = function agentsRouter({ db, AGENTS, requireAuth, requireAdmin, 
       const agent = AGENTS.find(a => a.id === req.params.agentId);
       if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-      const userId = req.user.id;
+      const userId = req.user?.id || req.agent?.id;
+      if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
       // Look for an existing DM channel for this user+agent pair
       let channel = await db.get(
