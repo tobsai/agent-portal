@@ -12,10 +12,28 @@
     "channel-plugin",
     "agent-portal"
   ],
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "channel": {
+      "id": "portal",
+      "label": "Agent Portal",
+      "selectionLabel": "Agent Portal",
+      "detailLabel": "Agent Portal iOS",
+      "blurb": "Self-hosted Agent Portal channel for OpenClaw.",
+      "exposure": {
+        "configured": true,
+        "setup": false,
+        "docs": false
+      }
+    }
+  },
   "license": "MIT",
   "author": "",
   "type": "commonjs",
   "devDependencies": {
+    "@types/node": "^26.0.0",
     "typescript": "^5.9.3"
   }
 }

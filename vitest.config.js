@@ -8,6 +8,7 @@ module.exports = defineConfig({
     globals: true,       // makes describe/it/expect available globally — no import needed
     testTimeout: 10000,
     include: ['tests/**/*.test.js'],
+    exclude: ['**/._*.test.js'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

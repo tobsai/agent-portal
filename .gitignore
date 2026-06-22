@@ -3,4 +3,5 @@ data/
 *.db
 .env
 .DS_Store
+._*
 public/downloads/

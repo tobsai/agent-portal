@@ -1,8 +1,87 @@
 {
+  "id": "portal",
   "name": "openclaw-channel-agent-portal",
+  "kind": "channel",
   "version": "1.0.0",
   "description": "Agent Portal channel plugin for OpenClaw",
   "main": "dist/index.js",
+  "channels": [
+    "portal"
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "streaming": {
+        "type": "string"
+      },
+      "dmPolicy": {
+        "type": "string"
+      },
+      "allowFrom": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "portalUrl": {
+        "type": "string"
+      },
+      "apiKey": {
+        "type": "string"
+      },
+      "webhookSecret": {
+        "type": "string"
+      },
+      "webhookPort": {
+        "type": "number"
+      }
+    },
+    "required": []
+  },
+  "channelConfigs": {
+    "portal": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "streaming": {
+            "type": "string"
+          },
+          "dmPolicy": {
+            "type": "string"
+          },
+          "allowFrom": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "portalUrl": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "webhookSecret": {
+            "type": "string"
+          },
+          "webhookPort": {
+            "type": "number"
+          },
+          "defaultTo": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
   "channel": {
     "id": "portal",
     "displayName": "Agent Portal",

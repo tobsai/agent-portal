@@ -169,11 +169,9 @@ function getFullChatState() {
 connectChatGateway();
 
 // ── Phase 1: Wire native gateway client events ─────────────────────────────
-if (process.env.GATEWAY_TOKEN) {
-  chatGateway.wireGatewayClientEvents();
-  gatewayClient.connect();
-  console.log('[gateway-client] native client starting');
-}
+chatGateway.wireGatewayClientEvents();
+gatewayClient.connect();
+console.log('[gateway-client] native client starting');
 
 const PORT = process.env.PORT || 3847;
 

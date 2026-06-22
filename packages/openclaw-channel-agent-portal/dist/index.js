@@ -64,6 +64,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.portalChannelPlugin = void 0;
 exports.createPlugin = createPlugin;
 const http = __importStar(require("http"));
 const https = __importStar(require("https"));
@@ -381,4 +382,121 @@ class AgentPortalChannelPlugin {
 function createPlugin(config) {
     return new AgentPortalChannelPlugin(config);
 }
-exports.default = createPlugin;
+function resolvePortalConfig(cfg) {
+    const config = cfg.channels?.portal;
+    if (!config) {
+        throw new Error('[portal-plugin] Missing channels.portal config');
+    }
+    if (!config.portalUrl) {
+        throw new Error('[portal-plugin] Missing channels.portal.portalUrl');
+    }
+    if (!config.apiKey) {
+        throw new Error('[portal-plugin] Missing channels.portal.apiKey');
+    }
+    return {
+        ...config,
+        webhookSecret: config.webhookSecret || '',
+    };
+}
+function normalizeTargetToSessionKey(to) {
+    const target = (to || '').trim();
+    if (target.startsWith('portal:'))
+        return target;
+    if (target.startsWith('dm-'))
+        return `portal:${target}`;
+    if (target)
+        return `portal:dm-${target}`;
+    return 'portal:dm-lewis';
+}
+const portalChannelPlugin = {
+    id: 'portal',
+    meta: {
+        id: 'portal',
+        label: 'Agent Portal',
+        displayName: 'Agent Portal',
+        blurb: 'Self-hosted Agent Portal channel for OpenClaw.',
+        markdownCapable: true,
+    },
+    capabilities: {
+        dm: true,
+        text: true,
+        streaming: true,
+    },
+    config: {
+        listAccountIds: () => ['default'],
+        defaultAccountId: () => 'default',
+        resolveAccount: (cfg) => resolvePortalConfig(cfg),
+        inspectAccount: (cfg) => {
+            const account = resolvePortalConfig(cfg);
+            return {
+                accountId: 'default',
+                portalUrl: account.portalUrl,
+                webhookPort: account.webhookPort ?? 3001,
+                enabled: account.enabled !== false,
+                configured: Boolean(account.portalUrl && account.apiKey),
+            };
+        },
+        isEnabled: (account) => account.enabled !== false,
+        isConfigured: (account) => Boolean(account.portalUrl && account.apiKey),
+        unconfiguredReason: () => 'Set channels.portal.portalUrl and channels.portal.apiKey',
+        describeAccount: (account) => ({
+            accountId: 'default',
+            enabled: account.enabled !== false,
+            configured: Boolean(account.portalUrl && account.apiKey),
+            label: 'Agent Portal',
+            status: account.enabled === false ? 'disabled' : 'configured',
+        }),
+        resolveAllowFrom: ({ cfg }) => cfg.channels?.portal?.allowFrom ?? ['*'],
+        formatAllowFrom: ({ allowFrom }) => allowFrom.map(String),
+        hasConfiguredState: ({ cfg }) => Boolean(cfg.channels?.portal?.portalUrl),
+        resolveDefaultTo: ({ cfg }) => cfg.channels?.portal?.defaultTo || 'portal:dm-lewis',
+    },
+    security: {
+        resolveDmPolicy: ({ account }) => ({
+            policy: 'open',
+            allowFrom: account.allowFrom ?? ['*'],
+        }),
+    },
+    outbound: {
+        deliveryMode: 'direct',
+        textChunkLimit: 4000,
+        preferFinalAssistantVisibleText: true,
+        resolveTarget: ({ to }) => ({
+            ok: true,
+            to: normalizeTargetToSessionKey(to),
+        }),
+        sendText: async (ctx) => {
+            const account = resolvePortalConfig(ctx.cfg);
+            const plugin = new AgentPortalChannelPlugin(account);
+            const messageId = `portal-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            const sessionKey = normalizeTargetToSessionKey(ctx.to);
+            await plugin.send({
+                id: messageId,
+                sessionKey,
+                text: ctx.text,
+            });
+            return {
+                channel: 'portal',
+                messageId,
+                conversationId: sessionKey,
+                timestamp: Date.now(),
+            };
+        },
+    },
+};
+exports.portalChannelPlugin = portalChannelPlugin;
+const portalPluginEntry = {
+    id: 'portal',
+    name: 'Agent Portal',
+    description: 'Agent Portal channel plugin for OpenClaw',
+    configSchema: {
+        type: 'object',
+        additionalProperties: true,
+        properties: {},
+    },
+    register(api) {
+        api.registerChannel({ plugin: portalChannelPlugin });
+    },
+    channelPlugin: portalChannelPlugin,
+};
+exports.default = portalPluginEntry;

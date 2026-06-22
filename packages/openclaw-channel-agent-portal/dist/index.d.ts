@@ -84,4 +84,199 @@ interface ChannelPlugin {
  * Receives the merged config from `channels.portal` in `openclaw.json`.
  */
 export declare function createPlugin(config: PluginConfig): ChannelPlugin;
-export default createPlugin;
+type OpenClawConfigLike = {
+    channels?: {
+        portal?: PluginConfig & {
+            enabled?: boolean;
+            allowFrom?: string[];
+            defaultTo?: string;
+        };
+    };
+};
+declare const portalChannelPlugin: {
+    id: string;
+    meta: {
+        id: string;
+        label: string;
+        displayName: string;
+        blurb: string;
+        markdownCapable: boolean;
+    };
+    capabilities: {
+        dm: boolean;
+        text: boolean;
+        streaming: boolean;
+    };
+    config: {
+        listAccountIds: () => string[];
+        defaultAccountId: () => string;
+        resolveAccount: (cfg: OpenClawConfigLike) => PluginConfig & {
+            enabled?: boolean;
+            allowFrom?: string[];
+        };
+        inspectAccount: (cfg: OpenClawConfigLike) => {
+            accountId: string;
+            portalUrl: string;
+            webhookPort: number;
+            enabled: boolean;
+            configured: boolean;
+        };
+        isEnabled: (account: PluginConfig & {
+            enabled?: boolean;
+        }) => boolean;
+        isConfigured: (account: PluginConfig) => boolean;
+        unconfiguredReason: () => string;
+        describeAccount: (account: PluginConfig & {
+            enabled?: boolean;
+        }) => {
+            accountId: string;
+            enabled: boolean;
+            configured: boolean;
+            label: string;
+            status: string;
+        };
+        resolveAllowFrom: ({ cfg }: {
+            cfg: OpenClawConfigLike;
+        }) => string[];
+        formatAllowFrom: ({ allowFrom }: {
+            allowFrom: Array<string | number>;
+        }) => string[];
+        hasConfiguredState: ({ cfg }: {
+            cfg: OpenClawConfigLike;
+        }) => boolean;
+        resolveDefaultTo: ({ cfg }: {
+            cfg: OpenClawConfigLike;
+        }) => string;
+    };
+    security: {
+        resolveDmPolicy: ({ account }: {
+            account: PluginConfig & {
+                allowFrom?: string[];
+            };
+        }) => {
+            policy: string;
+            allowFrom: string[];
+        };
+    };
+    outbound: {
+        deliveryMode: string;
+        textChunkLimit: number;
+        preferFinalAssistantVisibleText: boolean;
+        resolveTarget: ({ to }: {
+            to?: string;
+        }) => {
+            ok: boolean;
+            to: string;
+        };
+        sendText: (ctx: {
+            cfg: OpenClawConfigLike;
+            to?: string;
+            text: string;
+        }) => Promise<{
+            channel: string;
+            messageId: string;
+            conversationId: string;
+            timestamp: number;
+        }>;
+    };
+};
+declare const portalPluginEntry: {
+    id: string;
+    name: string;
+    description: string;
+    configSchema: {
+        type: string;
+        additionalProperties: boolean;
+        properties: {};
+    };
+    register(api: any): void;
+    channelPlugin: {
+        id: string;
+        meta: {
+            id: string;
+            label: string;
+            displayName: string;
+            blurb: string;
+            markdownCapable: boolean;
+        };
+        capabilities: {
+            dm: boolean;
+            text: boolean;
+            streaming: boolean;
+        };
+        config: {
+            listAccountIds: () => string[];
+            defaultAccountId: () => string;
+            resolveAccount: (cfg: OpenClawConfigLike) => PluginConfig & {
+                enabled?: boolean;
+                allowFrom?: string[];
+            };
+            inspectAccount: (cfg: OpenClawConfigLike) => {
+                accountId: string;
+                portalUrl: string;
+                webhookPort: number;
+                enabled: boolean;
+                configured: boolean;
+            };
+            isEnabled: (account: PluginConfig & {
+                enabled?: boolean;
+            }) => boolean;
+            isConfigured: (account: PluginConfig) => boolean;
+            unconfiguredReason: () => string;
+            describeAccount: (account: PluginConfig & {
+                enabled?: boolean;
+            }) => {
+                accountId: string;
+                enabled: boolean;
+                configured: boolean;
+                label: string;
+                status: string;
+            };
+            resolveAllowFrom: ({ cfg }: {
+                cfg: OpenClawConfigLike;
+            }) => string[];
+            formatAllowFrom: ({ allowFrom }: {
+                allowFrom: Array<string | number>;
+            }) => string[];
+            hasConfiguredState: ({ cfg }: {
+                cfg: OpenClawConfigLike;
+            }) => boolean;
+            resolveDefaultTo: ({ cfg }: {
+                cfg: OpenClawConfigLike;
+            }) => string;
+        };
+        security: {
+            resolveDmPolicy: ({ account }: {
+                account: PluginConfig & {
+                    allowFrom?: string[];
+                };
+            }) => {
+                policy: string;
+                allowFrom: string[];
+            };
+        };
+        outbound: {
+            deliveryMode: string;
+            textChunkLimit: number;
+            preferFinalAssistantVisibleText: boolean;
+            resolveTarget: ({ to }: {
+                to?: string;
+            }) => {
+                ok: boolean;
+                to: string;
+            };
+            sendText: (ctx: {
+                cfg: OpenClawConfigLike;
+                to?: string;
+                text: string;
+            }) => Promise<{
+                channel: string;
+                messageId: string;
+                conversationId: string;
+                timestamp: number;
+            }>;
+        };
+    };
+};
+export { portalChannelPlugin };
+export default portalPluginEntry;
